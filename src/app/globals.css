@@ -1,0 +1,399 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────────────
+   Hamdaz 2.0 — design tokens
+
+   A dark analytics workspace: a near-black canvas, panels floating on it
+   with barely-there borders, pill controls, and one oversized hero panel
+   per screen carrying the numbers.
+
+   The two colours are the Hamdaz mark's own — wordmark blue #45BEED and
+   bar pink #EF4896. They are used almost nowhere as flat fills. Their real
+   job is the ramp: every bar, meter and progress track in this app runs
+   blue → pink, so a length is readable as a position along one continuous
+   scale rather than as a legend lookup.
+
+   Both brand colours are light, so text on a filled blue or pink surface
+   is always a dark ink, never white. The -text variants exist for the
+   opposite case: brand-coloured type on a panel.
+
+   One palette, expressed twice. No component branches on the theme — a
+   theme switch is a change of variable values and nothing else. Light is
+   the default declaration on :root; dark is applied both by an explicit
+   [data-theme="dark"] and by prefers-color-scheme, guarded so an explicit
+   "light" choice still wins. Those two dark blocks are necessarily
+   duplicated (one lives inside a media query, and CSS cannot share a block
+   of custom properties across that boundary) — edit them together.
+   ───────────────────────────────────────────────────────────────────── */
+
+:root {
+  color-scheme: light;
+
+  /* The canvas is the page itself; panels sit on it. "Sunken" is the frame
+     around everything, "inset" is a well inside a panel. */
+  --c-canvas: #e8e8ea;
+  --c-sunken: #dededf;
+  --c-panel: #ffffff;
+  --c-panel-2: #f4f4f6;
+  --c-panel-3: #ebebee;
+  --c-inset: #f1f1f3;
+  --c-float: #ffffff;
+
+  --c-line: #e6e6e9;
+  --c-line-strong: #d3d3d8;
+
+  --c-ink: #0b0b0d;
+  --c-ink-2: #4e4e57;
+  --c-ink-3: #78787f;
+  --c-ink-4: #a2a2a9;
+
+  /* Brand blue — the wordmark. Primary: selection, active nav, ramp start. */
+  --c-accent: #22a8e0;
+  --c-accent-hover: #1795cc;
+  --c-accent-ink: #04212f;
+  --c-accent-soft: #dff2fd;
+  --c-accent-line: #a8dff6;
+  --c-accent-text: #0b6b93;
+
+  /* Brand pink — the bars. "Now / mine / decide this", and the ramp end. */
+  --c-highlight: #e02f81;
+  --c-highlight-hover: #cc1e6f;
+  --c-highlight-ink: #33061a;
+  --c-highlight-soft: #fde4ef;
+  --c-highlight-line: #f8b6d3;
+  --c-highlight-text: #b01a5e;
+
+  --c-positive: #17835a;
+  --c-positive-soft: #dcf3e8;
+  --c-warn: #9c6208;
+  --c-warn-soft: #fbeed6;
+  --c-danger: #cf3418;
+  --c-danger-soft: #fbe4de;
+  --c-info: #4a49c4;
+  --c-info-soft: #e7e7fb;
+  --c-neutral-soft: #eaeaee;
+
+  --shadow-panel: 0 1px 2px rgb(11 11 13 / 0.05), 0 12px 32px -20px rgb(11 11 13 / 0.25);
+  --shadow-float: 0 18px 48px -16px rgb(11 11 13 / 0.28), 0 2px 8px -2px rgb(11 11 13 / 0.1);
+  --shadow-lift: 0 6px 20px -8px rgb(11 11 13 / 0.22);
+
+  --ring: 0 0 0 2px var(--c-canvas), 0 0 0 4px var(--c-accent);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --c-canvas: #0a0a0b;
+    --c-sunken: #050506;
+    --c-panel: #131316;
+    --c-panel-2: #1a1a1e;
+    --c-panel-3: #232328;
+    --c-inset: #101013;
+    --c-float: #1a1a1e;
+
+    --c-line: #232328;
+    --c-line-strong: #33333a;
+
+    --c-ink: #fbfbfc;
+    --c-ink-2: #a9a9b3;
+    --c-ink-3: #77777f;
+    --c-ink-4: #55555d;
+
+    --c-accent: #45beed;
+    --c-accent-hover: #63caf1;
+    --c-accent-ink: #04212f;
+    --c-accent-soft: #0d2c3b;
+    --c-accent-line: #1a5170;
+    --c-accent-text: #63caf1;
+
+    --c-highlight: #ef4896;
+    --c-highlight-hover: #f367a8;
+    --c-highlight-ink: #33061a;
+    --c-highlight-soft: #331125;
+    --c-highlight-line: #6f1c46;
+    --c-highlight-text: #f47cb4;
+
+    --c-positive: #34c98a;
+    --c-positive-soft: #0d2a1f;
+    --c-warn: #e2a63f;
+    --c-warn-soft: #2b2211;
+    --c-danger: #f2694f;
+    --c-danger-soft: #331512;
+    --c-info: #8b8af0;
+    --c-info-soft: #1b1b3a;
+    --c-neutral-soft: #232328;
+
+    --shadow-panel: 0 1px 0 rgb(255 255 255 / 0.03);
+    --shadow-float: 0 24px 64px -16px rgb(0 0 0 / 0.9);
+    --shadow-lift: 0 8px 28px -12px rgb(0 0 0 / 0.8);
+
+    --ring: 0 0 0 2px var(--c-canvas), 0 0 0 4px var(--c-accent);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --c-canvas: #0a0a0b;
+  --c-sunken: #050506;
+  --c-panel: #131316;
+  --c-panel-2: #1a1a1e;
+  --c-panel-3: #232328;
+  --c-inset: #101013;
+  --c-float: #1a1a1e;
+
+  --c-line: #232328;
+  --c-line-strong: #33333a;
+
+  --c-ink: #fbfbfc;
+  --c-ink-2: #a9a9b3;
+  --c-ink-3: #77777f;
+  --c-ink-4: #55555d;
+
+  --c-accent: #45beed;
+  --c-accent-hover: #63caf1;
+  --c-accent-ink: #04212f;
+  --c-accent-soft: #0d2c3b;
+  --c-accent-line: #1a5170;
+  --c-accent-text: #63caf1;
+
+  --c-highlight: #ef4896;
+  --c-highlight-hover: #f367a8;
+  --c-highlight-ink: #33061a;
+  --c-highlight-soft: #331125;
+  --c-highlight-line: #6f1c46;
+  --c-highlight-text: #f47cb4;
+
+  --c-positive: #34c98a;
+  --c-positive-soft: #0d2a1f;
+  --c-warn: #e2a63f;
+  --c-warn-soft: #2b2211;
+  --c-danger: #f2694f;
+  --c-danger-soft: #331512;
+  --c-info: #8b8af0;
+  --c-info-soft: #1b1b3a;
+  --c-neutral-soft: #232328;
+
+  --shadow-panel: 0 1px 0 rgb(255 255 255 / 0.03);
+  --shadow-float: 0 24px 64px -16px rgb(0 0 0 / 0.9);
+  --shadow-lift: 0 8px 28px -12px rgb(0 0 0 / 0.8);
+
+  --ring: 0 0 0 2px var(--c-canvas), 0 0 0 4px var(--c-accent);
+}
+
+@theme inline {
+  --color-canvas: var(--c-canvas);
+  --color-sunken: var(--c-sunken);
+  --color-panel: var(--c-panel);
+  --color-panel-2: var(--c-panel-2);
+  --color-panel-3: var(--c-panel-3);
+  --color-inset: var(--c-inset);
+  --color-float: var(--c-float);
+
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
+
+  --color-ink: var(--c-ink);
+  --color-ink-2: var(--c-ink-2);
+  --color-ink-3: var(--c-ink-3);
+  --color-ink-4: var(--c-ink-4);
+
+  --color-accent: var(--c-accent);
+  --color-accent-hover: var(--c-accent-hover);
+  --color-accent-ink: var(--c-accent-ink);
+  --color-accent-soft: var(--c-accent-soft);
+  --color-accent-line: var(--c-accent-line);
+  --color-accent-text: var(--c-accent-text);
+
+  --color-highlight: var(--c-highlight);
+  --color-highlight-hover: var(--c-highlight-hover);
+  --color-highlight-ink: var(--c-highlight-ink);
+  --color-highlight-soft: var(--c-highlight-soft);
+  --color-highlight-line: var(--c-highlight-line);
+  --color-highlight-text: var(--c-highlight-text);
+
+  --color-positive: var(--c-positive);
+  --color-positive-soft: var(--c-positive-soft);
+  --color-warn: var(--c-warn);
+  --color-warn-soft: var(--c-warn-soft);
+  --color-danger: var(--c-danger);
+  --color-danger-soft: var(--c-danger-soft);
+  --color-info: var(--c-info);
+  --color-info-soft: var(--c-info-soft);
+  --color-neutral-soft: var(--c-neutral-soft);
+
+  --radius-panel: 20px;
+  --radius-tile: 14px;
+}
+
+/* ── base ───────────────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  border-color: var(--c-line);
+}
+
+html {
+  background: var(--c-sunken);
+}
+
+body {
+  background: var(--c-canvas);
+  color: var(--c-ink);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--c-accent);
+  color: var(--c-accent-ink);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-line-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--c-line-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--c-ink-4);
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── the ramp ────────────────────────────────────────────────────────
+   Every bar, meter and track in the app runs blue → pink, so a length can
+   be read as a position on one continuous scale. `--ramp-a`/`--ramp-b` are
+   set per element to take a slice of that scale, which is how a stacked bar
+   gets segments that still belong to the same gradient.
+   ─────────────────────────────────────────────────────────────────── */
+
+.ramp {
+  background-image: linear-gradient(
+    90deg,
+    var(--ramp-a, var(--c-accent)),
+    var(--ramp-b, var(--c-highlight))
+  );
+}
+
+/* A bar's rounded ends, with the value printed inside it. */
+.bar-seg {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  height: 100%;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── type ────────────────────────────────────────────────────────────── */
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The oversized hero figure: light weight, tight tracking, tabular. */
+.figure {
+  font-variant-numeric: tabular-nums;
+  font-weight: 300;
+  letter-spacing: -0.035em;
+  line-height: 0.9;
+}
+
+/* The hero panel title — large and light, the way the reference sets it. */
+.hero-title {
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+/* ── motion ──────────────────────────────────────────────────────────── */
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--c-inset);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--c-ink) 7%, transparent),
+    transparent
+  );
+  animation: shimmer 1.4s infinite;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise 220ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+/* Grows a bar from nothing on first paint, so a chart reads as a chart. */
+@keyframes grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.grow {
+  transform-origin: left center;
+  animation: grow 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Horizontal rails (tabs, filter pills) scroll without a visible bar. */
+.no-bar {
+  scrollbar-width: none;
+}
+.no-bar::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

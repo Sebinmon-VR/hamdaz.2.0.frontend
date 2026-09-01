@@ -1,0 +1,487 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #4fd8ff; text-decoration: none; }
+    a:hover { color: #8ae7ff; }
+    .hz { font-family: "Outfit", ui-sans-serif, system-ui, sans-serif; }
+    .hz .fig { font-variant-numeric: tabular-nums; font-weight: 200; letter-spacing: -0.04em; line-height: 1; }
+    .hz .pill { border-radius: 999px; display: flex; align-items: center; }
+    /* A one-pixel top highlight. Without it a panel reads as a hole punched in
+       the page rather than a surface sitting on it. */
+    .hz .lift { box-shadow: inset 0 1px 0 var(--edge); }
+    .hz .ico { display: grid; place-items: center; border-radius: 50%; }
+  </style>
+</helmet>
+
+<!--
+  Three surfaces, each stepping away from the last:
+      app  →  slab  →  well  →  tile
+  Dark inverts: near-black → white → near-black → charcoal.
+  Light never goes dark. It steps in tone instead: grey → white → soft grey →
+  white, with a shadow lifting the slab. Same depth, no black cards sitting in
+  the middle of a light page.
+-->
+<div class="hz"
+     style="width: 1440px; height: 1080px; box-sizing: border-box; padding: 16px; background: {{bezel}}; font-size: 13px;
+            --app: {{app}}; --panel: {{panel}}; --panel2: {{panel2}}; --panel3: {{panel3}};
+            --edge: {{edge}}; --line: {{line}};
+            --ink: {{ink}}; --ink2: {{ink2}}; --ink3: {{ink3}}; --ink4: {{ink4}};
+            --accent: {{accent}}; --on-accent: {{onAccent}}; --second: {{second}}; --on-second: {{onSecond}};
+            --slab: {{slab}}; --slab-ink: {{slabInk}}; --slab-ink3: {{slabInk3}}; --slab-row: {{slabRow}};
+            --slab-shadow: {{slabShadow}}; --solid: {{solid}}; --on-solid: {{onSolid}};
+            --well: {{well}}; --well-ink: {{wellInk}}; --well-ink2: {{wellInk2}}; --well-ink3: {{wellInk3}};
+            --well-tile: {{wellTile}}; --well-line: {{wellLine}};">
+<div style="position: relative; isolation: isolate; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; background: var(--app); border-radius: 32px; overflow: hidden; color: var(--ink);">
+
+  <!-- ── doodle layer ────────────────────────────────────────────
+       Loose line art behind the top of the page, masked to fade out
+       before it reaches the working area. z-index -1 under an isolated
+       stacking context puts it above the app's own background but below
+       every panel, so nothing needs a z-index of its own. Strokes are
+       currentColor, so it inks itself correctly in either theme.
+       ──────────────────────────────────────────────────────────── -->
+  <div aria-hidden="true"
+       style="position: absolute; top: 0; left: 0; right: 0; height: 660px; z-index: -1; pointer-events: none;
+              opacity: {{doodleOpacity}};
+              -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 34%, transparent 92%);
+              mask-image: linear-gradient(to bottom, #000 0%, #000 34%, transparent 92%);">
+    <svg viewBox="0 0 1408 660" width="100%" height="100%" preserveAspectRatio="xMidYMin slice"
+         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+
+      <!-- left: a spiral unwinding out of the corner -->
+      <path d="M118 92c-22-16-52-8-60 16-10 30 20 54 50 46 38-10 50-58 24-88C100 30 40 44 24 92"/>
+      <path d="M150 176c14-6 30-4 42 6"/>
+
+      <!-- a run of wave, the kind you draw while on a call -->
+      <path d="M292 62c16-20 32-20 48 0s32 20 48 0 32-20 48 0 32 20 48 0"/>
+
+      <!-- four-point sparkles -->
+      <path d="M214 40c2 10 5 13 15 15-10 2-13 5-15 15-2-10-5-13-15-15 10-2 13-5 15-15z" stroke="var(--accent)" stroke-width="1.6"/>
+      <path d="M552 118c1.6 8 4 10 12 12-8 1.6-10 4-12 12-1.6-8-4-10-12-12 8-1.6 10-4 12-12z"/>
+      <path d="M1042 44c2 10 5 13 15 15-10 2-13 5-15 15-2-10-5-13-15-15 10-2 13-5 15-15z" stroke="var(--accent)" stroke-width="1.6"/>
+
+      <!-- the long sweep across the middle of the band -->
+      <path d="M596 136C724 44 944 38 1084 120" stroke-dasharray="7 11"/>
+
+      <!-- right: concentric arcs breaking the corner -->
+      <path d="M1408 210a168 168 0 0 0-172-176"/>
+      <path d="M1408 148a112 112 0 0 0-116-118"/>
+      <path d="M1408 86a54 54 0 0 0-58-58"/>
+
+      <!-- a circle scribbled twice round, the way you actually draw one -->
+      <path d="M1186 246c-26-4-44 12-42 30 2 20 26 32 46 24 22-8 30-34 16-50-15-17-45-14-56 6"/>
+
+      <!-- an arrow with a curled tail -->
+      <path d="M96 344c34-40 96-50 144-20"/>
+      <path d="M224 306l18 18-22 14"/>
+
+      <!-- three bars, drawn not plotted -->
+      <path d="M330 366V318M362 366v-74M394 366v-38M312 372h100"/>
+
+      <!-- a loose pair of brackets holding nothing in particular -->
+      <path d="M876 260c-14 6-14 62 0 68M986 260c14 6 14 62 0 68"/>
+
+      <!-- zigzag, right side -->
+      <path d="M1088 336l26-30 26 30 26-30 26 30 26-30 26 30"/>
+
+      <!-- lower band: it is nearly faded out by here, so keep it quiet -->
+      <path d="M108 470c56-18 118-16 172 6" stroke-dasharray="5 10"/>
+      <path d="M470 452c18 16 34 16 50 0"/>
+      <path d="M700 500c-18-2-30 10-28 22 2 14 18 22 32 16 15-6 20-24 10-34"/>
+      <path d="M900 476l16 18 32-40" stroke="var(--accent)"/>
+      <path d="M1120 460c30-14 66-12 94 6" stroke-dasharray="5 10"/>
+      <path d="M1246 540c2 10 5 13 15 15-10 2-13 5-15 15-2-10-5-13-15-15 10-2 13-5 15-15z"/>
+      <path d="M300 566c48-10 96-8 142 6"/>
+      <path d="M640 596c22-12 46-12 68 0"/>
+    </svg>
+  </div>
+
+
+  <!-- ── top bar ─────────────────────────────────────────────── -->
+  <div style="display: flex; align-items: center; gap: 18px; padding: 18px 26px 12px;">
+    <div style="display: flex; align-items: center; gap: 11px;">
+      <span style="display: grid; gap: 2.5px;">
+        <span style="display: flex; gap: 2.5px;"><i style="width: 2.5px; height: 5px; background: var(--second); display: block; border-radius: 1px;"></i><i style="width: 2.5px; height: 5px; background: var(--second); display: block; border-radius: 1px;"></i><i style="width: 2.5px; height: 5px; background: var(--second); display: block; border-radius: 1px;"></i></span>
+        <span style="width: 14px; height: 2.5px; background: var(--accent); display: block; border-radius: 1px;"></span>
+        <span style="display: flex; gap: 2.5px;"><i style="width: 2.5px; height: 5px; background: var(--second); display: block; border-radius: 1px;"></i><i style="width: 2.5px; height: 5px; background: var(--second); display: block; border-radius: 1px;"></i><i style="width: 2.5px; height: 5px; background: var(--second); display: block; border-radius: 1px;"></i></span>
+      </span>
+      <span style="font-size: 17px; font-weight: 600; letter-spacing: -0.025em;">hamdaz</span>
+    </div>
+
+    <div class="pill lift" style="gap: 4px; background: var(--panel); padding: 5px; margin-left: 12px;">
+      <span class="pill ico" style="width: 36px; height: 36px; background: var(--panel2); color: var(--ink3);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      </span>
+      <sc-for list="{{tabs}}" as="t" hint-placeholder-count="5">
+        <span class="pill" style="height: 36px; padding: 0 17px; gap: 8px; background: {{t.bg}}; color: {{t.fg}}; font-size: 13.5px; font-weight: {{t.weight}};">
+          <sc-if value="{{t.active}}" hint-placeholder-val="{{true}}"><i style="width: 6px; height: 6px; border-radius: 50%; background: var(--on-accent); display: block;"></i></sc-if>
+          {{t.label}}
+        </span>
+      </sc-for>
+    </div>
+
+    <div style="display: flex; gap: 5px;">
+      <sc-for list="{{tools}}" as="i" hint-placeholder-count="4">
+        <span class="lift" style="width: 36px; height: 36px; border-radius: 12px; background: var(--panel); color: var(--ink3); display: grid; place-items: center;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="{{i.d}}"/></svg>
+        </span>
+      </sc-for>
+    </div>
+
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 9px;">
+      <span class="pill lift" style="height: 38px; padding: 0 6px 0 17px; gap: 14px; background: var(--panel); color: var(--ink3); font-size: 12.5px; width: 216px;">
+        Search everything
+        <i class="ico" style="margin-left: auto; width: 28px; height: 28px; background: var(--panel2); color: var(--ink2);">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        </i>
+      </span>
+      <span class="ico lift" style="position: relative; width: 38px; height: 38px; background: var(--panel); color: var(--ink3);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        <i style="position: absolute; top: 8px; right: 9px; width: 6px; height: 6px; border-radius: 50%; background: var(--second);"></i>
+      </span>
+      <span class="ico" style="width: 40px; height: 40px; background: linear-gradient(145deg, #86b0d4, #5d7fa3); color: #0c1c26; font-size: 13px; font-weight: 700;">SM</span>
+    </div>
+  </div>
+
+  <!-- ── title ───────────────────────────────────────────────── -->
+  <div style="display: flex; align-items: center; gap: 18px; padding: 10px 26px 20px;">
+    <span class="ico" style="width: 40px; height: 40px; border: 1px solid var(--line); color: var(--ink2);">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+    </span>
+    <h1 class="fig" style="margin: 0; font-size: 52px;">Quotes</h1>
+    <span class="pill" style="height: 26px; padding: 0 12px; background: var(--panel2); color: var(--ink2); font-size: 11.5px; font-weight: 500; align-self: center;">128 live</span>
+    <span style="margin-left: auto; display: flex; align-items: center; gap: 9px;">
+      <span class="ico" style="width: 40px; height: 40px; border: 1px solid var(--line); color: var(--ink2);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+      </span>
+      <span class="pill" style="height: 40px; padding: 0 20px; gap: 9px; background: var(--accent); color: var(--on-accent); font-size: 13.5px; font-weight: 700;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
+        New comparison
+      </span>
+    </span>
+  </div>
+
+  <!-- ── stat row ────────────────────────────────────────────── -->
+  <div style="display: grid; grid-template-columns: 1.58fr 1fr; gap: 16px; padding: 0 26px;">
+
+    <div class="lift" style="background: var(--panel); border-radius: 26px; padding: 26px 30px 24px;">
+      <div style="display: flex; gap: 60px;">
+        <sc-for list="{{figures}}" as="f" hint-placeholder-count="3">
+          <span style="display: flex; flex-direction: column; gap: 14px;">
+            <i style="font-style: normal; font-size: 12px; color: var(--ink3);">{{f.label}}</i>
+            <b style="display: flex; align-items: baseline; gap: 6px; font-weight: 200;">
+              <i class="fig" style="font-style: normal; font-size: 16px; color: var(--ink3);">{{f.prefix}}</i>
+              <i class="fig" style="font-style: normal; font-size: 40px; color: {{f.color}};">{{f.value}}</i>
+              <i class="fig" style="font-style: normal; font-size: 16px; color: var(--ink3);">{{f.suffix}}</i>
+            </b>
+          </span>
+        </sc-for>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 30px;">
+        <sc-for list="{{months}}" as="m" hint-placeholder-count="4">
+          <span style="display: flex; flex-direction: column; gap: 10px;">
+            <i style="display: flex; align-items: baseline; justify-content: space-between; font-style: normal;">
+              <b style="font-size: 12px; font-weight: 400; color: var(--ink3);">{{m.name}}</b>
+              <b class="fig" style="font-size: 13px; font-weight: 400; color: {{m.valueColor}};">{{m.value}}</b>
+            </i>
+            <i style="display: block; height: 10px; border-radius: 999px; background: var(--panel3); position: relative; overflow: hidden;">
+              <b style="position: absolute; left: 0; top: 0; bottom: 0; width: {{m.fill}}; border-radius: 999px; background: {{m.color}};"></b>
+            </i>
+          </span>
+        </sc-for>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 18px;">
+        <sc-for list="{{months}}" as="m" hint-placeholder-count="4">
+          <span style="display: flex; align-items: center;">
+            <sc-for list="{{m.people}}" as="p" hint-placeholder-count="3">
+              <i class="ico" style="width: 34px; height: 34px; background: {{p.bg}}; color: {{p.fg}}; font-size: 11px; font-weight: 700; font-style: normal; margin-left: -9px; border: 2.5px solid var(--panel);">{{p.i}}</i>
+            </sc-for>
+            <i style="font-style: normal; font-size: 11px; color: var(--ink4); margin-left: 10px;">{{m.count}}</i>
+          </span>
+        </sc-for>
+      </div>
+    </div>
+
+    <div class="lift" style="position: relative; background: var(--panel); border-radius: 26px; padding: 26px 26px 24px;">
+      <span class="ico" style="position: absolute; top: 22px; right: 22px; width: 32px; height: 32px; border: 1px solid var(--line); color: var(--ink2);">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M8 7h9v9"/></svg>
+      </span>
+      <span style="display: block; font-size: 12px; color: var(--ink3);">Accepted this quarter</span>
+      <span style="display: flex; align-items: baseline; gap: 6px; margin-top: 14px;">
+        <i class="fig" style="font-style: normal; font-size: 16px; color: var(--ink3);">AED</i>
+        <i class="fig" style="font-style: normal; font-size: 40px;">2.26M</i>
+        <b class="pill" style="height: 24px; padding: 0 11px; background: var(--panel2); color: var(--ink2); font-size: 11.5px; font-weight: 500; margin-left: 8px;">+18%</b>
+      </span>
+
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin-top: 26px;">
+        <sc-for list="{{sources}}" as="s" hint-placeholder-count="3">
+          <span style="position: relative; display: flex; flex-direction: column; justify-content: space-between; height: 112px; border-radius: 18px; padding: 14px; background: {{s.bg}}; color: {{s.fg}};">
+            <i class="fig" style="font-style: normal; font-size: 19px; font-weight: 400;">{{s.value}}</i>
+            <i style="font-style: normal; font-size: 11.5px; opacity: 0.72; line-height: 1.3;">{{s.label}}</i>
+            <sc-if value="{{s.lead}}" hint-placeholder-val="{{true}}">
+              <b style="position: absolute; top: 12px; right: 12px; display: flex; opacity: 0.6;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M7 17L17 7M8 7h9v9"/></svg>
+              </b>
+            </sc-if>
+          </span>
+        </sc-for>
+      </div>
+
+      <span class="pill" style="height: 40px; padding: 0 20px; background: var(--solid); color: var(--on-solid); font-size: 13.5px; font-weight: 600; justify-content: center; margin-top: 18px;">Open in Zoho Books</span>
+    </div>
+  </div>
+
+  <!-- ── filters ─────────────────────────────────────────────── -->
+  <div style="display: flex; align-items: center; gap: 10px; padding: 20px 26px 16px;">
+    <span style="font-size: 12.5px; color: var(--ink3);">Active filters</span>
+    <span class="ico" style="width: 22px; height: 22px; background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 700;">2</span>
+    <sc-for list="{{filters}}" as="f" hint-placeholder-count="5">
+      <span class="pill lift" style="height: 38px; padding: 0 15px; gap: 10px; background: var(--panel); color: {{f.fg}}; font-size: 12.5px; min-width: 150px;">
+        {{f.label}}
+        <i style="margin-left: auto; color: var(--ink4); display: flex;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="{{f.icon}}"/></svg>
+        </i>
+      </span>
+    </sc-for>
+  </div>
+
+  <!-- ── slab (inverts against the app) ──────────────────────── -->
+  <div style="flex: 1; min-height: 0; margin: 0 16px 16px; background: var(--slab); border-radius: 28px; padding: 20px; box-shadow: var(--slab-shadow); display: grid; grid-template-columns: 1fr 1.4fr; gap: 18px;">
+
+    <div style="min-width: 0; display: flex; flex-direction: column;">
+      <span style="display: flex; align-items: center; gap: 10px; padding: 2px 8px 14px;">
+        <i style="font-style: normal; font-size: 16px; font-weight: 600; color: var(--slab-ink);">Open quotes</i>
+        <b class="pill" style="height: 21px; padding: 0 10px; background: var(--second); color: var(--on-second); font-size: 10.5px; font-weight: 700;">2 expiring</b>
+      </span>
+      <div style="display: flex; flex-direction: column; gap: 3px;">
+        <sc-for list="{{quotes}}" as="q" hint-placeholder-count="5">
+          <span class="pill" style="height: 58px; padding: 0 15px; gap: 13px; border: 1.5px solid {{q.ring}}; background: {{q.rowBg}};">
+            <i class="ico" style="width: 36px; height: 36px; background: {{q.avBg}}; color: {{q.avFg}}; font-size: 11.5px; font-weight: 700; font-style: normal;">{{q.initials}}</i>
+            <i style="display: flex; flex-direction: column; gap: 3px; font-style: normal; min-width: 0;">
+              <b style="font-size: 13.5px; font-weight: 600; color: var(--slab-ink);">{{q.no}}</b>
+              <b style="font-size: 11.5px; font-weight: 400; color: {{q.ageColor}};">{{q.age}}</b>
+            </i>
+            <i style="margin-left: auto; font-style: normal; font-size: 12px; color: var(--slab-ink3);">{{q.status}}</i>
+            <i class="fig" style="font-style: normal; font-size: 16px; font-weight: 400; color: var(--slab-ink); width: 106px; text-align: right;">{{q.total}}</i>
+          </span>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- ── well (inverts again, back to the app's polarity) ──── -->
+    <div style="min-width: 0; display: flex; flex-direction: column; background: var(--well); border-radius: 22px; padding: 20px 22px; color: var(--well-ink);">
+
+      <div style="display: flex; align-items: flex-start; gap: 10px;">
+        <span class="pill" style="gap: 4px; background: var(--well-tile); padding: 4px; margin: -4px auto -4px 0;">
+          <sc-for list="{{listTabs}}" as="t" hint-placeholder-count="3">
+            <i class="pill" style="height: 30px; padding: 0 15px; gap: 6px; background: {{t.bg}}; color: {{t.fg}}; font-size: 12px; font-weight: {{t.weight}}; font-style: normal;">{{t.label}}<b style="font-size: 11px; opacity: 0.7;">{{t.count}}</b></i>
+          </sc-for>
+        </span>
+        <span class="ico" style="width: 32px; height: 32px; background: var(--well-tile); color: var(--well-ink2);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v.01M12 12v.01M12 19v.01"/></svg>
+        </span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; margin-top: 26px;">
+        <span style="display: flex; flex-direction: column; gap: 9px;">
+          <i style="font-style: normal; font-size: 11.5px; color: var(--well-ink3);">Quote</i>
+          <i style="display: flex; align-items: center; gap: 10px; font-style: normal;">
+            <b class="fig" style="font-size: 23px; font-weight: 400; color: var(--well-ink);">QT-1038</b>
+            <b class="pill" style="height: 22px; padding: 0 10px; background: var(--second); color: var(--on-second); font-size: 10.5px; font-weight: 700;">5 days left</b>
+          </i>
+        </span>
+        <span style="display: flex; flex-direction: column; gap: 9px;">
+          <i style="font-style: normal; font-size: 11.5px; color: var(--well-ink3);">Customer</i>
+          <i style="display: flex; align-items: center; gap: 9px; font-style: normal;">
+            <b style="width: 26px; height: 26px; border-radius: 8px; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-size: 10px; font-weight: 800;">MC</b>
+            <b style="font-size: 15.5px; font-weight: 600; color: var(--well-ink);">Masdar City FM</b>
+          </i>
+        </span>
+        <span style="display: flex; flex-direction: column; gap: 9px;">
+          <i style="font-style: normal; font-size: 11.5px; color: var(--well-ink3);">Salesperson</i>
+          <i style="display: flex; align-items: center; gap: 9px; font-style: normal;">
+            <b class="ico" style="width: 26px; height: 26px; background: linear-gradient(145deg, #cbb08a, #a8865a); color: #2e2110; font-size: 9.5px; font-weight: 700;">TM</b>
+            <b style="display: flex; flex-direction: column; line-height: 1.25;"><span style="font-size: 13px; font-weight: 600; color: var(--well-ink);">Tariq Al Mansoori</span><span style="font-size: 10.5px; font-weight: 400; color: var(--well-ink3);">Presales</span></b>
+          </i>
+        </span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-top: 24px;">
+        <sc-for list="{{lines}}" as="l" hint-placeholder-count="3">
+          <span style="position: relative; display: flex; flex-direction: column; justify-content: space-between; height: 94px; border-radius: 18px; padding: 14px; background: var(--well-tile);">
+            <i class="fig" style="font-style: normal; font-size: 18px; font-weight: 400; color: var(--well-ink);">{{l.amount}}</i>
+            <i style="font-style: normal; font-size: 11px; color: var(--well-ink3); line-height: 1.3;">{{l.label}}</i>
+            <b style="position: absolute; top: 12px; right: 12px; color: var(--well-ink3); display: flex;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M7 17L17 7M8 7h9v9"/></svg>
+            </b>
+          </span>
+        </sc-for>
+        <span style="display: grid; place-items: center; height: 94px; border-radius: 18px; background: var(--well-tile); color: var(--well-ink3);">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 5v14M5 12h14"/></svg>
+        </span>
+      </div>
+
+      <div class="pill" style="margin-top: auto; gap: 26px; background: var(--well-tile); padding: 13px 13px 13px 22px;">
+        <sc-for list="{{totals}}" as="t" hint-placeholder-count="3">
+          <span style="display: flex; flex-direction: column; gap: 5px;">
+            <i style="font-style: normal; font-size: 10.5px; color: var(--well-ink3);">{{t.label}}</i>
+            <i class="fig" style="font-style: normal; font-size: 18px; font-weight: 400; color: var(--well-ink);">{{t.value}}</i>
+          </span>
+        </sc-for>
+        <span style="margin-left: auto; display: flex; align-items: center; gap: 9px;">
+          <i class="ico" style="width: 36px; height: 36px; border: 1px solid var(--well-line); color: var(--well-ink2);">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          </i>
+          <i class="pill" style="height: 40px; padding: 0 22px; background: var(--accent); color: var(--on-accent); font-size: 13.5px; font-weight: 700; font-style: normal;">Compare suppliers</i>
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"palette":{"editor":"enum","options":["Electric","Magenta","Acid","Ember"],"default":"Electric"},"theme":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Accents keep their vivid value in both themes — they are always a FILL
+    // carrying dark ink, never body text — so only the neutrals swap.
+    const ACCENTS = {
+      Electric: { accent: '#4fd8ff', onAccent: '#022733', second: '#ff4fa3', onSecond: '#2d0417' },
+      Magenta:  { accent: '#ff3d8f', onAccent: '#2d0417', second: '#4fd8ff', onSecond: '#022733' },
+      Acid:     { accent: '#cbfb45', onAccent: '#151f02', second: '#ef4896', onSecond: '#2d0417' },
+      Ember:    { accent: '#ffab2e', onAccent: '#2b1701', second: '#ef4896', onSecond: '#2d0417' }
+    };
+    // Each palette carries its own neutrals so the greys are tinted towards
+    // the accent rather than being one generic grey under four hues.
+    const NEUTRALS = {
+      Electric: {
+        dark:  { bezel: '#040405', app: '#08080b', panel: '#15151a', panel2: '#22222a', panel3: '#2c2c36', line: '#26262e', ink: '#ffffff', ink2: '#a6a6b0', ink3: '#6d6d78', ink4: '#54545e' },
+        light: { bezel: '#c9c9d2', app: '#e6e6ec', panel: '#ffffff', panel2: '#f1f1f5', panel3: '#e3e3ea', line: '#e2e2e9', ink: '#0a0a0e', ink2: '#53535e', ink3: '#7c7c88', ink4: '#a2a2ad' }
+      },
+      Magenta: {
+        dark:  { bezel: '#050304', app: '#0b0709', panel: '#191216', panel2: '#271c22', panel3: '#33242c', line: '#2c2028', ink: '#ffffff', ink2: '#b3a5ab', ink3: '#7d6e75', ink4: '#61535a' },
+        light: { bezel: '#cfc5c9', app: '#ebe4e7', panel: '#ffffff', panel2: '#f6f0f2', panel3: '#e9dfe3', line: '#e8dee2', ink: '#0b0709', ink2: '#5c5057', ink3: '#877a80', ink4: '#aca0a5' }
+      },
+      Acid: {
+        dark:  { bezel: '#040505', app: '#08090a', panel: '#151719', panel2: '#212528', panel3: '#2b3033', line: '#242a2d', ink: '#ffffff', ink2: '#a4aaad', ink3: '#6b7276', ink4: '#52585c' },
+        light: { bezel: '#c7cbc6', app: '#e6e9e4', panel: '#ffffff', panel2: '#f1f3ef', panel3: '#e3e6e1', line: '#e2e5e0', ink: '#080a08', ink2: '#525a53', ink3: '#7b837c', ink4: '#a1a8a2' }
+      },
+      Ember: {
+        dark:  { bezel: '#050403', app: '#0a0806', panel: '#181310', panel2: '#261e18', panel3: '#322820', line: '#2a221b', ink: '#ffffff', ink2: '#b0a69c', ink3: '#7a7066', ink4: '#5e554c' },
+        light: { bezel: '#cfc8bc', app: '#ebe5da', panel: '#fffdfa', panel2: '#f6f1e8', panel3: '#e8e1d5', line: '#e7e0d5', ink: '#0a0806', ink2: '#5c5449', ink3: '#867d71', ink4: '#aba397' }
+      }
+    };
+
+    const name = ACCENTS[this.props.palette] ? this.props.palette : 'Electric';
+    const isLight = this.props.theme === 'Light';
+    const n = NEUTRALS[name][isLight ? 'light' : 'dark'];
+
+    // Dark inverts the slab and inverts the well back again. Light never goes
+    // dark: it alternates white and a soft grey, and lifts the slab with a
+    // shadow instead. Only the one solid button stays high-contrast.
+    const surfaces = isLight
+      ? {
+          slab: '#ffffff', slabInk: '#0a0a0e', slabInk3: '#8b8b96', slabRow: '#f1f1f7',
+          well: '#f2f2f8', wellInk: '#0a0a0e', wellInk2: '#53535e', wellInk3: '#8b8b96',
+          wellTile: '#ffffff', wellLine: '#e4e4ec',
+          slabShadow: '0 2px 20px rgba(12, 12, 28, 0.07)',
+          solid: '#16161c', onSolid: '#ffffff'
+        }
+      : {
+          slab: '#ffffff', slabInk: '#0a0a0c', slabInk3: '#9a9aa4', slabRow: '#f2f2f5',
+          well: '#111116', wellInk: '#ffffff', wellInk2: '#a6a6b0', wellInk3: '#83838f',
+          wellTile: '#1e1e25', wellLine: '#2e2e37',
+          slabShadow: 'none',
+          solid: '#ffffff', onSolid: '#0a0a0c'
+        };
+
+    const a = ACCENTS[name];
+    const edge = isLight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)';
+    // White strokes on near-black read weaker than black on off-white, so the
+    // two themes need different values to look like the same amount of ink.
+    const doodleOpacity = isLight ? 0.085 : 0.14;
+
+    const tab = (label, active) => ({
+      label, active,
+      bg: active ? a.accent : 'transparent',
+      fg: active ? a.onAccent : n.ink3,
+      weight: active ? 700 : 500
+    });
+    const face = (i, c1, c2, fg) => ({ i, bg: `linear-gradient(145deg, ${c1}, ${c2})`, fg });
+
+    return {
+      ...n, ...a, ...surfaces, edge, doodleOpacity,
+      tabs: [tab('Quotes', true), tab('Proposals', false), tab('Comparisons', false), tab('Leave', false), tab('Teams', false)],
+      tools: [
+        { d: 'M3 5h18M3 12h18M3 19h12' },
+        { d: 'M4 20V10M10 20V4M16 20v-7M22 20v-3' },
+        { d: 'M12 3a9 9 0 1 0 9 9h-9z' },
+        { d: 'M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9.5 7a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7' }
+      ],
+      figures: [
+        { label: 'Expiring within 7 days', prefix: 'AED', value: '231,400', suffix: '', color: a.second },
+        { label: 'Out with clients', prefix: 'AED', value: '1,842,300', suffix: '', color: n.ink },
+        { label: 'Average time to accept', prefix: '', value: '18', suffix: 'days', color: n.ink }
+      ],
+      months: [
+        { name: 'January', value: '612K', valueColor: n.ink2, fill: '62%', color: a.accent, count: '3 owners',
+          people: [face('RA', '#d0a97a', '#a8865a', '#2e2110'), face('AK', '#9acbaa', '#6fa080', '#12281a'), face('SM', '#86b0d4', '#5d7fa3', '#0c1c26')] },
+        { name: 'February', value: '374K', valueColor: n.ink2, fill: '38%', color: a.accent, count: '2 owners',
+          people: [face('TM', '#c0a6d4', '#8f76a8', '#241633'), face('AK', '#9acbaa', '#6fa080', '#12281a')] },
+        { name: 'March', value: '869K', valueColor: n.ink, fill: '88%', color: a.accent, count: '4 owners',
+          people: [face('RA', '#d0a97a', '#a8865a', '#2e2110'), face('SM', '#86b0d4', '#5d7fa3', '#0c1c26'), face('TM', '#c0a6d4', '#8f76a8', '#241633'), face('PN', '#d4b98a', '#ab965f', '#33260f')] },
+        { name: 'April', value: '168K', valueColor: n.ink3, fill: '17%', color: a.second, count: '1 owner',
+          people: [face('AK', '#9acbaa', '#6fa080', '#12281a')] }
+      ],
+      sources: [
+        { value: 'AED 1.29M', label: 'Repeat customers', bg: a.accent, fg: a.onAccent, lead: true },
+        { value: 'AED 612K', label: 'Tenders', bg: n.panel2, fg: n.ink2, lead: false },
+        { value: 'AED 354K', label: 'New accounts', bg: n.panel2, fg: n.ink2, lead: false }
+      ],
+      filters: [
+        { label: 'All customers', fg: n.ink2, icon: 'M6 9l6 6 6-6' },
+        { label: 'All statuses', fg: n.ink2, icon: 'M6 9l6 6 6-6' },
+        { label: 'March 2026', fg: n.ink2, icon: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z' },
+        { label: 'April 2026', fg: n.ink2, icon: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z' },
+        { label: 'Quote number', fg: n.ink3, icon: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14M20 20l-3.5-3.5' }
+      ],
+      quotes: [
+        { no: 'QT-1042', age: 'expires in 11 days', ageColor: surfaces.slabInk3, status: 'Sent', total: '412,800', initials: 'SC', avBg: 'linear-gradient(145deg, #d0a97a, #a8865a)', avFg: '#2e2110', ring: 'transparent', rowBg: 'transparent' },
+        { no: 'QT-1039', age: 'expires in 2 days', ageColor: a.second, status: 'Sent', total: '231,000', initials: 'GP', avBg: 'linear-gradient(145deg, #9acbaa, #6fa080)', avFg: '#12281a', ring: 'transparent', rowBg: 'transparent' },
+        { no: 'QT-1038', age: 'expires in 5 days', ageColor: a.second, status: 'Viewed', total: '76,400', initials: 'MC', avBg: 'linear-gradient(145deg, #c0a6d4, #8f76a8)', avFg: '#241633', ring: a.accent, rowBg: surfaces.slabRow },
+        { no: 'QT-1035', age: 'expires in 18 days', ageColor: surfaces.slabInk3, status: 'Sent', total: '303,250', initials: 'RC', avBg: 'linear-gradient(145deg, #86b0d4, #5d7fa3)', avFg: '#0c1c26', ring: 'transparent', rowBg: 'transparent' },
+        { no: 'QT-1032', age: 'expires in 25 days', ageColor: surfaces.slabInk3, status: 'Viewed', total: '129,400', initials: 'FP', avBg: 'linear-gradient(145deg, #d4b98a, #ab965f)', avFg: '#33260f', ring: 'transparent', rowBg: 'transparent' }
+      ],
+      listTabs: [
+        { label: 'All', count: '128', bg: 'transparent', fg: surfaces.wellInk3, weight: 500 },
+        { label: 'Draft', count: '11', bg: 'transparent', fg: surfaces.wellInk3, weight: 500 },
+        { label: 'Open', count: '46', bg: a.accent, fg: a.onAccent, weight: 700 }
+      ],
+      lines: [
+        { amount: '34,200', label: 'MV panels' },
+        { amount: '28,700', label: 'Cable & tray' },
+        { amount: '13,500', label: 'Commissioning' }
+      ],
+      totals: [
+        { label: 'Sub total', value: '76,400' },
+        { label: 'VAT 5%', value: '3,820' },
+        { label: 'Total AED', value: '80,220' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
