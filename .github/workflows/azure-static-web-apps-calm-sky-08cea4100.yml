@@ -17,7 +17,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v3
+      # v3 runs on Node 20, which the runners now warn is deprecated.
+      - uses: actions/checkout@v4
         with:
           submodules: true
           lfs: false
