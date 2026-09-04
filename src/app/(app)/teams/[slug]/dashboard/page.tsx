@@ -6,7 +6,7 @@ import useSWR from "swr";
 import { RotateCcw, Settings2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { humanise } from "@/lib/format";
-import { useAction } from "@/lib/hooks";
+import { useAction, useProgressive } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import type { DashboardOut, LayoutOut, WidgetInfo } from "@/lib/types";
 import { Badge, Panel, PageHead } from "@/components/ui/primitives";
@@ -23,7 +23,9 @@ export default function TeamDashboardPage({
   const session = useSession();
   const [configuring, setConfiguring] = useState(false);
 
-  const dashboard = useSWR<DashboardOut>(`/teams/${slug}/dashboard`);
+  // The local half paints straight away; the Graph- and SharePoint-backed
+  // cards arrive after and replace it.
+  const dashboard = useProgressive<DashboardOut>(`/teams/${slug}/dashboard`);
 
   if (dashboard.error) {
     return <ErrorState error={dashboard.error} onRetry={() => dashboard.mutate()} />;
@@ -59,6 +61,13 @@ export default function TeamDashboardPage({
             </p>
           ))}
         </InlineNotice>
+      )}
+
+      {dashboard.partial && data && (
+        <p className="px-1 text-[11.5px] text-ink-4">
+          Showing what is held locally — the cards that read Entra and SharePoint are
+          still on their way.
+        </p>
       )}
 
       {!data ? (

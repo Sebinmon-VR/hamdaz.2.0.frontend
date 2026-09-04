@@ -51,7 +51,7 @@ export function AnalysisView({ analysis }: { analysis: Analysis }) {
                   <p className="mt-2 text-[26px] font-semibold leading-tight tracking-tight">
                     {cheapest.supplier_name}
                   </p>
-                  <p className="display-num mt-1 text-[34px] font-semibold leading-none">
+                  <p className="fig mt-1 text-[34px] leading-none">
                     {money(cheapest.total, currency)}
                   </p>
                 </>
@@ -244,8 +244,8 @@ function Matrix({ analysis }: { analysis: Analysis }) {
         </tbody>
       </table>
       <p className="mt-4 text-[11.5px] leading-relaxed text-ink-4">
-        Prices are per unit, converted to {currency} where a quote was in another currency.
-        Spread is the gap between the cheapest and dearest offer on that line.
+        Per unit, in {currency}. Spread is the gap between the cheapest and dearest
+        offer on the line.
       </p>
     </div>
   );
@@ -294,7 +294,7 @@ function Suppliers({ analysis }: { analysis: Analysis }) {
                 </div>
               </div>
               <div className="text-right">
-                <p className="display-num text-[24px] font-semibold">
+                <p className="fig text-[24px]">
                   {money(supplier.total, currency)}
                 </p>
                 <p className="text-[11.5px] text-ink-4">

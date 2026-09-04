@@ -8,6 +8,7 @@ import { withQuery } from "@/lib/api";
 import { date, isoDay } from "@/lib/format";
 import type { CalendarOut, LeaveSettingsOut } from "@/lib/types";
 import { Avatar, Badge, Panel, PageHead, PanelHead } from "@/components/ui/primitives";
+import { PersonHover } from "@/components/people/PersonHover";
 import { Button, PillRail } from "@/components/ui/controls";
 import { ErrorState, RowsSkeleton } from "@/components/ui/feedback";
 import { LeaveTypeBadge } from "@/components/leave/badges";
@@ -121,7 +122,7 @@ export default function LeaveCalendarPage() {
                   className={clsx(
                     "flex min-h-11 flex-wrap items-center gap-3 rounded-2xl px-3.5 py-2",
                     full
-                      ? "bg-highlight text-[var(--c-highlight-ink)]"
+                      ? "bg-highlight text-second-ink"
                       : people.length > 0
                         ? "bg-inset"
                         : weekend
@@ -154,10 +155,12 @@ export default function LeaveCalendarPage() {
                             key={`${day}-${person.user_id}`}
                             className={clsx(
                               "inline-flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-2.5 text-[12px]",
-                              full ? "bg-[var(--c-highlight-ink)]/10" : "bg-panel",
+                              full ? "bg-second/10" : "bg-panel",
                             )}
                           >
-                            <Avatar name={person.name} seed={person.user_id} size="xs" />
+                            <PersonHover userId={person.user_id} name={person.name}>
+                              <Avatar name={person.name} seed={person.user_id} size="xs" />
+                            </PersonHover>
                             {person.name}
                           </span>
                         ))}

@@ -9,6 +9,7 @@ import { useAction } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import type { LeaveRequestOut } from "@/lib/types";
 import { Avatar, Badge, Panel, PageHead, Stat } from "@/components/ui/primitives";
+import { PersonHover } from "@/components/people/PersonHover";
 import { Button, Field, PillRail, Textarea, Toggle } from "@/components/ui/controls";
 import { Empty, ErrorState, InlineNotice, Modal, RowsSkeleton } from "@/components/ui/feedback";
 import { LeaveStatusBadge, LeaveTypeBadge } from "@/components/leave/badges";
@@ -55,7 +56,6 @@ export default function LeaveQueuePage() {
       <PageHead
         eyebrow="Leave · HR"
         title="Requests to decide"
-        lead="Approving here can go over the concurrency limit — that is what the emergency override is for."
       />
 
       <div className="flex flex-wrap items-center gap-3">
@@ -116,7 +116,9 @@ export default function LeaveQueuePage() {
                 className="p-5"
               >
                 <div className="flex flex-wrap items-start gap-4">
-                  <Avatar name={request.user_name} seed={request.user_id} />
+                  <PersonHover userId={request.user_id} name={request.user_name}>
+                    <Avatar name={request.user_name} seed={request.user_id} />
+                  </PersonHover>
                   <div className="min-w-0 flex-1">
                     <p className="text-[15px] font-semibold">{request.user_name}</p>
                     <p className="mt-0.5 text-[12.5px] opacity-70">

@@ -37,7 +37,6 @@ export default function RolesPage() {
       <PageHead
         eyebrow="Administration"
         title="Roles"
-        lead="Global roles confer authority across the organisation. Team roles are held per team and mean nothing outside one."
         actions={
           <>
             <LinkButton href="/admin/roles/assignments" icon={Users}>
@@ -200,8 +199,13 @@ function RoleDialog({
   const [description, setDescription] = useState("");
   const [seenFor, setSeenFor] = useState<string | null | undefined>();
 
-  if (role?.key !== seenFor) {
-    setSeenFor(role?.key ?? null);
+  // Normalised on both sides. Setting `?? null` while comparing the raw
+  // `role?.key` meant that closing the dialog left seenFor as null and the
+  // test reading undefined — never equal, so this reset re-entered until
+  // React bailed out with "too many re-renders".
+  const openFor = role?.key ?? null;
+  if (openFor !== seenFor) {
+    setSeenFor(openFor);
     setKey(role?.key ?? "");
     setName(role?.name ?? "");
     setScope(role?.scope ?? "team");

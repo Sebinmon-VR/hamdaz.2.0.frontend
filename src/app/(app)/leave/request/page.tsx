@@ -210,7 +210,7 @@ export default function RequestLeavePage() {
                         key={day}
                         className={
                           wouldBreach
-                            ? "flex items-center gap-3 rounded-2xl bg-[var(--c-highlight-ink)]/8 px-3.5 py-2.5"
+                            ? "flex items-center gap-3 rounded-2xl bg-second/8 px-3.5 py-2.5"
                             : "flex items-center gap-3 rounded-xl bg-inset px-2.5 py-1.5"
                         }
                       >

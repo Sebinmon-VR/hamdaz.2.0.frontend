@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { dateShort, humanise, num, relative } from "@/lib/format";
+import { activeOf } from "@/lib/types";
 import type {
   DirectorySnapshotData,
   LeaveQueueData,
@@ -46,8 +47,28 @@ const SPAN: Record<string, string> = {
   full: "col-span-full",
 };
 
+/**
+ * The widget grid.
+ *
+ * Twelve columns, and the registry's four sizes are a quarter, a third, a half
+ * and the width. Mixing thirds and quarters is what makes it look broken: a
+ * quarter beside a third leaves five columns, which the next third does not
+ * fill, so every dashboard ended up with ragged holes down its right-hand
+ * side. `grid-flow-dense` fixes that by letting a later, smaller widget
+ * backfill a gap an earlier one could not use — the order shifts a little, but
+ * nothing on a dashboard depends on reading order, whereas the holes were
+ * visible on every screen.
+ *
+ * The other half of the problem was height: cards in the same row are as tall
+ * as the tallest, and a short one that did not stretch left a step in the
+ * bottom edge. `h-full` on the frame makes every card fill its row.
+ */
 export function WidgetGrid({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-1 gap-4 sm:grid-cols-12">{children}</div>;
+  return (
+    <div className="grid grid-flow-dense grid-cols-1 gap-3.5 sm:grid-cols-12">
+      {children}
+    </div>
+  );
 }
 
 /** The frame every widget shares: title, module tag, body, optional footer. */
@@ -67,7 +88,7 @@ function Frame({
   className?: string;
 }) {
   return (
-    <Panel tone={tone} className={clsx("flex flex-col p-5", className)}>
+    <Panel tone={tone} className={clsx("flex h-full flex-col p-5", className)}>
       <div className="mb-4 flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[14.5px] font-semibold tracking-tight">{title}</h3>
@@ -233,7 +254,7 @@ function MyStanding({ title, module, data }: WidgetProps<MyStandingData>) {
                 key={key}
                 className={clsx(
                   "rounded-full px-2.5 py-1 text-[11.5px] font-medium",
-                  data.is_lead ? "bg-[var(--c-highlight-ink)]/10" : "bg-inset text-ink-2",
+                  data.is_lead ? "bg-second/10" : "bg-inset text-ink-2",
                 )}
               >
                 {humanise(key)}
@@ -298,7 +319,6 @@ function TeamMembers({
 
 function RoleBreakdown({ title, module, data }: WidgetProps<RoleBreakdownData>) {
   const entries = Object.entries(data.counts).sort((a, b) => b[1] - a[1]);
-  const tones = ["accent", "info", "positive", "warn", "neutral"] as const;
   return (
     <Frame title={title} module={module}>
       {entries.length === 0 ? (
@@ -451,8 +471,15 @@ function MyProposalTasks({ title, module, data }: WidgetProps<MyProposalTasksDat
         <ul className="mt-4 space-y-1.5">
           {data.tasks.map((task) => (
             <li key={task.id}>
+              {/* The row names a task, so it goes to that task. It used to go
+                  to the generic list, where the default filter re-sorted
+                  everything and you had to find the same row again, open it,
+                  and then click the SharePoint link inside — four clicks to a
+                  URL this payload already carried. */}
               <Link
-                href="/proposals/my-tasks"
+                href={task.web_url ?? "/proposals/my-tasks"}
+                target={task.web_url ? "_blank" : undefined}
+                rel={task.web_url ? "noreferrer" : undefined}
                 className="flex items-center gap-3 rounded-xl bg-inset px-2.5 py-1.5 transition hover:bg-panel-2"
               >
                 <div className="min-w-0 flex-1">
@@ -494,9 +521,17 @@ function ProposalWorkload({
       }
     >
       <div className="flex flex-wrap gap-x-6 gap-y-3">
-        <Stat value={num(org.open)} label="open" />
-        <Stat value={num(org.overdue)} label="overdue" tone="danger" delta={org.overdue > 0 ? "late" : undefined} />
-        <Stat value={num(org.due_soon)} label={`due in ${data.soon_days}d`} tone="warn" />
+        {/* `open` counts everything not finished, most of which is bids
+            that closed months ago; `overdue` is that closed pile, not late
+            work. Leading with the live figure is the only honest reading. */}
+        <Stat value={num(activeOf(org))} label="live" />
+        <Stat
+          value={num(org.due_soon)}
+          label={`due in ${data.soon_days}d`}
+          tone="warn"
+          delta={org.due_soon > 0 ? "soon" : undefined}
+        />
+        <Stat value={num(org.overdue)} label="bids closed" />
         <Stat value={num(data.person_count)} label="people" />
       </div>
 
@@ -505,9 +540,9 @@ function ProposalWorkload({
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-[0.08em] text-ink-4">
               <th className="pb-1 font-medium">Person</th>
-              <th className="pb-1 text-right font-medium">Open</th>
-              <th className="pb-1 text-right font-medium">Overdue</th>
+              <th className="pb-1 text-right font-medium">Live</th>
               <th className="pb-1 text-right font-medium">Due soon</th>
+              <th className="pb-1 text-right font-medium">Closed</th>
               <th className="pb-1 pl-4 font-medium">Split</th>
               <th className="pb-1 text-right font-medium">Next</th>
             </tr>
@@ -521,25 +556,30 @@ function ProposalWorkload({
                     <span className="truncate font-medium">{person.name}</span>
                   </div>
                 </td>
-                <td className="tnum bg-inset py-2.5 text-right">{person.open}</td>
+                <td className="tnum bg-inset py-2.5 text-right font-semibold">
+                  {activeOf(person)}
+                </td>
                 <td
                   className={clsx(
                     "tnum bg-inset py-2.5 text-right",
-                    person.overdue > 0 && "font-semibold text-danger",
+                    person.due_soon > 0 && "font-semibold text-warn",
                   )}
                 >
+                  {person.due_soon}
+                </td>
+                <td className="tnum bg-inset py-2.5 text-right text-ink-4">
                   {person.overdue}
                 </td>
-                <td className="tnum bg-inset py-2.5 text-right">{person.due_soon}</td>
                 <td className="w-40 bg-inset py-2.5 pl-4">
                   <RampBar
                     height={20}
                     showValues={false}
+                    // Live work only — the closed bids outnumber it twenty
+                    // to one and turned every bar into the same full smear.
                     segments={[
                       { value: person.no_deadline, label: "No deadline" },
                       { value: person.later, label: "Later" },
                       { value: person.due_soon, label: "Due soon" },
-                      { value: person.overdue, label: "Overdue" },
                     ]}
                   />
                 </td>
@@ -687,7 +727,7 @@ function LeaveQueue({ title, module, data }: WidgetProps<LeaveQueueData>) {
               key={request.id}
               className={clsx(
                 "flex items-center gap-3 rounded-2xl px-3.5 py-2.5 text-[13px]",
-                data.pending_count > 0 ? "bg-[var(--c-highlight-ink)]/8" : "bg-inset",
+                data.pending_count > 0 ? "bg-second/8" : "bg-inset",
               )}
             >
               <Avatar name={request.name} size="xs" />
@@ -728,7 +768,7 @@ function Open({
       className={clsx(
         "grid size-8 shrink-0 place-items-center rounded-full border transition",
         tone === "highlight"
-          ? "border-[var(--c-highlight-ink)]/15 hover:bg-[var(--c-highlight-ink)]/10"
+          ? "border-second/15 hover:bg-second/10"
           : "border-line bg-panel-2 text-ink-3 hover:border-accent hover:text-ink",
       )}
     >

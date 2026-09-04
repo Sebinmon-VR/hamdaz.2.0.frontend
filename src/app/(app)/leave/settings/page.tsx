@@ -61,7 +61,7 @@ export default function LeaveSettingsPage() {
       <PageHead
         eyebrow="Leave"
         title="Leave rules"
-        lead="These numbers decide every request the system handles on its own. Changing them does not revisit decisions already made."
+        lead="Changing these does not revisit decisions already made."
         actions={
           editable && (
             <Button

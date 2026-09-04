@@ -2,33 +2,33 @@
 
 import clsx from "clsx";
 import { Monitor, Moon, Sun } from "lucide-react";
-import { useTheme, type ThemeChoice } from "@/lib/theme";
+import { useTheme, type ModeChoice } from "@/lib/theme";
 
-const OPTIONS: { value: ThemeChoice; icon: typeof Sun; label: string }[] = [
+const OPTIONS: { value: ModeChoice; icon: typeof Sun; label: string }[] = [
   { value: "light", icon: Sun, label: "Light" },
   { value: "dark", icon: Moon, label: "Dark" },
-  { value: "system", icon: Monitor, label: "Match system" },
+  { value: "system", icon: Monitor, label: "Match this device" },
 ];
 
 /**
- * Three states, shown as three segments rather than a two-way toggle — because
- * "follow the system" is a real choice and a toggle cannot express it. The
- * segments carry no text at this size; the title and aria-label do.
+ * Light / dark / follow-the-system, as three segments.
+ *
+ * Three states rather than two, because "follow the system" is a real choice
+ * and a two-way toggle cannot express it. This is the sign-in screen's copy of
+ * the control; inside the app the full picker lives on Settings, where the
+ * accent palette is chosen too.
  */
 export function ThemeSwitch({ className }: { className?: string }) {
-  const { choice, setChoice } = useTheme();
+  const { mode, setMode } = useTheme();
 
   return (
     <div
       role="radiogroup"
-      aria-label="Colour theme"
-      className={clsx(
-        "inline-flex items-center gap-0.5 rounded-xl border border-line bg-panel p-0.5",
-        className,
-      )}
+      aria-label="Colour mode"
+      className={clsx("inline-flex items-center gap-0.5 rounded-full bg-panel-2 p-1", className)}
     >
       {OPTIONS.map(({ value, icon: Icon, label }) => {
-        const active = choice === value;
+        const active = mode === value;
         return (
           <button
             key={value}
@@ -36,12 +36,12 @@ export function ThemeSwitch({ className }: { className?: string }) {
             aria-checked={active}
             aria-label={label}
             title={label}
-            onClick={() => setChoice(value)}
+            onClick={() => setMode(value)}
             className={clsx(
-              "grid size-6 place-items-center rounded transition",
+              "grid size-8 place-items-center rounded-full transition",
               active
-                ? "bg-accent text-[var(--c-accent-ink)]"
-                : "text-ink-4 hover:bg-inset hover:text-ink-2",
+                ? "bg-accent text-accent-ink"
+                : "text-ink-4 hover:bg-panel-3 hover:text-ink-2",
             )}
           >
             <Icon className="size-3.5" strokeWidth={2.1} />

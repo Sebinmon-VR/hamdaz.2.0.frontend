@@ -41,7 +41,7 @@ src/
     layout.tsx            root: self-hosted font, theme script, API preconnect
     login/                the only page outside the shell
     (app)/
-      layout.tsx          the shell — rail, tab bar, session, SWR config
+      layout.tsx          the shell — frame, doodles, top bar, tabs, session
       dashboard/          overview
       teams/              list, detail, members, team dashboard, team proposals
       directory/          Entra, list and person
@@ -49,10 +49,12 @@ src/
       proposals/my-tasks/ SharePoint tasks assigned to the viewer
       quotes/             Zoho Books, list and detail
       comparisons/        list, new (upload → check → compare), saved detail
+      assignment/         labels, the policy, who would get what, and the ranking
       admin/              roles, assignments, team access, user administration
+      settings/           accent palette and light/dark, per browser
   components/
     ui/                   primitives, controls, feedback — the design system
-    shell/                rail, tab bar, wordmark, theme switch
+    shell/                top bar, tab strip, doodles, wordmark, theme switch
     widgets/              one renderer per backend dashboard widget
     comparison/ leave/ proposals/ quotes/   module-specific pieces
   lib/
@@ -60,45 +62,110 @@ src/
     types.ts   transcribed from the backend OpenAPI document
     session.tsx  who is signed in and what they can reach
     tabs.tsx   the open-tab strip
-    theme.tsx  light / dark / follow-the-system
-    nav.ts     the rail and the tab labels, from the viewer's access
+    theme.tsx  accent palette + light / dark / follow-the-system
+    nav.ts     the pill bar, the overflow menu and the tab labels
     format.ts  dates, money, names
     hooks.ts   useAction, useDebounced
 ```
 
 ## The design
 
-A dark analytics workspace: a near-black canvas with panels floating on it,
-pill controls, a tab strip along the top, and one hero panel per screen
-carrying the numbers.
+Archivo throughout, a rail down the left, and a column of blocks on the app
+ground with a 16px gutter. Nothing is a card with a border.
 
-**Colour.** The two brand values from the Hamdaz mark — wordmark blue
-`#45BEED`, bar pink `#EF4896`. They are used almost nowhere as flat fills.
-Their real job is **the ramp**: every bar, meter and track runs blue → pink, so
-a length reads as a position on one continuous scale instead of a legend
-lookup. `RampBar` slices that gradient per segment, so adjacent segments
-*continue* the ramp rather than restarting it, and each prints its own value
-inside its rounded end. Where a series has an urgency order, it is laid out
-least-urgent first so the pink end always means "deal with this".
+**The shell.** [layout.tsx](src/app/(app)/layout.tsx) is a rail, a row of tab
+chips, and one scroll container. Navigation is vertical
+([Rail.tsx](src/components/shell/Rail.tsx)) for a reason that is arithmetic:
+the top of a screen is where the title, the path, the filters and the actions
+all want to be, and a nav bar there costs every screen 56 vertical pixels it
+cannot spare. On the side it costs 62 horizontal pixels of a 1440-wide window,
+which no screen misses.
 
-Both brand colours are light, so **text on a filled blue or pink surface is
-always a dark ink, never white**. The `-text` variants exist for the opposite
-case and are darkened in light mode to pass contrast. `danger` is pushed
-towards orange-red and `info` towards indigo, specifically so neither reads as
-a brand colour at badge size.
+Every screen owns its own command bar — that is what `PageHead` renders: the
+display title, the route as a path pill read straight off the URL, a count, the
+actions, and whatever the screen wants to say about where its data came from.
+It is `sticky`, so it costs no vertical room while scrolling. The shell holds
+no per-screen state at all.
 
-**Theming.** Every colour is a token in `app/globals.css`; no component
-branches on the theme. Three states, not two — light, dark, and
-follow-the-system; "system" stamps no attribute so the media query does the
-work. An inline script in the root layout applies the saved choice before first
-paint. The two dark blocks are necessarily duplicated (one lives inside a media
-query, and CSS cannot share custom properties across that boundary) — **edit
-them together**.
+**Blocks.** 20px corners, no border, floating on the ground. How a block
+separates from that ground is decided once, by `--lift`: nothing in dark (the
+ground is darker than the block), a soft shadow in light (they are both pale).
+One class, two behaviours.
 
-**Tabs.** Screens stay open along the top. A tab is only ever a route — every
-screen reads its own data and SWR still has it cached — so the strip is a list
-of paths, which is why it survives a reload for free. Kept in
-`sessionStorage`, capped at eight.
+**Surfaces.** The app ground, the panel, and — for exactly one thing — the
+**sheet**:
+
+```
+app  →  panel  →  panel-2  →  sheet
+```
+
+The sheet is the record surface: white on dark, a tinted well on light. It is
+the only inversion left in the design, and it is reserved for *one record*, not
+for a list. `Panel tone="sheet"` also carries `.on-sheet`, which redefines the
+surface variables locally — so markup nested inside it re-inks without knowing
+it is on a sheet, which is the whole reason those are variables.
+
+`tone="slab"` and `tone="well"` still exist and still work: the pre-shell design
+put every working list on a white slab, and rather than rewrite two dozen
+screens' markup — and risk dropping a field on the way — those names now resolve
+to the new surfaces.
+
+**Selection inverts.** The selected row breaks its surface: white on dark, ink
+on light (`--row-bg` / `--row-ink`). Same move, opposite direction, so the row
+that matters reads first without a border, a bar or an accent.
+
+**One accent per screen.** `AccentSlab` names the single thing a screen exists
+to answer, and it runs off the right edge of its column — only the leading
+corners are cut — because a slab that stops neatly inside the gutter reads as
+another card. The accent is used nowhere else on that screen: used twice, it
+stops meaning "this one". `HeroPanel` used to wear a decorative accent aura and
+no longer does, for that reason.
+
+**Type.** Three settings do all the hierarchy. `.display` is the screen title
+and the slab — 800 weight, -0.04em, uppercase. `.fig` is every number — 700,
+-0.03em, tabular. `.micro` is the 9px uppercase label at 0.19em that sits over
+each one. The contrast between the widest tracking and the tightest is what
+separates a label from a value, so neither needs a rule, a box or a colour.
+
+**Colour.** Two axes, both stamped on `<html>` by [theme.tsx](src/lib/theme.tsx):
+`data-palette` (electric · magenta · acid · ember) and `data-theme` (dark ·
+light). "Follow the system" is resolved to a concrete mode in JS before first
+paint, so `globals.css` never carries a `prefers-color-scheme` duplicate of
+every block — that keeps it to four accent blocks, eight neutral blocks and two
+surface blocks instead of twenty-something.
+
+An accent never changes value between modes. It is always a **fill carrying
+dark ink**, never body text, so it needs no duller variant to stay legible —
+which is also why the app reads as one product in both modes rather than two.
+`--accent-soft` and `--accent-text` are derived with `color-mix`, so adding a
+fifth palette means adding one accent block and nothing else.
+
+**The ramp.** Every bar and meter runs accent → second, so a length reads as a
+position on one continuous scale instead of a legend lookup. `RampBar` slices
+that gradient per segment, so adjacent segments *continue* it rather than
+restarting, and each prints its own value inside its rounded end. Series with
+an urgency order are laid out least-urgent first, which puts the second colour
+— the one that already means "now" — at the late end.
+
+**Doodles.** [Doodles.tsx](src/components/shell/Doodles.tsx) sits at `z-index:
+-1` inside the frame, which sets `isolation: isolate` — above the app's own
+background, below every block in flow, so no block needs a z-index of its own.
+Strokes are `currentColor`, so the same drawing inks itself white on dark and
+black on light; `--doodle` carries a different opacity per mode because white
+on near-black reads weaker than black on off-white.
+
+## Choosing a theme
+
+[/settings](src/app/(app)/settings/page.tsx) is where a person picks their
+accent and their light/dark mode. Each palette card previews itself in its own
+real values — swatches, a filled pill, the ramp — so the choice is made by
+looking rather than by reading.
+
+The choice is stored per browser, not per account: the backend has no
+user-preferences endpoint, and this is the kind of setting that genuinely
+differs between someone's laptop and the shared machine in the workshop. The
+sign-in screen carries a cut-down light/dark switch so the door matches the
+room.
 
 ## Speed
 
@@ -111,7 +178,7 @@ The things that were actually slow, and what was done:
 - **SharePoint in the shell.** The "what's due today" rail lived in the top
   bar, so its SharePoint list sweep — the slowest call in the app — ran on
   *every* page. It now lives on the dashboard alone.
-- **The font.** Inter is self-hosted via `next/font` instead of a
+- **The font.** Outfit is self-hosted via `next/font` instead of a
   render-blocking Google stylesheet, which also removes a DNS lookup and a TLS
   handshake to a third origin before first paint.
 - **API preconnect.** The root layout warms the connection to the API origin,
@@ -123,12 +190,60 @@ What is still slow is the backend's own remote reads — a team dashboard render
 Graph and SharePoint live, and the comparison analyse step calls a model. Those
 show progressive skeletons rather than blocking the page.
 
+## Two traps in the API
+
+**`team` is not one convention.** Four modules take a query parameter of that
+name and disagree on what goes in it:
+
+| Endpoint | `team` is |
+| --- | --- |
+| `/assignment/preview`, `/labels…` | the team's **UUID** |
+| `/analytics/…`, `/proposals/workload` | the team's **slug** |
+
+Sending the wrong one fails as a 422 about an "invalid character" — nothing in
+that message names the real problem. `withQuery` in [api.ts](src/lib/api.ts)
+therefore checks the shape against the path and throws a readable error in
+development, where the call site is still in front of you.
+
+**`excluded_roles` is applied by the ranking and ignored by the preview.**
+`/analytics` drops anyone holding an excluded role; `/assignment/preview`
+decides exclusion from labels and capacity alone and never looks at a role. So
+a manager appears on *Who gets what* with a full share and is then absent from
+*Ranking*, and the preview's shares are larger than what would actually be
+handed out.
+
+This is a backend inconsistency, not something the frontend should quietly
+paper over by inventing its own rule — a guess here could diverge from what the
+server does. So the preview marks the affected rows and says plainly that the
+ranking will drop them, reading `excluded_roles` from the same policy rather
+than deciding anything itself. **Worth fixing server-side** in
+`app/assignment/router.py`, where the preview builds its `EffectOut` list.
+
+## Which modules are actually gated
+
+Only two routers enforce a team grant: **proposals** and **quote comparison**,
+both with a `require_module` dependency. Everything else — leave, quotes,
+labels, the assignment policy, the ranking — takes `CurrentUser` and checks
+nothing further, and each says so in its own docstring. Being in the module
+catalogue gives a module a route and a name; it is not what gates it.
+
+So `ALWAYS_OPEN` in [session.tsx](src/lib/session.tsx) lists **leave, quotes
+and assignment**, and the nav shows them regardless of grant. Hiding the
+assignment screens behind one would have directly defeated the reason their
+router gives for being open.
+
+Writes are a separate question and stay gated: label edits need a super admin,
+the CEO or a manager; policy edits follow the reach rule; the HR queue checks
+team membership. In each case the backend decides and the UI reports what it
+said.
+
 ## Navigation is not a static list
 
 The backend's module catalogue (`app/access/catalogue.py`) already names every
 frontend route — deliberate on its side, so one catalogue drives both the
-permission model and the navigation. `lib/nav.ts` adds only an icon and an
-order; what appears comes from `/access/me`, so nobody is shown a link that
+permission model and the navigation. `lib/nav.ts` adds only an icon, an
+order, and the split between the pill bar and the overflow menu behind the grid
+button; what appears comes from `/access/me`, so nobody is shown a link that
 would 403.
 
 Two exceptions, both matching the backend's own comments: **Leave** and
@@ -139,6 +254,62 @@ modules are never granted to a team. The HR-only leave screens appear by
 comparing the viewer's teams against `hr_team_slug` from `/leave/settings`, so
 HR sees a queue rather than a 403.
 
+## Work assignment
+
+Two backend modules, three screens, and **nothing on any of them assigns work**
+— the backend is explicit that the scoring which acts on these settings is a
+separate piece, so the ratios can be set up and argued about before anything
+starts moving.
+
+- **[Labels](src/app/(app)/assignment/labels/page.tsx)** — the catalogue and
+  who holds what, on one screen, because making a label and giving it to
+  somebody is the same task. Some labels are *derived*: On Leave is read live
+  from the leave module, New Joiner from a joining date. Those show with their
+  reason attached and no remove button, since the honest answer to "why does
+  she have this" is a date, not a person. A label can be renamed and restyled
+  but its **key cannot change**: the policy, every assignment and every stored
+  run refer to it, so the edit dialog shows the key greyed rather than omitting
+  it, and a built-in label's *kind* is fixed because the policy reasons about a
+  seniority and a status differently.
+- **[Policy](src/app/(app)/assignment/policy/page.tsx)** — a capacity
+  multiplier per label, an optional hard ceiling on open items, who is out of
+  the pool, and the three weights the scoring balances. The organisation has a
+  default; a team can be given its own or dropped back to inheriting.
+- **[Preview](src/app/(app)/assignment/preview/page.tsx)** — the policy read
+  against the labels people actually hold. The backend returns a ratio in words
+  ("1 task for every 2") next to the decimal, and the screen leads with the
+  words: 0.7 is precise and means nothing at a glance.
+
+- **[Ranking](src/app/(app)/assignment/ranking/page.tsx)** — the scoring that
+  acts on all of it. Three factors — load against capacity, raw open count, and
+  days since last assigned — each normalised across the candidates to 0–1 where
+  1 always means most deserving, then weighted and summed. Every person's score
+  can be opened to see the three contributions that produced it.
+
+  Two endpoints, and the split is the design. `/preview` computes and keeps
+  nothing, which is the common case. `POST /runs` computes and **freezes the
+  policy onto the record**, so a later edit to the weights cannot rewrite what
+  a decision was based on — which is why [a kept
+  run](src/app/(app)/assignment/runs/[id]/page.tsx) never re-scores and shows
+  the snapshot instead of the live policy.
+
+  A team is required and must have a policy **of its own**; the organisation
+  default deliberately does not qualify, since scoring everybody at once would
+  put every team into a queue they do not share. A 409 here is therefore a
+  setup answer, not a failure, and is shown as one with a link to the policy.
+
+Reading all four is open to **any signed-in user** — their routers take
+`CurrentUser` with no module guard, because the rule deciding how much work
+somebody gets should be visible to the person it applies to. Writing is gated
+by the backend's reach rule (super admins and the CEO anywhere, a manager only
+on their own teams), and `PolicyOut.may_edit` carries the answer per policy, so
+the UI reports the real refusal rather than guessing at it.
+
+**Nothing in this module assigns anything.** The backend is explicit about it
+twice: the policy screens set numbers, the ranking says who *should* get the
+next task and why, and handing it over stays a person's action. Nothing is ever
+written back to SharePoint.
+
 ## Widgets
 
 `/dashboards/me` and `/teams/{slug}/dashboard` return widgets the backend has
@@ -147,6 +318,45 @@ key. `components/widgets/index.tsx` is the switchboard. A widget with no
 renderer falls through to its raw JSON rather than vanishing, so adding one on
 the backend is never a silent no-op here. A widget that cannot answer returns
 `{available: false, reason}` and is rendered as that reason in place.
+
+## API coverage
+
+Every endpoint the backend exposes is called by some screen, bar three that are
+redundant here and deliberately left alone:
+
+| Endpoint / field | Why not |
+| --- | --- |
+| `GET /widgets` | The unscoped widget catalogue. The layout dialog uses `available` from `/teams/{ref}/dashboard/layout`, which is the same list already narrowed to that team's modules. |
+| `DELETE /teams/{ref}/access/{module_key}` | Revokes one module. The access screen sends the whole set with `PUT`, where a module left out *is* the revocation. |
+| `POST /teams/{ref}/access` → `page_keys` | Grants one module limited to some pages. The `PUT` above carries the same per-module page lists for every module at once. |
+| `GET /auth/callback` | A browser redirect target, not something a fetch should ever hit. |
+
+Thirteen response fields are also deliberately not rendered, and all of them
+are the same two kinds of thing: opaque identifiers the screens already have a
+better handle for (`created_by_id`, `decided_by_id`, `policy_id`,
+`sharepoint_lookup_id`, `sharepoint_user_id`, `team_slug`) and server telemetry
+(`widget_ms`, `section_ms`, `fetch_ms`, `SectionInfo.heavy`, which the
+progressive loader acts on rather than displays).
+
+Every other endpoint, **every query parameter and every request field** is sent
+by some screen. To re-check after a backend change, dump the spec (below) and
+diff its paths, `parameters[].name` and request-schema properties against the
+string literals under `src/`.
+
+### Loading fast, then completely
+
+Three endpoints take `local_only`, which tells the backend to skip the sections
+or widgets that call out to Entra and SharePoint. Those remote reads are what
+make a dashboard take seconds; the rest answers from Postgres in milliseconds.
+`useProgressive` in [hooks.ts](src/lib/hooks.ts) fires both **in parallel** —
+sequencing them would add the fast one's latency to the total for no benefit —
+renders whichever has arrived, and swaps in the complete answer when it lands.
+Used by the overview, each team dashboard, and the admin profile.
+
+One consequence worth knowing when reading those screens: a section can be
+`undefined` (not arrived — the local pass skipped it) or `null` (arrived, the
+person genuinely has no Entra record). Only the second is worth reporting to
+the viewer, so the distinction is load-bearing.
 
 ## Types
 

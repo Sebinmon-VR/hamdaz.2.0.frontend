@@ -154,7 +154,8 @@ export interface MyTeamOut {
 
 export interface BulkResult {
   added: MemberOut[];
-  failed: { user_id: string; error: string }[];
+  /** Each person is attempted independently — one bad id keeps the rest. */
+  failed: { user_id: string; reason: string }[];
 }
 
 // ── profiles (admin) ───────────────────────────────────────────────────
@@ -384,6 +385,41 @@ export interface MyTasksOut {
   tasks: TaskOut[];
 }
 
+/**
+ * An enquiry as the quoting module serves it.
+ *
+ * Every field the Proposals list carries, plus what quoting knows about it:
+ * whether a quote has already been raised, and which. That join is the reason
+ * this endpoint exists rather than the proposals one — the picker has to know,
+ * per row, whether it is offering to start work or to resume it, and asking
+ * two services and stitching the answers here would be slower and would go
+ * stale between the two calls.
+ */
+export interface QuotableTaskOut extends TaskOut {
+  /** Null when nothing has been raised against this enquiry yet. */
+  quote_request_id: string | null;
+  quote_reference: string | null;
+  quote_status: QuoteStatus | null;
+  quote_title: string | null;
+}
+
+export interface QuotableTasksOut {
+  email: string;
+  /**
+   * False means the person has no presence on the SharePoint site at all — a
+   * different thing from having nothing assigned, and it needs saying
+   * differently. One is "you are clear", the other is "you are not on the list
+   * and nothing could ever reach you here".
+   */
+  in_sharepoint: boolean;
+  /** Before `open_only` is applied, so "showing 12 of 27" is available. */
+  total: number;
+  open_count: number;
+  quoted_count: number;
+  /** Already sorted soonest deadline first, by BCD. Do not re-sort. */
+  tasks: QuotableTaskOut[];
+}
+
 export interface ColumnOut {
   name: string | null;
   display_name: string | null;
@@ -396,11 +432,21 @@ export interface PersonWorkloadOut {
   email: string | null;
   total: number;
   completed: number;
+  /** Everything not finished — includes bids that closed long ago. */
   open: number;
+  /**
+   * Bid closing date already past. Despite the name this is not "late work":
+   * it is the parked pile. See {@link activeOf}.
+   */
   overdue: number;
   due_soon: number;
   later: number;
   no_deadline: number;
+  /**
+   * Rows with no status at all. **Also present in `by_status` under the key
+   * `"(no status)"`** — the backend counts them in both — so rendering this
+   * beside that map shows the same number twice.
+   */
   no_status: number;
   by_status: Record<string, number>;
   next_deadline: string | null;
@@ -418,6 +464,24 @@ export interface ExcludedOut {
   rows: number;
   people: number;
   names: string[];
+}
+
+/**
+ * How much of a person's workload is actually live.
+ *
+ * Everything needed is on the row already, split four ways by deadline:
+ * `overdue` (bid closing date passed), `due_soon`, `later` and `no_deadline`.
+ * `open` is simply all four added up. So the live work — the bid is still
+ * open — is the last three, or equivalently `open - overdue`, and that agrees
+ * with what the scoring module calls **active** person for person.
+ *
+ * The distinction matters because on this list most rows are parked, not late:
+ * somebody with 60 "open" and 58 "overdue" has two live proposals and a
+ * fifty-eight-row archive of closed bids. Reporting the first number, in red,
+ * says the opposite of the truth.
+ */
+export function activeOf(person: PersonWorkloadOut): number {
+  return Math.max(0, person.open - person.overdue);
 }
 
 export interface WorkloadOut {
@@ -772,4 +836,696 @@ export interface ComparisonOut {
   analysed_at: string | null;
   analysis: Analysis | null;
   quotes: ComparisonQuoteOut[];
+}
+
+// ── labels ─────────────────────────────────────────────────────────────
+
+export type LabelKind = "category" | "status" | "skill";
+/** "derived" labels are computed at read time, never assigned by hand. */
+export type LabelSource = "manual" | "derived";
+
+export interface LabelOut {
+  id: string;
+  key: string;
+  name: string;
+  kind: LabelKind;
+  color: string | null;
+  description: string | null;
+  is_system: boolean;
+  /** Null for an organisation-wide label; set for one scoped to a team. */
+  team_id: string | null;
+  derived?: boolean;
+}
+
+export interface LabelIn {
+  key: string;
+  name: string;
+  kind: LabelKind;
+  description?: string | null;
+  color?: string | null;
+}
+
+export interface HeldLabelOut {
+  key: string;
+  name: string;
+  kind: LabelKind;
+  source: LabelSource;
+  expires_at?: string | null;
+  /** Why a derived label applies — the leave dates, the joining date. */
+  reason?: string | null;
+}
+
+export interface PersonLabelsOut {
+  user_id: string;
+  display_name: string;
+  email: string;
+  joined_on: string | null;
+  labels: HeldLabelOut[];
+}
+
+export interface AssignLabelIn {
+  user_id: string;
+  label_key: string;
+  team_id?: string | null;
+  expires_at?: string | null;
+  note?: string | null;
+}
+
+export interface JoinedOnIn {
+  joined_on: string | null;
+}
+
+/** From /labels/suggested — the shipped labels and the capacities they imply. */
+export interface SuggestedLabel {
+  key: string;
+  name: string;
+  kind: LabelKind;
+  description: string;
+  color: string | null;
+  capacity: number | null;
+  derived: boolean;
+}
+
+// ── assignment policy ──────────────────────────────────────────────────
+
+export interface PolicyOut {
+  id: string;
+  /** Null on the organisation-wide default. */
+  team_id: string | null;
+  team_name?: string | null;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  /** Decimals arrive as strings so they survive the trip intact. */
+  default_capacity: string;
+  capacity_by_label: Record<string, string>;
+  default_max_open: number | null;
+  max_open_by_label: Record<string, number>;
+  excluded_labels: string[];
+  /** Roles whose holders are never scored — managers run the queue rather
+      than stand in it. Defaults to manager and team_manager. */
+  excluded_roles: string[];
+  exclude_on_leave: boolean;
+  new_joiner_days: number;
+  /** Fall back to first-seen when a joining date is missing. Off by default:
+      with few dates set, everybody collapses to the new-joiner capacity and
+      the ratio stops distinguishing anyone. */
+  new_joiner_from_first_seen: boolean;
+  weight_load: string;
+  weight_open_count: string;
+  weight_idle_days: string;
+  updated_at: string;
+  updated_by_name?: string | null;
+  /** Computed per viewer by the backend's reach rule. */
+  may_edit?: boolean;
+  edit_reason?: string | null;
+}
+
+export interface PolicyIn {
+  name?: string | null;
+  description?: string | null;
+  enabled?: boolean | null;
+  default_capacity?: string | null;
+  capacity_by_label?: Record<string, string> | null;
+  default_max_open?: number | null;
+  max_open_by_label?: Record<string, number> | null;
+  excluded_labels?: string[] | null;
+  excluded_roles?: string[] | null;
+  exclude_on_leave?: boolean | null;
+  new_joiner_days?: number | null;
+  new_joiner_from_first_seen?: boolean | null;
+  weight_load?: string | null;
+  weight_open_count?: string | null;
+  weight_idle_days?: string | null;
+}
+
+export interface EffectOut {
+  user_id: string;
+  display_name: string;
+  labels: string[];
+  capacity: string;
+  /** The multiplier said in words — "1 task for every 2". */
+  ratio: string;
+  max_open: number | null;
+  excluded: boolean;
+  excluded_reason: string | null;
+}
+
+export interface PolicyPreviewOut {
+  policy_id: string;
+  /**
+   * True when the team has no policy of its own and the default governs.
+   * Worth saying out loud on screen: an inherited preview changes the moment
+   * somebody edits the default.
+   */
+  inherited: boolean;
+  team_id: string | null;
+  people: EffectOut[];
+  assignable: number;
+}
+
+// ── quote requests ─────────────────────────────────────────────────────
+
+/**
+ * Where a quote is in its approval loop.
+ *
+ * `rework` is not a status: an approver sending one back puts it in
+ * `changes_requested`, the requester edits and submits again, and the revision
+ * number goes up. So a quote can pass through the same status more than once,
+ * and `revision` is what tells two passes apart.
+ */
+export type QuoteStatus =
+  | "draft"
+  | "pending_approval"
+  | "changes_requested"
+  | "approved"
+  | "rejected"
+  | "in_negotiation"
+  | "created_in_zoho";
+
+/** The three a requester can edit in. Everything else is locked, deliberately. */
+export const EDITABLE_STATUSES: readonly QuoteStatus[] = [
+  "draft",
+  "changes_requested",
+  "in_negotiation",
+];
+
+/**
+ * `negotiate` is not a decision an approver makes on the review form — it is
+ * what the requester records when the customer comes back on an already
+ * approved quote. It appears here because it lands in the same review history.
+ */
+export type ReviewAction = "approve" | "reject" | "rework" | "comment" | "negotiate";
+
+/** What a comment is attached to. `target_ref` names which one. */
+export type CommentTarget = "quote" | "field" | "item" | "supplier_quote";
+
+export interface QuoteLineOut {
+  id: string;
+  position: number;
+  name: string;
+  description: string | null;
+  item_code: string | null;
+  brand: string | null;
+  unit: string | null;
+  quantity: string;
+  rate: string;
+  discount: string;
+  tax_name: string | null;
+  tax_percentage: string | null;
+  /** What it costs us. Null when no supplier quote is behind the line. */
+  cost_rate: string | null;
+  /**
+   * What this line makes, in the quote's currency — quantity times the gap
+   * between `rate` and `cost_rate`. An amount, not a percentage. Null when no
+   * supplier cost sits behind the line.
+   */
+  margin: string | null;
+  line_total: string;
+  source_supplier_quote_id: string | null;
+}
+
+export interface QuoteLineIn {
+  name: string;
+  description?: string | null;
+  item_code?: string | null;
+  brand?: string | null;
+  unit?: string | null;
+  quantity: number | string;
+  rate: number | string;
+  discount?: number | string;
+  tax_name?: string | null;
+  tax_percentage?: number | string | null;
+  cost_rate?: number | string | null;
+  source_supplier_quote_id?: string | null;
+}
+
+/**
+ * A line as the editor holds it.
+ *
+ * Distinct from `QuoteLineOut` on two points that matter. `key` is stable
+ * across a reorder and exists for rows that the server has never seen, so
+ * React and the dirty-tracking have something to hold on to that `id` cannot
+ * provide. And `line_total` / `margin` are nullable: they are the server's
+ * numbers, and a row that has just been typed does not have them yet.
+ *
+ * Every value stays the string the user typed. Converting to a number to
+ * "normalise" it here would round the exact decimal the server is expecting.
+ */
+export interface QuoteLineDraft {
+  key: string;
+  /** Null for a row added here that has never been saved. */
+  id: string | null;
+  name: string;
+  description: string | null;
+  item_code: string | null;
+  brand: string | null;
+  unit: string | null;
+  quantity: string;
+  rate: string;
+  discount: string;
+  tax_name: string | null;
+  tax_percentage: string | null;
+  cost_rate: string | null;
+  source_supplier_quote_id: string | null;
+  line_total: string | null;
+  margin: string | null;
+}
+
+/** Server line to editable row. */
+export function toDraft(line: QuoteLineOut): QuoteLineDraft {
+  return {
+    key: line.id,
+    id: line.id,
+    name: line.name,
+    description: line.description,
+    item_code: line.item_code,
+    brand: line.brand,
+    unit: line.unit,
+    quantity: line.quantity,
+    rate: line.rate,
+    discount: line.discount,
+    tax_name: line.tax_name,
+    tax_percentage: line.tax_percentage,
+    cost_rate: line.cost_rate,
+    source_supplier_quote_id: line.source_supplier_quote_id,
+    line_total: line.line_total,
+    margin: line.margin,
+  };
+}
+
+/**
+ * Editable row to request body.
+ *
+ * Blank numerics become the server's own defaults rather than being sent as
+ * empty strings, which it rejects. Everything else goes as typed — no parsing,
+ * so an exact decimal survives the round trip unchanged.
+ */
+export function toLineIn(line: QuoteLineDraft): QuoteLineIn {
+  const orZero = (v: string) => (v.trim() === "" ? "0" : v.trim());
+  return {
+    name: line.name.trim(),
+    description: line.description,
+    item_code: line.item_code,
+    brand: line.brand,
+    unit: line.unit,
+    quantity: line.quantity.trim() === "" ? "1" : line.quantity.trim(),
+    rate: orZero(line.rate),
+    discount: orZero(line.discount),
+    tax_name: line.tax_name,
+    tax_percentage:
+      line.tax_percentage === null || line.tax_percentage.trim() === ""
+        ? null
+        : line.tax_percentage.trim(),
+    cost_rate:
+      line.cost_rate === null || line.cost_rate.trim() === "" ? null : line.cost_rate.trim(),
+    source_supplier_quote_id: line.source_supplier_quote_id,
+  };
+}
+
+export interface QuoteReviewOut {
+  id: string;
+  action: ReviewAction;
+  note: string | null;
+  /** Which pass this decision was made on. */
+  revision: number;
+  reviewer_name: string | null;
+  selected_supplier_quote_id: string | null;
+  created_at: string;
+}
+
+export interface QuoteCommentOut {
+  id: string;
+  target_type: CommentTarget;
+  target_ref: string | null;
+  body: string;
+  revision: number;
+  author_name: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  is_open: boolean;
+}
+
+export interface QuoteRequestSummaryOut {
+  id: string;
+  reference: string | null;
+  title: string;
+  customer_name: string;
+  status: QuoteStatus;
+  revision: number;
+  currency: string;
+  total: string;
+  win_probability: string | null;
+  multiple_supplier_quotes: boolean;
+  created_by_name: string | null;
+  assigned_to_name: string | null;
+  open_comments: number;
+  created_at: string;
+}
+
+export interface QuoteRequestOut {
+  id: string;
+  reference: string | null;
+  title: string;
+  status: QuoteStatus;
+  revision: number;
+
+  customer_name: string;
+  customer_id: string | null;
+  contact_person: string | null;
+  reference_number: string | null;
+  quote_date: string | null;
+  expiry_date: string | null;
+  currency: string;
+  salesperson_name: string | null;
+  place_of_supply: string | null;
+  payment_terms: string | null;
+  delivery_terms: string | null;
+  cf_bcd: string | null;
+  cf_portal: string | null;
+  subject: string | null;
+  notes: string | null;
+  terms: string | null;
+
+  discount: string;
+  shipping_charge: string;
+  adjustment: string;
+  sub_total: string;
+  total: string;
+
+  multiple_supplier_quotes: boolean;
+  /** Set once supplier quotes are attached — they are compared as a unit. */
+  comparison_id: string | null;
+  selected_supplier_quote_id: string | null;
+  /** Estimated from past outcomes. `win_basis` says what fed the estimate. */
+  win_probability: string | null;
+  win_basis: Record<string, unknown> | null;
+
+  team_id: string;
+  team_name: string | null;
+  created_by_name: string | null;
+  assigned_to_name: string | null;
+  submitted_at: string | null;
+  decided_at: string | null;
+
+  /**
+   * When the approvers were emailed that this is waiting, and why that failed.
+   *
+   * These two decide whether "pending approval" means anybody actually knows.
+   * Submitting succeeds even when the mail does not, so a quote can sit in the
+   * approvers' queue with nothing having told them it is there — which looks
+   * identical, to the person who submitted it, to an approver ignoring them.
+   * Both fields exist to be shown; see the workspace screen.
+   */
+  approvers_notified_at: string | null;
+  notify_error: string | null;
+
+  /** The SharePoint enquiry this was raised from, when it came from one. */
+  source_task_id: string | null;
+  source_task_url: string | null;
+  created_at: string;
+  updated_at: string;
+
+  items: QuoteLineOut[];
+  reviews: QuoteReviewOut[];
+  comments: QuoteCommentOut[];
+  /**
+   * The supplier comparison, inline. Same analysis the comparison module
+   * builds, carried on the quote so the picking happens here rather than on a
+   * screen the user has to come back from.
+   */
+  comparison: QuoteComparison | null;
+  /** Finished rounds, oldest first. The current pass is not in here. */
+  revisions: QuoteRevisionOut[];
+
+  /**
+   * The backend's own answer to "may this person do that", rather than the
+   * frontend re-deriving it from roles. The `_reason` fields are why not, and
+   * are written to be shown: `submit_reason` says what is still missing, so
+   * nobody has to press a disabled button to find out.
+   */
+  may_edit: boolean;
+  may_submit: boolean;
+  submit_reason: string | null;
+  may_approve: boolean;
+  approve_reason: string | null;
+}
+
+/**
+ * A finished round.
+ *
+ * Kept whole rather than as a diff because a negotiation is read, not
+ * replayed: the reviewer wants to see what was agreed last time beside what is
+ * being asked for now, and that means both rounds have to stand on their own.
+ */
+export interface QuoteRevisionOut {
+  /** The pass number. Unique within a quote, and its identity — there is no id. */
+  revision: number;
+  outcome: "approve" | "reject" | "rework" | "superseded" | (string & {});
+  /**
+   * The whole round as the backend serialised it.
+   *
+   * Typed as a bare `object` on the wire, so nothing in here is guaranteed.
+   * `readRound` in components/quotes/History.tsx is the one place that reads
+   * it, and it treats every key as optional — do not reach into this shape
+   * directly from a component.
+   */
+  snapshot: Record<string, unknown>;
+  created_at: string;
+}
+
+/**
+ * The comparison as it arrives on a quote.
+ *
+ * `suppliers` and `groups` are the comparison module's own shapes — this is
+ * that analysis, not a second copy of it — plus the supplier-quote ids the
+ * quote needs in order to price itself from one of them.
+ */
+export interface QuoteComparison extends Analysis {
+  /** Set when a supplier has already been chosen for this round. */
+  selected_supplier_quote_id?: string | null;
+}
+
+/** POST /{id}/select-supplier. `SupplierChoiceIn` on the wire. */
+export interface SupplierChoiceIn {
+  supplier_quote_id: string;
+  /** Percent added to each supplier cost to get the sell rate. */
+  markup_percent: number | string;
+}
+
+/** POST /{id}/negotiate. `NegotiationIn` on the wire. */
+export interface NegotiationIn {
+  /** What the customer is asking for. The API requires it. */
+  note: string;
+}
+
+/**
+ * A file that could not be read.
+ *
+ * The upload endpoint takes up to twelve at once and keeps the ones that
+ * worked, so a failure is partial by design and the names have to survive to
+ * the screen — "3 files failed" is not something anyone can act on.
+ */
+export interface SupplierQuoteFailure {
+  file_name: string;
+  error: string;
+}
+
+export interface QuoteRequestIn {
+  title: string;
+  customer_name: string;
+  customer_id?: string | null;
+  contact_person?: string | null;
+  reference?: string | null;
+  reference_number?: string | null;
+  quote_date?: string | null;
+  expiry_date?: string | null;
+  currency?: string;
+  salesperson_name?: string | null;
+  place_of_supply?: string | null;
+  payment_terms?: string | null;
+  delivery_terms?: string | null;
+  cf_bcd?: string | null;
+  cf_portal?: string | null;
+  subject?: string | null;
+  notes?: string | null;
+  terms?: string | null;
+  discount?: number | string;
+  shipping_charge?: number | string;
+  adjustment?: number | string;
+  multiple_supplier_quotes?: boolean;
+  items?: QuoteLineIn[];
+}
+
+// ── form templates ─────────────────────────────────────────────────────
+
+export type TemplateStatus = "draft" | "active" | "archived";
+
+export type FieldType =
+  | "text"
+  | "textarea"
+  | "number"
+  | "currency"
+  | "percent"
+  | "date"
+  | "checkbox"
+  | "select"
+  | "table"
+  | "file";
+
+export interface TemplateFieldOut {
+  key: string;
+  label: string;
+  type: FieldType;
+  section: string | null;
+  required: boolean;
+  help: string | null;
+  /** For `select`. */
+  options: string[] | null;
+  default: unknown;
+  /** The field on the real record this one fills in, when it maps to one. */
+  maps_to: string | null;
+  /** For `table`: the columns each row has. */
+  columns: TemplateFieldOut[] | null;
+}
+
+export interface TemplateSectionOut {
+  key: string;
+  name: string;
+  help: string | null;
+}
+
+export interface TemplateGrantOut {
+  /** Null means every team. */
+  team_id: string | null;
+  team_name: string | null;
+  allowed_roles: string[];
+  note: string | null;
+}
+
+export interface TemplateSummaryOut {
+  id: string;
+  key: string;
+  name: string;
+  kind: string;
+  status: TemplateStatus;
+  version: number;
+  field_count: number;
+  grant_count: number;
+  description: string | null;
+}
+
+export interface TemplateOut {
+  id: string;
+  key: string;
+  name: string;
+  kind: string;
+  description: string | null;
+  status: TemplateStatus;
+  version: number;
+  sections: TemplateSectionOut[];
+  fields: TemplateFieldOut[];
+  created_by_name: string | null;
+  grants: TemplateGrantOut[];
+  /** Whether the caller may fill this in, and why not when they may not. */
+  may_use: boolean;
+  use_reason: string | null;
+  may_edit: boolean;
+}
+
+// ── analytics: the assignment ranking ──────────────────────────────────
+
+/**
+ * One factor's contribution to a person's score.
+ *
+ * `normalised` is 0..1 across the candidates in this run, where 1 always means
+ * "most deserving of the next task" — so a low raw load and a long wait both
+ * normalise towards 1. A factor everybody ties on contributes 1.0 to all of
+ * them rather than 0, since a tie is not evidence.
+ */
+export interface FactorOut {
+  raw: number;
+  normalised: number;
+  weight: number;
+  contribution: number;
+}
+
+/** The three factors the scoring balances, in the order they are explained. */
+export const FACTOR_KEYS = [
+  "load_vs_capacity",
+  "open_task_count",
+  "days_since_last_assign",
+] as const;
+export type FactorKey = (typeof FACTOR_KEYS)[number];
+
+export interface EntryOut {
+  user_id: string | null;
+  display_name: string;
+  email: string | null;
+  sharepoint_lookup_id: string | null;
+  total_tasks: number;
+  open_tasks: number;
+  completed_tasks: number;
+  overdue_tasks: number;
+  due_soon_tasks: number;
+  no_status_tasks: number;
+  /** Never given a status and the bid closed — read as finished. */
+  expired_tasks: number;
+  /** Not finished, but the bid closed. Counted, but not current workload. */
+  bid_closed_tasks: number;
+  /**
+   * Not finished and the bid is still open. **This is what the score is built
+   * on** — `effective_load` divides it by capacity, and the `open_task_count`
+   * factor counts it. `open_tasks` is the broader number and no longer the one
+   * the ranking reasons about.
+   */
+  active_tasks: number;
+  last_assigned_on: string | null;
+  days_since_last_assign: number | null;
+  labels: string[];
+  capacity: string;
+  effective_load: string;
+  max_open: number | null;
+  excluded: boolean;
+  excluded_reason: string | null;
+  /** Rank, 1 = next up. Null for anyone excluded from the pool. */
+  priority_score: number | null;
+  weighted_score: string | null;
+  /** The three weighted contributions added up, before ranking. */
+  factor_total: string | null;
+  factors: Partial<Record<FactorKey, FactorOut>>;
+}
+
+export interface RunOut {
+  id: string;
+  team_id: string | null;
+  team_name: string | null;
+  /** The policy as it stood, frozen so a later edit cannot rewrite history. */
+  policy_snapshot: Record<string, unknown>;
+  source: string;
+  rows_read: number;
+  excluded_note: string | null;
+  saved: boolean;
+  notes: string | null;
+  created_at: string;
+  created_by_name?: string | null;
+  entries: EntryOut[];
+  next_up?: string | null;
+  assignable?: number;
+}
+
+export interface RunSummaryOut {
+  id: string;
+  team_name: string | null;
+  rows_read: number;
+  people: number;
+  assignable: number;
+  next_up: string | null;
+  notes: string | null;
+  created_at: string;
+  created_by_name: string | null;
+}
+
+export interface RunIn {
+  notes?: string | null;
 }

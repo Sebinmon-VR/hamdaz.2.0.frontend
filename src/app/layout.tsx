@@ -1,20 +1,22 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Archivo } from "next/font/google";
 import { ThemeProvider, THEME_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 /**
- * Self-hosted at build time rather than fetched from Google at runtime. The
+ * Self-hosted at build time rather than fetched from Google at runtime — the
  * stylesheet link this replaces was render-blocking and cost a DNS lookup plus
  * a TLS handshake to a third origin before the first paint.
+ *
+ * Weight 800 is the one screen titles and the accent slab are set in; without
+ * it they fall back to 700 and the display type stops being distinct from the
+ * figures, which is the whole hierarchy on a dense screen.
  */
-const inter = Inter({
+const archivo = Archivo({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-sans",
-  // The app uses 300 for its hero figures and 600 for emphasis; shipping only
-  // what is used keeps the font payload to a fraction of the full family.
-  weight: ["300", "400", "500", "600"],
+  variable: "--font-archivo",
+  weight: ["400", "500", "600", "700", "800"],
 });
 
 const API_ORIGIN = (() => {
@@ -31,22 +33,22 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // The frame around the app, which is what a browser paints behind it.
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#e8e8ea" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0b" },
+    { media: "(prefers-color-scheme: light)", color: "#c9c9d2" },
+    { media: "(prefers-color-scheme: dark)", color: "#040405" },
   ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en-GB" className={inter.variable} suppressHydrationWarning>
+    <html lang="en-GB" className={archivo.variable} suppressHydrationWarning>
       <head>
-        {/* Applies the saved theme before the first paint. Without it a
-            dark-mode viewer gets a white flash on every hard load. */}
+        {/* Applies the saved palette and mode before the first paint. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
-        {/* Every screen's first action is an API call, and the shell fires five
-            of them at once. Warming the connection here means the first of
-            those does not also pay for DNS and the TLS handshake. */}
+        {/* Every screen's first act is an API call, and the shell fires five at
+            once. Warming the connection means the first does not also pay for
+            DNS and the TLS handshake. */}
         {API_ORIGIN && (
           <>
             <link rel="preconnect" href={API_ORIGIN} crossOrigin="use-credentials" />

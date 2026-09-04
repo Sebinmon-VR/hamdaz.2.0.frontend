@@ -6,8 +6,17 @@ import useSWR from "swr";
 import { RefreshCw } from "lucide-react";
 import { api, withQuery } from "@/lib/api";
 import { dateShort, num, relative } from "@/lib/format";
+import { activeOf } from "@/lib/types";
 import type { WorkloadOut } from "@/lib/types";
-import { Avatar, Panel, PageHead, PanelHead, RampBar, Stat } from "@/components/ui/primitives";
+import {
+  Avatar,
+  Badge,
+  Panel,
+  PageHead,
+  PanelHead,
+  RampBar,
+  Stat,
+} from "@/components/ui/primitives";
 import { Button } from "@/components/ui/controls";
 import { Empty, ErrorState, InlineNotice, RowsSkeleton } from "@/components/ui/feedback";
 
@@ -16,8 +25,15 @@ import { Empty, ErrorState, InlineNotice, RowsSkeleton } from "@/components/ui/f
  *
  * Not a task list — the tasks themselves are personal, and the backend will
  * only ever hand a person their own. What a team screen can honestly show is
- * the aggregate: who is carrying how much, and how much of it is late.
+ * the aggregate: who is carrying how much live work, and what is due.
+ *
+ * The number that leads is the *live* one. `open` on this endpoint means "not
+ * finished", which on the Proposals list is mostly an archive of bids that
+ * closed months ago — leading with it, and painting its bulk red as "overdue",
+ * described a crisis that was not happening.
  */
+const NO_STATUS = "(no status)";
+
 export default function TeamProposalsPage({
   params,
 }: {
@@ -45,7 +61,7 @@ export default function TeamProposalsPage({
       <PageHead
         eyebrow={<Link href={`/teams/${slug}`}>Team</Link>}
         title="Proposal workload"
-        lead="Counted across this team's members only. People on the Proposals list who are not in the team are excluded."
+        lead="This team's members only."
         actions={
           <Button icon={RefreshCw} loading={isValidating} onClick={refresh}>
             Re-read SharePoint
@@ -67,20 +83,30 @@ export default function TeamProposalsPage({
           )}
 
           <Panel className="flex flex-wrap items-center gap-x-8 gap-y-4 px-4 py-3.5">
-            <Stat value={num(data.organisation.open)} label="open across the team" />
-            <Stat
-              value={num(data.organisation.overdue)}
-              label="overdue"
-              tone="danger"
-              delta={data.organisation.overdue > 0 ? "late" : undefined}
-            />
+            <Stat value={num(activeOf(data.organisation))} label="live across the team" />
             <Stat
               value={num(data.organisation.due_soon)}
               label={`due within ${data.soon_days} days`}
               tone="warn"
+              delta={data.organisation.due_soon > 0 ? "soon" : undefined}
             />
+            {/* Not "overdue": the backend means the bid closing date has
+                passed, which on this list is an archive rather than late
+                work. Calling it late put every team permanently in the red. */}
+            <Stat value={num(data.organisation.overdue)} label="bids since closed" />
             <Stat value={num(data.person_count)} label="people carrying work" />
           </Panel>
+
+          {data.scope && (
+            <p className="text-[12px] text-ink-4">
+              {data.scope.matched_in_sharepoint} of {data.scope.member_count} members
+              matched on the Proposals list
+              {data.row_count !== null && data.row_count !== undefined
+                ? ` · ${num(data.row_count)} rows read`
+                : ""}
+              .
+            </p>
+          )}
 
           {data.scope && data.scope.members_without_sharepoint.length > 0 && (
             <InlineNotice tone="warn">
@@ -118,20 +144,26 @@ export default function TeamProposalsPage({
                     </div>
 
                     <div className="flex items-center gap-5 text-[13px]">
-                      <span className="tnum">
-                        <strong>{person.open}</strong>{" "}
-                        <span className="text-ink-4">open</span>
+                      <span className="tnum" title="Not finished and the bid is still open">
+                        <strong>{activeOf(person)}</strong>{" "}
+                        <span className="text-ink-4">live</span>
                       </span>
-                      {person.overdue > 0 && (
-                        <span className="tnum font-semibold text-danger">
-                          {person.overdue} overdue
-                        </span>
-                      )}
                       {person.due_soon > 0 && (
                         <span className="tnum text-warn">{person.due_soon} soon</span>
                       )}
+                      {person.overdue > 0 && (
+                        <span
+                          className="tnum text-ink-4"
+                          title="Not finished, but the bid closed. Counted, not chased."
+                        >
+                          {person.overdue} closed
+                        </span>
+                      )}
                     </div>
 
+                    {/* Only the live work is drawn. Including the closed bids
+                        made every bar a full-width smear that said nothing —
+                        they outnumber live rows twenty to one. */}
                     <div className="w-full sm:w-44">
                       <RampBar
                         height={22}
@@ -140,7 +172,6 @@ export default function TeamProposalsPage({
                           { value: person.no_deadline, label: "No deadline" },
                           { value: person.later, label: "Later" },
                           { value: person.due_soon, label: "Due soon" },
-                          { value: person.overdue, label: "Overdue" },
                         ]}
                       />
                     </div>
@@ -148,6 +179,28 @@ export default function TeamProposalsPage({
                     <span className="tnum w-20 shrink-0 text-right text-[12.5px] text-ink-3">
                       {person.next_deadline ? dateShort(person.next_deadline) : "—"}
                     </span>
+
+                    {/* SharePoint's own status values, which the bar cannot
+                        show because it groups by deadline instead.
+
+                        The unstatused rows are already in here under the key
+                        "(no status)"; `person.no_status` is those same rows
+                        counted a second time, so rendering both showed every
+                        person the same number twice. Marked, not repeated. */}
+                    {Object.keys(person.by_status).length > 0 && (
+                      <div className="flex w-full flex-wrap gap-1.5 pl-11">
+                        {Object.entries(person.by_status)
+                          .sort((a, b) => b[1] - a[1])
+                          .map(([status, count]) => (
+                            <Badge
+                              key={status}
+                              tone={status === NO_STATUS ? "warn" : "neutral"}
+                            >
+                              {status === NO_STATUS ? "No status" : status} {count}
+                            </Badge>
+                          ))}
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

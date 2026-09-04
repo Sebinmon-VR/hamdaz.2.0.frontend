@@ -1,22 +1,32 @@
 /**
- * The sidebar, built from what the viewer can actually reach.
+ * Navigation, built from what the viewer can actually reach.
  *
  * The backend's module catalogue already names every frontend route — that is
  * deliberate on its side, so one catalogue drives both the permission model
- * and the navigation. This file adds the two things a route table cannot
- * carry: an icon, and an order that reads like a working day rather than like
- * a database.
+ * and the navigation. This file adds only an icon, an order, and the split
+ * between the pill bar and the overflow menu behind the grid button.
+ *
+ * The pill bar holds the six places people work. Everything else — the
+ * directory, the HR queue, administration, settings — lives in the menu,
+ * because a pill row that wraps is a pill row that has stopped being one.
  */
 
 import {
   Building2,
   CalendarDays,
-  FileStack,
+  CalendarRange,
+  FilePen,
   GaugeCircle,
   KeyRound,
+  LayoutList,
   ListChecks,
   ReceiptText,
   Scale,
+  Settings,
+  Sliders,
+  Tag,
+  Trophy,
+  UserCheck,
   ShieldCheck,
   Users,
   type LucideIcon,
@@ -27,7 +37,7 @@ export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
-  /** Matched as a prefix so child routes keep the parent highlighted. */
+  /** Matched as a prefix so child routes keep the parent selected. */
   match?: string;
   badge?: "hr" | "admin";
 }
@@ -37,61 +47,82 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-export const MODULE_ICONS: Record<string, LucideIcon> = {
-  dashboard: GaugeCircle,
-  directory: Building2,
-  teams: Users,
-  leave: CalendarDays,
-  proposals: ListChecks,
-  quotes: ReceiptText,
-  quote_comparison: Scale,
-  roles: ShieldCheck,
-  user_admin: KeyRound,
-};
+export interface Nav {
+  /** The pill bar across the top. */
+  primary: NavItem[];
+  /** Grouped, behind the grid button. */
+  more: NavGroup[];
+}
 
-export function buildNav(session: Session): NavGroup[] {
+export function buildNav(session: Session): Nav {
   const { can, roles, isHr } = session;
-  const groups: NavGroup[] = [];
 
-  const work: NavItem[] = [
+  const primary: NavItem[] = [
     { label: "Overview", href: "/dashboard", icon: GaugeCircle, match: "/dashboard" },
   ];
+  if (can("quotes")) {
+    primary.push({ label: "Quotes", href: "/quotes", icon: ReceiptText, match: "/quotes" });
+  }
   if (can("proposals", "my_tasks")) {
-    work.push({
-      label: "My proposals",
+    primary.push({
+      label: "Proposals",
       href: "/proposals/my-tasks",
       icon: ListChecks,
       match: "/proposals",
     });
   }
-  if (can("quotes")) {
-    work.push({ label: "Quotes", href: "/quotes", icon: ReceiptText, match: "/quotes" });
+  if (can("quote_requests")) {
+    primary.push({
+      label: "Quote requests",
+      href: "/quote-requests",
+      icon: FilePen,
+      match: "/quote-requests",
+    });
   }
   if (can("quote_comparison")) {
-    work.push({
+    primary.push({
       label: "Comparisons",
       href: "/comparisons",
       icon: Scale,
       match: "/comparisons",
     });
   }
-  groups.push({ label: "Work", items: work });
-
-  const people: NavItem[] = [];
-  if (can("teams")) {
-    people.push({ label: "Teams", href: "/teams", icon: Users, match: "/teams" });
+  if (can("leave")) {
+    primary.push({ label: "Leave", href: "/leave", icon: CalendarDays, match: "/leave" });
   }
-  if (can("directory")) {
-    people.push({
-      label: "Directory",
-      href: "/directory",
-      icon: Building2,
-      match: "/directory",
+  if (can("teams")) {
+    primary.push({ label: "Teams", href: "/teams", icon: Users, match: "/teams" });
+  }
+
+  const more: NavGroup[] = [];
+
+  const assignment: NavItem[] = [];
+  if (can("assignment", "labels")) {
+    assignment.push({ label: "Labels", href: "/assignment/labels", icon: Tag });
+  }
+  if (can("assignment", "policy")) {
+    assignment.push({ label: "Assignment policy", href: "/assignment/policy", icon: Sliders });
+  }
+  // The analytics router has no module guard of its own — it is open to any
+  // signed-in user, and the real gate is whether the team has a policy. Kept
+  // beside the rest of the assignment work all the same, since that is the
+  // only place it means anything.
+  if (can("assignment")) {
+    assignment.push({
+      label: "User analytics",
+      href: "/assignment/user-analytics",
+      icon: Trophy,
+      match: "/assignment/user-analytics",
     });
   }
+  if (assignment.length) more.push({ label: "Work assignment", items: assignment });
+
+  const people: NavItem[] = [];
+  if (can("directory")) {
+    people.push({ label: "Directory", href: "/directory", icon: Building2, match: "/directory" });
+  }
   if (can("leave")) {
-    people.push({ label: "My leave", href: "/leave", icon: CalendarDays });
-    people.push({ label: "Who is off", href: "/leave/calendar", icon: FileStack });
+    people.push({ label: "Who is off", href: "/leave/calendar", icon: CalendarRange });
     if (isHr) {
       people.push({
         label: "Leave requests",
@@ -99,20 +130,36 @@ export function buildNav(session: Session): NavGroup[] {
         icon: ListChecks,
         badge: "hr",
       });
+      people.push({
+        label: "Leave rules",
+        href: "/leave/settings",
+        icon: CalendarDays,
+        badge: "hr",
+      });
     }
   }
-  if (people.length) groups.push({ label: "People", items: people });
+  if (people.length) more.push({ label: "People", items: people });
 
-  // Admin modules are never granted to a team — reaching them depends on
-  // holding a global admin role, and the endpoints enforce that themselves.
-  // Hiding them here only spares an admin-less person a guaranteed 403.
+  // Admin modules are never granted to a team — reaching them depends on a
+  // global admin role, and the endpoints enforce that themselves. Hiding them
+  // here only spares an admin-less person a guaranteed 403.
   const admin: NavItem[] = [];
   if (roles.is_admin) {
     admin.push({
       label: "Roles",
       href: "/admin/roles",
+      // Not a prefix match: "Who holds what" is its own rail entry below and
+      // both would light up at once if this swallowed the whole subtree.
       icon: ShieldCheck,
-      match: "/admin/roles",
+      badge: "admin",
+    });
+    // Granting somebody their first role is the common administrative task and
+    // was two hops away behind the roles catalogue. It is a destination.
+    admin.push({
+      label: "Who holds what",
+      href: "/admin/roles/assignments",
+      icon: UserCheck,
+      match: "/admin/roles/assignments",
       badge: "admin",
     });
   }
@@ -124,13 +171,27 @@ export function buildNav(session: Session): NavGroup[] {
       match: "/admin/access",
       badge: "admin",
     });
+    // Reading a template is open to any signed-in user, but only a super admin
+    // creates or changes one — and reading it is only useful if you can.
+    admin.push({
+      label: "Form templates",
+      href: "/admin/templates",
+      icon: LayoutList,
+      match: "/admin/templates",
+      badge: "admin",
+    });
   }
-  if (isHr) {
-    admin.push({ label: "Leave rules", href: "/leave/settings", icon: CalendarDays, badge: "hr" });
-  }
-  if (admin.length) groups.push({ label: "Administration", items: admin });
+  if (admin.length) more.push({ label: "Administration", items: admin });
 
-  return groups;
+  more.push({
+    label: "You",
+    items: [
+      { label: "Settings", href: "/settings", icon: Settings, match: "/settings" },
+      { label: "My profile", href: `/admin/users/${session.user.id}`, icon: Users },
+    ],
+  });
+
+  return { primary, more };
 }
 
 export function isActive(pathname: string, item: NavItem): boolean {
@@ -141,11 +202,9 @@ export function isActive(pathname: string, item: NavItem): boolean {
 /**
  * A label for a route, for the tab strip.
  *
- * Derived from the module catalogue's own page paths where it can be, because
- * that catalogue is the authority on what each route is called. Dynamic
- * segments are the interesting case: "/teams/presales" should read "presales",
- * not "Team detail", since the whole point of a tab is telling two of them
- * apart.
+ * Dynamic segments are the interesting case: "/teams/presales" should read
+ * "presales", not "Team detail", since the whole point of a tab is telling two
+ * of them apart.
  */
 const STATIC_LABELS: Record<string, string> = {
   "/dashboard": "Overview",
@@ -158,11 +217,19 @@ const STATIC_LABELS: Record<string, string> = {
   "/leave/settings": "Leave rules",
   "/proposals/my-tasks": "My proposals",
   "/quotes": "Quotes",
+  "/quote-requests": "Quote requests",
+  "/quote-requests/new": "New quote",
+  "/quote-requests/queue": "Ready for Zoho",
+  "/admin/templates": "Form templates",
   "/comparisons": "Comparisons",
   "/comparisons/new": "New comparison",
   "/admin/roles": "Roles",
-  "/admin/roles/assignments": "Assignments",
+  "/admin/roles/assignments": "Who holds what",
   "/admin/access": "Team access",
+  "/settings": "Settings",
+  "/assignment/labels": "Labels",
+  "/assignment/policy": "Assignment policy",
+  "/assignment/user-analytics": "User analytics",
 };
 
 export function labelFor(pathname: string): string {
@@ -172,7 +239,6 @@ export function labelFor(pathname: string): string {
   const parts = pathname.split("/").filter(Boolean);
   if (parts.length === 0) return "Hamdaz";
 
-  // /teams/[slug]/members -> "presales · members"
   if (parts[0] === "teams" && parts.length >= 2) {
     const tail = parts[2];
     return tail ? `${parts[1]} · ${tail}` : parts[1];
@@ -183,6 +249,7 @@ export function labelFor(pathname: string): string {
   if (parts[0] === "comparisons") return `Comparison ${short(parts[1])}`;
   if (parts[0] === "directory") return `Person ${short(parts[1])}`;
   if (parts[0] === "admin" && parts[1] === "users") return `User ${short(parts[2])}`;
+  if (parts[0] === "assignment" && parts[1] === "runs") return `Run ${short(parts[2])}`;
 
   const last = parts[parts.length - 1];
   return last.charAt(0).toUpperCase() + last.slice(1).replace(/-/g, " ");

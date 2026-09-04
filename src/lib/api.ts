@@ -42,11 +42,49 @@ export class ApiError extends Error {
 
 type Query = Record<string, string | number | boolean | undefined | null>;
 
+/**
+ * `team` is not one convention across this API. Four modules take a parameter
+ * of that name and they do not agree on what goes in it:
+ *
+ *   /assignment/preview   uuid    (the team's id)
+ *   /labels…              uuid
+ *   /analytics/…          slug    (the team's handle)
+ *   /proposals/workload   slug
+ *
+ * Sending the wrong one fails as a 422 about an "invalid character" rather
+ * than as anything that names the real problem, so the check below turns it
+ * into an immediate, readable error while developing. Production skips it —
+ * by then the call sites are fixed and a throw would only make a recoverable
+ * request fatal.
+ */
+const TEAM_PARAM: { uuid: RegExp; slug: RegExp } = {
+  uuid: /^\/(assignment\/preview|labels)/,
+  slug: /^\/(analytics|proposals\/workload)/,
+};
+
+const LOOKS_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function checkTeamParam(path: string, value: string): void {
+  if (process.env.NODE_ENV === "production") return;
+  const isUuid = LOOKS_UUID.test(value);
+  if (TEAM_PARAM.uuid.test(path) && !isUuid) {
+    throw new Error(
+      `${path} expects team as a UUID, got "${value}". Pass team.id, not team.slug.`,
+    );
+  }
+  if (TEAM_PARAM.slug.test(path) && isUuid) {
+    throw new Error(
+      `${path} expects team as a slug, got a UUID. Pass team.slug, not team.id.`,
+    );
+  }
+}
+
 export function withQuery(path: string, query?: Query): string {
   if (!query) return path;
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
     if (value === undefined || value === null || value === "") continue;
+    if (key === "team") checkTeamParam(path, String(value));
     params.set(key, String(value));
   }
   const qs = params.toString();
@@ -151,6 +189,13 @@ export async function signOut() {
  * same-site navigations to the API origin, so no token juggling is needed.
  */
 export const files = {
+  /**
+   * A path the API itself handed back — Zoho attachments carry a
+   * `download_url` already pointing at this API, prefix included, so it is
+   * resolved against the origin rather than against API_ROOT.
+   */
+  fromApiPath: (path: string) =>
+    /^https?:\/\//.test(path) ? path : `${BASE}${path}`,
   quoteDocument: (quoteId: string, documentId: string) =>
     apiUrl(`/quotes/${quoteId}/documents/${documentId}`),
   comparisonDocument: (comparisonId: string, quoteId: string) =>

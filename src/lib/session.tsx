@@ -37,12 +37,21 @@ export interface Session {
 const SessionContext = createContext<Session | null>(null);
 
 /**
- * Leave and Quotes are open to every signed-in person — their endpoints check
- * nothing beyond a session, and the module catalogue says so in as many words.
- * They are in the catalogue for navigation, not for gating, so the nav has to
- * add them back after the grant-driven list.
+ * Modules whose READ endpoints take nothing but a session.
+ *
+ * All three are in the module catalogue "for navigation", in its own words —
+ * being listed there is what gives them a route and a name, not what gates
+ * them. Their routers use `CurrentUser` with no `require_module`, unlike
+ * proposals and quote comparison which do gate.
+ *
+ * Assignment is the one worth spelling out: its router says reading is open
+ * because "the rule deciding how much work somebody gets should be visible to
+ * the person it applies to". Hiding it behind a team grant would defeat that
+ * exactly. Writing is still gated — by role and team membership, checked by
+ * the backend, with `may_edit` coming back per policy so the UI reports the
+ * real answer rather than guessing.
  */
-const ALWAYS_OPEN = ["leave", "quotes"] as const;
+const ALWAYS_OPEN = ["leave", "quotes", "assignment"] as const;
 
 export function useSession(): Session {
   const session = useContext(SessionContext);
@@ -129,6 +138,7 @@ export function useLoadSession(): SessionLoad {
 const OPEN_PAGES: Record<(typeof ALWAYS_OPEN)[number], string[]> = {
   leave: ["mine", "request", "calendar", "queue", "rules"],
   quotes: ["list", "detail"],
+  assignment: ["labels", "policy", "preview"],
 };
 
 export function SessionProvider({

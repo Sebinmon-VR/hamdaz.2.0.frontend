@@ -1,0 +1,37 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "Dark", "x": 0, "y": 0, "w": 1440, "h": 900 },
+    { "file": "Light.dc.html", "title": "Light", "x": 1560, "y": 0, "w": 1440, "h": 900 }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -210,
+      "w": 700,
+      "text": "Direction B — Blocks × Console — in both themes.\n\nOne component, two token sets. Every colour is a CSS custom property set on the root and read with var(), exactly as the real app does it: globals.css stamps data-theme on <html> and nothing below has to know which mode it is in.\n\nThe Theme chips above each artboard switch mode and accent independently — all four Hamdaz palettes work in both."
+    },
+    {
+      "id": "note-invert",
+      "x": 0,
+      "y": 950,
+      "w": 460,
+      "text": "THE ONE RULE WORTH KNOWING\n\nThe selected row always breaks its surface. On dark it inverts to a white sheet; on light it inverts to an ink block. Same move, opposite direction — so the row that matters reads first without needing a border, a tint, or an accent bar.\n\nThe accent itself never changes value between modes. It is only ever a fill carrying dark ink, never body text, which is why it does not need a duller variant to stay legible."
+    },
+    {
+      "id": "note-light",
+      "x": 1560,
+      "y": 950,
+      "w": 460,
+      "text": "WHAT CHANGES IN LIGHT\n\nNothing goes dark. The panels step in tone (grey ground, white blocks) and pick up a soft shadow where dark relied on the ground being darker than the block.\n\nThe record sheet becomes a tinted well rather than white-on-white, and the pink used for 'out of the pool' darkens — #ff4fa3 at 9px is unreadable on white, so light mode uses the darkened variant the same way globals.css derives --second-text."
+    },
+    {
+      "id": "note-backend",
+      "x": 3120,
+      "y": 0,
+      "w": 420,
+      "text": "BACKEND CHANGE, NOW SHOWN\n\nThe ranking used to score on open tasks. It now scores on ACTIVE tasks — not finished and the bid still open — with bid-closed and expired counted separately.\n\nSo the list column is Active, not Open, and the sheet's tiles carry Active / Bid closed / Overdue / Idle. Showing the wider open count next to the score made the order look wrong."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

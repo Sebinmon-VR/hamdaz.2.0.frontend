@@ -11,15 +11,15 @@ import { Panel } from "@/components/ui/primitives";
 /* ── loading ─────────────────────────────────────────────────────────── */
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={clsx("skeleton rounded-full", className)} />;
+  return <div className={clsx("skeleton rounded-[13px]", className)} />;
 }
 
 /** Placeholder shaped like the content that replaces it, not a spinner. */
 export function PanelSkeleton({ lines = 3, className }: { lines?: number; className?: string }) {
   return (
-    <Panel className={clsx("p-5", className)}>
+    <Panel className={clsx("p-6", className)}>
       <Skeleton className="h-3.5 w-1/3" />
-      <div className="mt-5 space-y-2.5">
+      <div className="mt-6 space-y-3">
         {Array.from({ length: lines }).map((_, i) => (
           // The last line is short, the way a real paragraph ends.
           <Skeleton key={i} className={clsx("h-3", i === lines - 1 && "w-2/3")} />
@@ -33,7 +33,7 @@ export function RowsSkeleton({ rows = 6 }: { rows?: number }) {
   return (
     <div className="space-y-2">
       {Array.from({ length: rows }).map((_, i) => (
-        <Skeleton key={i} className="h-14 rounded-[18px]" />
+        <Skeleton key={i} className="h-[33px] rounded-[11px]" />
       ))}
     </div>
   );
@@ -61,16 +61,16 @@ export function Empty({
   return (
     <div
       className={clsx(
-        "flex flex-col items-center justify-center rounded-[20px] border border-dashed border-line px-6 py-14 text-center",
+        "flex flex-col items-center justify-center rounded-[20px] border border-dashed border-line px-6 py-16 text-center",
         className,
       )}
     >
-      <span className="mb-4 grid size-11 place-items-center rounded-full bg-panel-2 text-ink-3">
-        <Icon className="size-4.5" strokeWidth={1.9} />
+      <span className="mb-5 grid size-12 place-items-center rounded-full bg-panel-2 text-ink-3">
+        <Icon className="size-5" strokeWidth={1.8} />
       </span>
-      <p className="text-[14px] font-medium text-ink">{title}</p>
-      {body && <p className="mt-1.5 max-w-sm text-[12.5px] leading-relaxed text-ink-3">{body}</p>}
-      {action && <div className="mt-5">{action}</div>}
+      <p className="text-[15px] font-semibold text-ink">{title}</p>
+      {body && <p className="mt-2 max-w-sm text-[12.5px] leading-relaxed text-ink-3">{body}</p>}
+      {action && <div className="mt-6">{action}</div>}
     </div>
   );
 }
@@ -92,12 +92,19 @@ export function ErrorState({
 }) {
   const api = error instanceof ApiError ? error : null;
 
+  // The backend writes its 403s for people to read — which module is missing,
+  // and who can grant it. Showing that verbatim beats the sentence this used
+  // to print, which was the same however the access was lost and named
+  // nothing the reader could act on.
   if (api?.forbidden) {
     return (
       <Empty
         icon={Lock}
         title="You do not have access to this"
-        body="Reaching this screen depends on a module your teams have not been granted. An administrator can change that under Team access."
+        body={
+          api.message ||
+          "Reaching this screen depends on a module your teams have not been granted. An administrator can change that under Team access."
+        }
         className={className}
       />
     );
@@ -143,12 +150,12 @@ export function InlineNotice({
   return (
     <div
       className={clsx(
-        "flex items-start gap-2.5 rounded-[18px] px-4 py-3 text-[12.5px] leading-relaxed",
+        "flex items-start gap-3 rounded-[20px] px-5 py-3.5 text-[12.5px] leading-relaxed",
         tones[tone],
         className,
       )}
     >
-      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" strokeWidth={2.1} />
+      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" strokeWidth={2.2} />
       <div className="min-w-0">{children}</div>
     </div>
   );
@@ -200,28 +207,28 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         className={clsx(
-          "rise relative w-full overflow-hidden rounded-t-[24px] border border-line bg-float shadow-[var(--shadow-float)] sm:rounded-[24px]",
+          "rise relative w-full overflow-hidden rounded-t-[24px] bg-panel shadow-[var(--shadow-float)] sm:rounded-[20px]",
           widths[width],
         )}
       >
-        <div className="flex items-start gap-4 px-6 pb-4 pt-6">
+        <div className="flex items-start gap-4 px-7 pb-4 pt-7">
           <div className="min-w-0 flex-1">
-            <h2 className="hero-title text-[22px] text-ink">{title}</h2>
+            <h2 className="fig text-[26px] text-ink">{title}</h2>
             {description && (
-              <p className="mt-2 text-[12.5px] leading-relaxed text-ink-3">{description}</p>
+              <p className="mt-2.5 text-[12.5px] leading-relaxed text-ink-3">{description}</p>
             )}
           </div>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="grid size-8 shrink-0 place-items-center rounded-full bg-panel-2 text-ink-3 transition hover:bg-panel-3 hover:text-ink"
+            className="grid size-9 shrink-0 place-items-center rounded-full bg-panel-2 text-ink-3 transition hover:bg-panel-3 hover:text-ink"
           >
-            <X className="size-3.5" />
+            <X className="size-4" />
           </button>
         </div>
-        {children && <div className="max-h-[65vh] overflow-y-auto px-6 pb-2">{children}</div>}
+        {children && <div className="max-h-[65vh] overflow-y-auto px-7 pb-2">{children}</div>}
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-line bg-panel-2 px-6 py-4">
+          <div className="mt-2 flex justify-end gap-2 border-t border-line bg-panel-2 px-7 py-5">
             {footer}
           </div>
         )}

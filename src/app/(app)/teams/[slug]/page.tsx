@@ -118,7 +118,7 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
               }
             />
           ) : (
-            <ul className="mt-2 divide-y divide-[var(--c-line)]">
+            <ul className="mt-2 divide-y divide-line">
               {data.members.map((member) => (
                 <li key={member.user_id} className="flex items-center gap-2.5 py-2">
                   <Avatar name={member.display_name} seed={member.user_id} />

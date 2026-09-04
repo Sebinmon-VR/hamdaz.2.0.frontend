@@ -1,28 +1,36 @@
 import Link from "next/link";
+import clsx from "clsx";
 
 /**
- * The mark, reduced to what makes the Hamdaz logo recognisable at 28px: the
- * pink bars stacked above and below a blue rule. The full lockup has three
- * bars each side of the word; at this size two rows read as the same thing and
- * more would turn to mud.
+ * The mark, reduced to what makes the Hamdaz logo recognisable at this size:
+ * pink bars stacked above and below a rule in the accent. The full lockup has
+ * three bars each side of the word; at 28px two rows read as the same thing
+ * and more turns to mud.
  *
- * Both colours are brand tokens, so it recolours with the theme rather than
- * being a fixed image.
+ * Both colours are tokens, so it recolours with the palette rather than being
+ * a fixed image.
  */
-export function Wordmark({ compact = false }: { compact?: boolean }) {
+export function Wordmark({
+  compact = false,
+  className,
+}: {
+  compact?: boolean;
+  className?: string;
+}) {
   return (
-    <Link href="/dashboard" className="flex items-center gap-2.5" aria-label="Hamdaz, home">
-      <span className="grid size-8 shrink-0 place-items-center gap-[3px] rounded-[10px] bg-panel-3">
+    <Link
+      href="/dashboard"
+      aria-label="Hamdaz, home"
+      className={clsx("flex shrink-0 items-center gap-2.5", className)}
+    >
+      <span aria-hidden className="grid gap-[2.5px]">
         <Bars />
-        <span className="h-[2px] w-4 rounded-full bg-accent" />
+        <span className="block h-[2.5px] w-3.5 rounded-full bg-accent" />
         <Bars />
       </span>
       {!compact && (
-        <span className="text-[14px] font-medium tracking-[-0.01em] text-ink">
-          Hamdaz
-          <span className="ml-1.5 align-super text-[9px] font-semibold tracking-normal text-ink-4">
-            2.0
-          </span>
+        <span className="text-[17px] font-semibold tracking-[-0.025em] lowercase">
+          hamdaz
         </span>
       )}
     </Link>
@@ -31,10 +39,10 @@ export function Wordmark({ compact = false }: { compact?: boolean }) {
 
 function Bars() {
   return (
-    <span aria-hidden className="flex gap-[2.5px]">
-      <span className="h-[4px] w-[2.5px] rounded-full bg-highlight" />
-      <span className="h-[4px] w-[2.5px] rounded-full bg-highlight" />
-      <span className="h-[4px] w-[2.5px] rounded-full bg-highlight" />
+    <span className="flex gap-[2.5px]">
+      <span className="block h-[5px] w-[2.5px] rounded-full bg-second" />
+      <span className="block h-[5px] w-[2.5px] rounded-full bg-second" />
+      <span className="block h-[5px] w-[2.5px] rounded-full bg-second" />
     </span>
   );
 }

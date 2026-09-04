@@ -5,12 +5,24 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { Building2, Crown, Eraser, ShieldCheck, Trash2 } from "lucide-react";
-import { api, withQuery } from "@/lib/api";
+import { api } from "@/lib/api";
 import { date, humanise, num, relative } from "@/lib/format";
-import { useAction } from "@/lib/hooks";
+import { useAction, useProgressive } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
-import type { ResetResult, UserProfileOut } from "@/lib/types";
+import type {
+  EffectiveAccessOut,
+  ResetResult,
+  SectionInfo,
+  UserProfileOut,
+} from "@/lib/types";
 import { Avatar, Badge, Panel, Meta, PageHead, PanelHead, Stat } from "@/components/ui/primitives";
+import {
+  LabelsHeld,
+  ProfileRefused,
+  ProposalWork,
+  RankingStanding,
+  mayViewProfile,
+} from "@/components/people/WorkSections";
 import { Button, Field, Input } from "@/components/ui/controls";
 import { PanelSkeleton, ErrorState, InlineNotice, Modal } from "@/components/ui/feedback";
 
@@ -67,18 +79,55 @@ interface ActivitySection {
  * failure rather than failing the page, so the directory half can be missing
  * while the local half is fine — which is exactly what happens when Graph is
  * unreachable.
+ *
+ * Everything about the person is on this one screen, including the three
+ * things that used to be elsewhere: what they are carrying on the Proposals
+ * list, the labels the assignment policy reads, and where they sit in each of
+ * their teams' next ranking. Those three read SharePoint and Entra live, so
+ * each loads on its own and paints when it lands rather than holding the page.
+ *
+ * **Administrators only** — see `mayViewProfile` for what that does and does
+ * not guarantee.
  */
 export default function AdminUserPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const session = useSession();
   const router = useRouter();
 
-  const profile = useSWR<UserProfileOut>(
-    withQuery(`/users/${id}`, { include: "identity,directory,roles,teams,activity" }),
-  );
+  // Which sections a profile can contain is the backend's catalogue, not a
+  // list held here — so a section added there arrives without a frontend
+  // change. Asked for first because the profile request depends on it.
+  const sections = useSWR<SectionInfo[]>("/users/sections", {
+    revalidateOnFocus: false,
+    dedupingInterval: 600_000,
+  });
+  const include = (sections.data ?? []).map((s) => s.key).join(",");
+
+  // The Entra section is the slow one here, so the local sections paint first.
+  const profile = useProgressive<UserProfileOut>(include ? `/users/${id}` : null, {
+    include,
+  });
+  // What this person can actually reach, resolved by the backend rather than
+  // inferred from their teams here — a super admin reaches everything without
+  // belonging to anything, and that rule lives on the server.
+  const access = useSWR<EffectiveAccessOut>(`/access/users/${id}`, {
+    shouldRetryOnError: false,
+  });
 
   const [confirming, setConfirming] = useState<"reset" | "purge" | null>(null);
   const [outcome, setOutcome] = useState<ResetResult | null>(null);
+
+  // Checked after the hooks because hooks cannot be conditional, and before
+  // anything is rendered because a colleague should not read the answer off
+  // the screen while the refusal loads.
+  if (!mayViewProfile(session, id)) {
+    return (
+      <>
+        <PageHead eyebrow="People" title="Profile" />
+        <ProfileRefused />
+      </>
+    );
+  }
 
   if (profile.error) {
     return <ErrorState error={profile.error} onRetry={() => profile.mutate()} />;
@@ -87,30 +136,30 @@ export default function AdminUserPage({ params }: { params: Promise<{ id: string
 
   const data = profile.data;
   const identity = data.sections.identity as IdentitySection | undefined;
+  // undefined and null are different answers here, and the progressive load
+  // makes the difference load-bearing: undefined means the Entra section has
+  // not arrived yet (the local-only pass skips it), null means it arrived and
+  // the person has no directory record. Only the second is worth reporting.
   const directory = data.sections.directory as DirectorySection | null | undefined;
   const roles = data.sections.roles as RolesSection | undefined;
   const teams = data.sections.teams as TeamsSection | undefined;
   const activity = data.sections.activity as ActivitySection | undefined;
 
   const isSelf = data.user_id === session.user.id;
+  const resettable = (sections.data ?? []).filter((s) => s.resettable);
 
   return (
     <div className="space-y-4">
+      {/* No "open it elsewhere" buttons: every section this page can show is
+          already fetched by the time the header paints, so sending somebody to
+          another screen to read it was a click that bought nothing. */}
       <PageHead
-        eyebrow={<Link href="/admin/roles/assignments">Administration</Link>}
         title={data.display_name}
         lead={data.email}
-        actions={
-          <>
-            {directory && (
-              <Button
-                onClick={() => router.push(`/directory/${directory.object_id}`)}
-                icon={Building2}
-              >
-                In the directory
-              </Button>
-            )}
-          </>
+        meta={
+          identity?.last_login_at
+            ? `last seen ${relative(identity.last_login_at)}`
+            : "never signed in"
         }
       />
 
@@ -136,6 +185,11 @@ export default function AdminUserPage({ params }: { params: Promise<{ id: string
           .
         </InlineNotice>
       )}
+
+      {/* Live work, the policy's reading of them, and their standing —
+          the three questions a profile is opened to answer, none of which
+          used to be on it. */}
+      <ProposalWork email={data.email} name={data.display_name} />
 
       <div className="grid gap-3 lg:grid-cols-3">
         <Panel className="p-4 lg:col-span-2">
@@ -169,19 +223,37 @@ export default function AdminUserPage({ params }: { params: Promise<{ id: string
 
           {identity && (
             <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
+              <Meta label="Job title">{directory?.job_title ?? "—"}</Meta>
+              <Meta label="Department">{directory?.department ?? "—"}</Meta>
+              <Meta label="Office">{directory?.office_location ?? "—"}</Meta>
+              <Meta label="Mobile">{directory?.mobile_phone ?? "—"}</Meta>
+              <Meta label="Sign-in name">
+                {directory?.user_principal_name ?? data.email}
+              </Meta>
+              <Meta label="Entra account">
+                {directory === undefined
+                  ? "reading…"
+                  : directory === null
+                    ? "no longer present"
+                    : directory.account_enabled
+                      ? directory.is_guest
+                        ? "enabled · guest"
+                        : "enabled"
+                      : "disabled"}
+              </Meta>
               <Meta label="Last signed in">
                 {identity.last_login_at ? relative(identity.last_login_at) : "Never"}
               </Meta>
               <Meta label="Account created">{date(identity.created_at)}</Meta>
               <Meta label="Last changed">{date(identity.updated_at)}</Meta>
-              <Meta label="Job title">{directory?.job_title ?? "—"}</Meta>
-              <Meta label="Department">{directory?.department ?? "—"}</Meta>
-              <Meta label="Office">{directory?.office_location ?? "—"}</Meta>
               <Meta label="Hamdaz id">
                 <span className="font-mono text-[12px]">{identity.id}</span>
               </Meta>
               <Meta label="Entra object id">
                 <span className="font-mono text-[12px]">{identity.entra_object_id}</span>
+              </Meta>
+              <Meta label="Signed in before">
+                {identity.has_signed_in ? "Yes" : "No — provisioned only"}
               </Meta>
             </dl>
           )}
@@ -215,6 +287,44 @@ export default function AdminUserPage({ params }: { params: Promise<{ id: string
                   </li>
                 ))}
               </ul>
+            )}
+          </Panel>
+
+          <Panel className="p-4">
+            <PanelHead
+              title="Can reach"
+              count={access.data?.modules.length ?? 0}
+              hint={
+                access.data?.source === "super_admin" ? "everything, as a super admin" : undefined
+              }
+            />
+            {access.error ? (
+              <p className="mt-4 text-[13px] text-ink-3">
+                You cannot see this person&apos;s effective access.
+              </p>
+            ) : !access.data ? (
+              <p className="mt-4 text-[13px] text-ink-3">Working it out…</p>
+            ) : access.data.modules.length === 0 ? (
+              <p className="mt-4 text-[13px] text-ink-3">
+                Nothing. They belong to no team that has been granted a module.
+              </p>
+            ) : (
+              <>
+                <div className="mt-4 flex flex-wrap gap-1.5">
+                  {access.data.modules.map((module) => (
+                    <span key={module.key} title={module.pages.map((p) => p.name).join(", ")}>
+                      <Badge tone={module.admin_only ? "second" : "accent"}>
+                        {module.name}
+                      </Badge>
+                    </span>
+                  ))}
+                </div>
+                {access.data.via_teams.length > 0 && (
+                  <p className="mt-3 text-[11.5px] leading-relaxed text-ink-4">
+                    Through {access.data.via_teams.join(", ")}.
+                  </p>
+                )}
+              </>
             )}
           </Panel>
 
@@ -266,8 +376,28 @@ export default function AdminUserPage({ params }: { params: Promise<{ id: string
         </Panel>
       )}
 
+      {/* The labels the policy reads, and their standing in each of their
+          teams' next ranking. Both are per-team by design on the backend, so
+          they are per-team here too rather than averaged into one number. */}
+      <div className="grid gap-3 lg:grid-cols-3">
+        <LabelsHeld userId={data.user_id} />
+        <div className="space-y-3 lg:col-span-2">
+          <RankingStanding
+            userId={data.user_id}
+            teams={(teams?.memberships ?? [])
+              .filter((m) => !m.archived)
+              .map((m) => ({ slug: m.slug, name: m.name }))}
+          />
+        </div>
+      </div>
+
       <Panel className="p-4">
         <PanelHead title="Danger zone" />
+        {resettable.length > 0 && (
+          <p className="mt-3 text-[12px] text-ink-4">
+            Resetting clears: {resettable.map((s) => s.label.toLowerCase()).join(", ")}.
+          </p>
+        )}
         <p className="mt-3 max-w-2xl text-[13px] leading-relaxed text-ink-3">
           <strong className="text-ink">Reset</strong> strips every module&apos;s data —
           roles, memberships, and anything else a module owns — while keeping the account,

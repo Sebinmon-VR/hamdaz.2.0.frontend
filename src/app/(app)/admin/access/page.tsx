@@ -56,7 +56,6 @@ export default function AccessPage() {
       <PageHead
         eyebrow="Administration"
         title="Team module access"
-        lead="Everything a person can reach comes from the teams they belong to. Grants union across teams — the wider one wins."
       />
 
       <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
@@ -80,7 +79,7 @@ export default function AccessPage() {
                     className={clsx(
                       "flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-[13.5px] transition",
                       selected === team.slug
-                        ? "bg-accent text-[var(--c-accent-ink)] font-medium"
+                        ? "bg-accent text-accent-ink font-medium"
                         : "text-ink-2 hover:bg-inset",
                     )}
                   >
@@ -229,7 +228,7 @@ function TeamAccessEditor({ slug, modules }: { slug: string; modules: ModuleOut[
             <div
               key={module.key}
               className={clsx(
-                "rounded-[18px] border p-4 transition",
+                "rounded-[14px] border p-4 transition",
                 granted ? "border-accent-line bg-accent-soft/40" : "border-line bg-inset",
               )}
             >
@@ -277,7 +276,7 @@ function TeamAccessEditor({ slug, modules }: { slug: string; modules: ModuleOut[
                             className={clsx(
                               "rounded-full border px-3 py-1.5 text-[12px] font-medium transition",
                               on
-                                ? "border-transparent bg-accent text-[var(--c-accent-ink)]"
+                                ? "border-transparent bg-accent text-accent-ink"
                                 : "border-line bg-panel text-ink-3 hover:border-line-strong",
                             )}
                             title={page.path}
@@ -299,9 +298,8 @@ function TeamAccessEditor({ slug, modules }: { slug: string; modules: ModuleOut[
       </div>
 
       <p className="mt-5 text-[12px] leading-relaxed text-ink-4">
-        Leave and Quotes are open to every signed-in person whether or not they are
-        granted here — their endpoints check nothing beyond a session. Granting them
-        changes nothing except that they appear in this team&apos;s dashboard widgets.
+        Leave and Quotes are open to everyone signed in, granted or not. Granting them
+        only adds the widgets to this team&apos;s dashboard.
       </p>
     </Panel>
   );

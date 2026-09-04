@@ -40,7 +40,6 @@ export default function TeamsPage() {
       <PageHead
         eyebrow="People"
         title="Teams"
-        lead="Teams decide what people can reach. A module granted to a team is granted to everyone in it."
         actions={
           session.roles.is_admin && (
             <Button variant="accent" icon={Plus} onClick={() => setCreating(true)}>
@@ -130,7 +129,7 @@ function TeamCard({ team, isMine }: { team: TeamOut; isMine: boolean }) {
           aria-label={`Open ${team.name}`}
           className={
             isMine
-              ? "grid size-8 shrink-0 place-items-center rounded-full border border-[var(--c-highlight-ink)]/15 transition hover:bg-[var(--c-highlight-ink)]/10"
+              ? "grid size-8 shrink-0 place-items-center rounded-full border border-second/15 transition hover:bg-second/10"
               : "grid size-8 shrink-0 place-items-center rounded-full border border-line bg-panel-2 text-ink-3 transition hover:border-accent hover:text-ink"
           }
         >
@@ -150,7 +149,7 @@ function TeamCard({ team, isMine }: { team: TeamOut; isMine: boolean }) {
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         {isMine ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--c-highlight-ink)]/10 px-2.5 py-1 text-[11.5px] font-medium">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-second/10 px-2.5 py-1 text-[11.5px] font-medium">
             <Crown className="size-3.5" strokeWidth={2.2} />
             You are in this team
           </span>

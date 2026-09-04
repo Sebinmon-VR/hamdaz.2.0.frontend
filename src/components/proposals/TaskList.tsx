@@ -2,29 +2,79 @@
 
 import clsx from "clsx";
 import { useMemo, useState } from "react";
-import { ExternalLink, Flame, ListChecks } from "lucide-react";
+import useSWR from "swr";
+import { ExternalLink, FileText, Flame, ListChecks } from "lucide-react";
 import { date, humanise, truncate } from "@/lib/format";
-import type { TaskOut } from "@/lib/types";
+import type { ColumnOut, TaskOut } from "@/lib/types";
 import { Badge, Panel, Meta } from "@/components/ui/primitives";
-import { PillRail, SearchInput } from "@/components/ui/controls";
+import { LinkButton, PillRail, SearchInput, Select } from "@/components/ui/controls";
 import { Empty, Modal } from "@/components/ui/feedback";
 import { DueChip } from "@/components/widgets";
 
-type Filter = "all" | "overdue" | "due_soon" | "open" | "done";
+type Filter = "all" | "live" | "due_soon" | "overdue" | "closed" | "done";
+
+/**
+ * What a row actually is.
+ *
+ * `deadline` leads with the bid closing date, so an open row whose deadline
+ * has passed is usually a closed bid rather than late work — and the two need
+ * different reactions: one is an archive, the other is a phone call. They are
+ * told apart by whether a bid closing date is the thing that passed.
+ *
+ *   done    finished, whatever its dates
+ *   closed  not finished, but the bid closed — parked, not urgent
+ *   overdue not finished, no bid closing date, and its due date passed
+ *   due     not finished, still open, deadline within `soonDays`
+ *   live    not finished, still open, nothing pressing
+ */
+type Kind = "done" | "closed" | "overdue" | "due" | "live";
+
+function classify(task: TaskOut, days: number | null, soonDays: number): Kind {
+  if (!task.is_open) return "done";
+  if (task.bid_closing_date) {
+    const closed =
+      new Date(task.bid_closing_date).setHours(0, 0, 0, 0) < new Date().setHours(0, 0, 0, 0);
+    if (closed) return "closed";
+  }
+  if (days === null) return "live";
+  if (days < 0) return "overdue";
+  return days <= soonDays ? "due" : "live";
+}
 
 /**
  * A list of SharePoint proposal tasks.
  *
  * Ordered by deadline rather than by anything SharePoint returns, because the
  * only question anyone opens this screen with is "what is closest to late".
- * Rows are read-only: SharePoint is where this work actually happens, and the
- * backend is read-only over it — so every row offers the way out to the real
- * item rather than pretending to be editable.
+ *
+ * The rows stay read-only: SharePoint is where this work actually happens and
+ * the backend is read-only over it, so every row offers the way out to the
+ * real item rather than pretending to be editable.
+ *
+ * Quoting is deliberately a link out rather than a button here. This list has
+ * no idea whether an enquiry has already been quoted — that join only exists
+ * on the quoting side — so raising one from this screen could silently make a
+ * second quote against a bid that already has one. The quoting picker knows,
+ * and shows the existing quote instead of offering to duplicate it.
  */
 export function TaskList({ tasks, soonDays = 7 }: { tasks: TaskOut[]; soonDays?: number }) {
-  const [filter, setFilter] = useState<Filter>("open");
+  const [filter, setFilter] = useState<Filter>("live");
+  const [status, setStatus] = useState<string>("any");
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState<TaskOut | null>(null);
+
+  // The real choice list from SharePoint rather than whatever happens to
+  // appear in this person's own rows — a status nobody currently holds is
+  // still a status worth being able to filter to.
+  const columns = useSWR<ColumnOut[]>("/proposals/columns", {
+    revalidateOnFocus: false,
+    dedupingInterval: 600_000,
+    shouldRetryOnError: false,
+  });
+  const statuses =
+    columns.data
+      ?.find((c) => c.name === "Status" || c.display_name === "Status")
+      ?.choices ?? [];
 
   const withDays = useMemo(
     () =>
@@ -37,38 +87,46 @@ export function TaskList({ tasks, soonDays = 7 }: { tasks: TaskOut[]; soonDays?:
                   86_400_000,
               )
             : null;
-          return { task, days: Number.isNaN(days as number) ? null : days };
+          const clean = Number.isNaN(days as number) ? null : days;
+          return { task, days: clean, kind: classify(task, clean, soonDays) };
         })
         // No deadline sorts last: an undated task is not more urgent than a
         // dated one, whatever its position in the list.
-        .sort((a, b) => (a.days ?? Infinity) - (b.days ?? Infinity)),
-    [tasks],
+        // A closed bid sorts after everything live, however old it is: it is
+        // the least urgent thing on the list, not the most.
+        .sort((a, b) => {
+          const parked = Number(a.kind === "closed") - Number(b.kind === "closed");
+          if (parked !== 0) return parked;
+          return (a.days ?? Infinity) - (b.days ?? Infinity);
+        }),
+    [tasks, soonDays],
   );
 
-  const counts = useMemo(
-    () => ({
+  const counts = useMemo(() => {
+    const by = { done: 0, closed: 0, overdue: 0, due: 0, live: 0 };
+    for (const row of withDays) by[row.kind] += 1;
+    return {
       all: withDays.length,
-      open: withDays.filter((r) => r.task.is_open).length,
-      overdue: withDays.filter((r) => r.task.is_open && r.days !== null && r.days < 0).length,
-      due_soon: withDays.filter(
-        (r) => r.task.is_open && r.days !== null && r.days >= 0 && r.days <= soonDays,
-      ).length,
-      done: withDays.filter((r) => !r.task.is_open).length,
-    }),
-    [withDays, soonDays],
-  );
+      // "Live" is everything not finished whose bid has not closed — the due
+      // and overdue rows are part of it, not alternatives to it.
+      live: by.live + by.due + by.overdue,
+      due_soon: by.due,
+      overdue: by.overdue,
+      closed: by.closed,
+      done: by.done,
+    };
+  }, [withDays]);
 
   const needle = search.trim().toLowerCase();
-  const rows = withDays.filter(({ task, days }) => {
-    if (filter === "open" && !task.is_open) return false;
-    if (filter === "done" && task.is_open) return false;
-    if (filter === "overdue" && !(task.is_open && days !== null && days < 0)) return false;
-    if (
-      filter === "due_soon" &&
-      !(task.is_open && days !== null && days >= 0 && days <= soonDays)
-    ) {
+  const rows = withDays.filter(({ task, kind }) => {
+    if (filter === "live" && !(kind === "live" || kind === "due" || kind === "overdue")) {
       return false;
     }
+    if (filter === "due_soon" && kind !== "due") return false;
+    if (filter === "overdue" && kind !== "overdue") return false;
+    if (filter === "closed" && kind !== "closed") return false;
+    if (filter === "done" && kind !== "done") return false;
+    if (status !== "any" && task.status !== status) return false;
     if (!needle) return true;
     return [task.title, task.end_user, task.quote_no, task.status, task.assigned_to_name]
       .filter(Boolean)
@@ -84,14 +142,33 @@ export function TaskList({ tasks, soonDays = 7 }: { tasks: TaskOut[]; soonDays?:
           placeholder="Search title, end user, quote number"
           className="w-full max-w-sm"
         />
+        {statuses.length > 0 && (
+          <Select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className="w-full max-w-44"
+            aria-label="Status"
+          >
+            <option value="any">Any status</option>
+            {statuses.map((choice) => (
+              <option key={choice} value={choice}>
+                {choice}
+              </option>
+            ))}
+          </Select>
+        )}
         <PillRail
           value={filter}
           onChange={setFilter}
           options={[
-            { value: "open", label: "Open", count: counts.open },
-            { value: "overdue", label: "Overdue", count: counts.overdue, icon: Flame },
+            { value: "live", label: "Live", count: counts.live },
             { value: "due_soon", label: `Next ${soonDays} days`, count: counts.due_soon },
-            { value: "done", label: "Closed", count: counts.done },
+            // Genuinely late: no bid closing date, and the due date passed.
+            // Usually empty, which is the point — it used to hold the whole
+            // archive and so meant nothing.
+            { value: "overdue", label: "Overdue", count: counts.overdue, icon: Flame },
+            { value: "closed", label: "Bid closed", count: counts.closed },
+            { value: "done", label: "Finished", count: counts.done },
             { value: "all", label: "Everything", count: counts.all },
           ]}
         />
@@ -161,19 +238,29 @@ function TaskDetail({ task, onClose }: { task: TaskOut | null; onClose: () => vo
       onClose={onClose}
       width="lg"
       title={task ? truncate(task.title, 80) : "Task"}
-      description="Read-only. SharePoint is where this list is actually maintained."
+      description="The enquiry as SharePoint holds it. Editing happens there; pricing it happens here."
       footer={
-        task?.web_url && (
-          <a
-            href={task.web_url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex h-10 items-center gap-2 rounded-full bg-accent px-4 text-[13.5px] font-medium text-[var(--c-accent-ink)]"
-          >
-            <ExternalLink className="size-4" />
-            Open in SharePoint
-          </a>
-        )
+        <>
+          {task?.web_url && (
+            <a
+              href={task.web_url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-10 items-center gap-2 rounded-[13px] border border-line px-4 text-[13px] font-medium text-ink-2 transition hover:border-line-strong hover:text-ink"
+            >
+              <ExternalLink className="size-3.5" />
+              Open in SharePoint
+            </a>
+          )}
+          {/* Goes to the quoting picker rather than raising from here, so the
+              existing quote against this enquiry — if there is one — is seen
+              before a second gets made. */}
+          {task?.is_open && (
+            <LinkButton href="/quote-requests/new" variant="accent" icon={FileText}>
+              Quote this enquiry
+            </LinkButton>
+          )}
+        </>
       }
     >
       {task && (

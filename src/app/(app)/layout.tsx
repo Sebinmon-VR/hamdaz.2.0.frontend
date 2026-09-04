@@ -1,25 +1,37 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { SWRConfig } from "swr";
 import { fetcher } from "@/lib/api";
+import { countRequests } from "@/lib/progress";
 import { labelFor } from "@/lib/nav";
 import { SessionProvider, useLoadSession } from "@/lib/session";
 import { TabsProvider } from "@/lib/tabs";
-import { Sidebar } from "@/components/shell/Sidebar";
-import { Topbar } from "@/components/shell/Topbar";
+import { CommandPalette } from "@/components/shell/CommandPalette";
+import { Doodles } from "@/components/shell/Doodles";
+import { RouteProgress } from "@/components/shell/RouteProgress";
+import { Rail } from "@/components/shell/Rail";
+import { TabStrip } from "@/components/shell/TabStrip";
 import { Wordmark } from "@/components/shell/Wordmark";
 import { ErrorState, Skeleton } from "@/components/ui/feedback";
 
 /**
  * Everything behind sign-in renders inside this.
  *
- * The session is loaded once here rather than per page, so a navigation never
+ * The frame is a rail down the left and a column of blocks to its right, all
+ * floating on the app ground with a 16px gutter. Nothing is a card with a
+ * border: a block separates from the ground by tone in dark and by shadow in
+ * light, which is the one thing `--lift` decides.
+ *
+ * Screens do not draw their own background and do not scroll the window. Each
+ * one owns its command bar (that is what `PageHead` renders) and then its own
+ * blocks, so the shell holds no per-screen state at all.
+ *
+ * The session loads once here rather than per page, so a navigation never
  * re-asks who the viewer is. A 401 on that first load is the one error the
  * shell handles itself: the cookie has expired, and the only useful response
- * is to send the person back to sign in — remembering where they were so they
- * land there rather than on the dashboard.
+ * is to send the person back to sign in, remembering where they were.
  */
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -27,14 +39,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       value={{
         fetcher,
         revalidateOnFocus: false,
+        // Coming back to a machine after lunch should not re-sweep SharePoint
+        // for every screen that happens to be open.
+        revalidateOnReconnect: false,
         // Re-entering a screen through a tab should be instant. Within the
-        // dedupe window SWR serves the cached answer and skips the request
-        // entirely, which is what makes the tab strip feel free.
-        dedupingInterval: 30_000,
+        // dedupe window SWR serves the cached answer and skips the request,
+        // which is what makes the tab strip feel free. A minute rather than
+        // thirty seconds because the expensive endpoints here are org-wide
+        // sweeps of SharePoint and Entra that the backend caches anyway — a
+        // second sweep inside a minute cannot tell you anything new.
+        dedupingInterval: 60_000,
+        // Show the last answer while fetching the next one. Without this a
+        // filter change blanks the screen and redraws it, which reads as
+        // slower than it is even when it is not.
         keepPreviousData: true,
-        // A failure here is usually a real one — a 403, or SharePoint being
-        // down — so hammering it three times helps nobody.
+        // A failure here is usually real — a 403, or SharePoint being down —
+        // so hammering it three times helps nobody.
         errorRetryCount: 1,
+        // Counts what is in flight so the shell can say so. Screens opt into
+        // nothing and pass nothing: the middleware sees every hook.
+        use: [countRequests],
       }}
     >
       <Shell>{children}</Shell>
@@ -46,9 +70,6 @@ function Shell({ children }: { children: React.ReactNode }) {
   const { session, loading, unauthorised, error } = useLoadSession();
   const router = useRouter();
   const pathname = usePathname();
-  const [navOpen, setNavOpen] = useState(false);
-
-  const closeNav = useCallback(() => setNavOpen(false), []);
 
   useEffect(() => {
     if (unauthorised) router.replace(`/login?next=${encodeURIComponent(pathname)}`);
@@ -58,14 +79,16 @@ function Shell({ children }: { children: React.ReactNode }) {
 
   if (error) {
     return (
-      <main className="grid min-h-dvh place-items-center bg-canvas p-6">
-        <div className="w-full max-w-md">
-          <div className="mb-8 flex justify-center">
-            <Wordmark />
+      <Frame>
+        <div className="grid flex-1 place-items-center p-6">
+          <div className="w-full max-w-md">
+            <div className="mb-8 flex justify-center">
+              <Wordmark />
+            </div>
+            <ErrorState error={error} onRetry={() => location.reload()} />
           </div>
-          <ErrorState error={error} onRetry={() => location.reload()} />
         </div>
-      </main>
+      </Frame>
     );
   }
 
@@ -74,53 +97,74 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider session={session}>
       <TabsProvider labelFor={labelFor}>
-        <div className="min-h-dvh bg-canvas">
-          <Sidebar open={navOpen} onClose={closeNav} />
-          <div className="flex min-h-dvh flex-col lg:pl-[236px]">
-            <Topbar onOpenNav={() => setNavOpen(true)} />
-            <main className="min-w-0 flex-1 px-3 pb-4 sm:px-4">
-              <div className="mx-auto w-full max-w-[1560px] space-y-3">{children}</div>
-            </main>
-          </div>
-        </div>
+        <Frame>
+          {/* Bound to the window, so ⌘K works from any screen and from any
+              focused field — the point is not having to reach for anything. */}
+          <CommandPalette />
+          <Rail />
+          <main className="flex min-w-0 flex-1 flex-col gap-3">
+            {/* The open screens ride on the ground rather than in a block:
+                they are a list of places, not a second navigation, and giving
+                them a surface of their own made them compete with the command
+                bar directly underneath. */}
+            <TabStrip />
+            {/* One scroll container — the rail and the tab chips stay put
+                while a long list moves under them.
+
+                `[&>*]:shrink-0` is load-bearing, not tidying. A flex column
+                gives every child `flex-shrink: 1`, so once the screen's blocks
+                were taller than the window they were COMPRESSED to fit instead
+                of overflowing and scrolling — panels lost height and their
+                contents were sliced through the middle. Headline numbers were
+                cut in half on every screen with more than a couple of blocks.
+                Children keep their natural height; the container scrolls. */}
+            <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto [&>*]:shrink-0">
+              {children}
+            </div>
+          </main>
+        </Frame>
       </TabsProvider>
     </SessionProvider>
+  );
+}
+
+/**
+ * The app ground. Blocks float on it; nothing else paints a background.
+ *
+ * `isolation: isolate` is what lets the doodle layer sit at z-index -1 —
+ * above this element's own background, below every block in flow — so no
+ * block on any screen needs a z-index of its own. The drawing inks itself
+ * from `currentColor`, so it follows the mode without a second copy.
+ */
+function Frame({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative isolate flex h-dvh gap-3.5 overflow-hidden bg-app p-3 text-ink sm:p-4">
+      <Doodles />
+      {/* Above everything, including the modal layer: the one thing that must
+          stay visible while a screen is being replaced is the fact that it is
+          being replaced. */}
+      <RouteProgress />
+      {children}
+    </div>
   );
 }
 
 /** Shown while the session resolves. Shaped like the shell, so nothing jumps. */
 function BootScreen() {
   return (
-    <div className="min-h-dvh bg-canvas">
-      <div className="fixed inset-y-0 left-0 hidden w-[236px] flex-col gap-2 p-2 lg:flex">
-        {[5, 3, 3].map((rows, panel) => (
-          <div key={panel} className="rounded-[20px] border border-line bg-panel p-2.5">
-            <Skeleton className="mb-2 ml-1.5 h-3 w-20" />
-            <div className="space-y-1">
-              {Array.from({ length: rows }).map((_, i) => (
-                <Skeleton key={i} className="h-9 rounded-full" />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="lg:pl-[236px]">
-        <div className="flex h-16 items-center gap-3 px-4">
-          <Skeleton className="size-9 rounded-full" />
-          <Skeleton className="h-10 w-40 rounded-full" />
-          <Skeleton className="h-10 w-32 rounded-full" />
-          <div className="grow" />
-          <Skeleton className="size-10 rounded-full" />
-        </div>
-        <div className="mx-auto w-full max-w-[1560px] space-y-3 px-4">
-          <Skeleton className="h-44 rounded-[20px]" />
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-40 rounded-[20px]" />
-            ))}
+    <Frame>
+      <Skeleton className="h-full w-[62px] rounded-[16px]" />
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
+        <Skeleton className="h-[26px] w-64 shrink-0 rounded-[9px]" />
+        <Skeleton className="h-[62px] shrink-0 rounded-[20px]" />
+        <div className="flex min-h-0 flex-1 gap-3.5">
+          <Skeleton className="flex-1 rounded-[20px]" />
+          <div className="flex w-[420px] shrink-0 flex-col gap-3.5">
+            <Skeleton className="h-[186px] shrink-0 rounded-[11px]" />
+            <Skeleton className="flex-1 rounded-[20px]" />
           </div>
         </div>
       </div>
-    </div>
+    </Frame>
   );
 }

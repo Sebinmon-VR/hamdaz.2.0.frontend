@@ -58,6 +58,11 @@ export default function NewComparisonPage() {
   const [failed, setFailed] = useState<ExtractionFailure[]>([]);
   const [preview, setPreview] = useState<AnalysisOut | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  // What the extraction actually cost. Reading a supplier quote is the one
+  // place this app spends money per use, so it says so rather than hiding it.
+  const [usage, setUsage] = useState<{ model: string; input: number; output: number } | null>(
+    null,
+  );
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -69,6 +74,13 @@ export default function NewComparisonPage() {
     // Appended, not replaced: quotes usually arrive in more than one batch.
     setQuotes((current) => [...current, ...result.quotes]);
     setFailed((current) => [...current, ...(result.failed ?? [])]);
+    if (result.model) {
+      setUsage((current) => ({
+        model: result.model!,
+        input: (current?.input ?? 0) + (result.input_tokens ?? 0),
+        output: (current?.output ?? 0) + (result.output_tokens ?? 0),
+      }));
+    }
     setPreview(null);
     return result;
   });
@@ -124,7 +136,7 @@ export default function NewComparisonPage() {
       <PageHead
         eyebrow={<Link href="/comparisons">Comparisons</Link>}
         title="New comparison"
-        lead="Upload the supplier quotes, check what was read out of them, then compare. Nothing is saved until you say so."
+        lead="Nothing is saved until you say so."
         actions={
           <Button
             variant="accent"
@@ -182,7 +194,7 @@ export default function NewComparisonPage() {
               onClick={() => inputRef.current?.click()}
               disabled={extract.pending}
               className={clsx(
-                "mt-5 flex w-full flex-col items-center justify-center rounded-[18px] border border-dashed px-6 py-10 text-center transition",
+                "mt-5 flex w-full flex-col items-center justify-center rounded-[14px] border border-dashed px-6 py-10 text-center transition",
                 extract.pending
                   ? "border-accent bg-accent-soft"
                   : "border-line hover:border-accent hover:bg-accent-soft/40",
@@ -209,6 +221,13 @@ export default function NewComparisonPage() {
               <InlineNotice tone="danger" className="mt-4">
                 {fileError ?? extract.error}
               </InlineNotice>
+            )}
+
+            {usage && (
+              <p className="mt-4 text-[11.5px] text-ink-4">
+                Read by {usage.model} · {usage.input.toLocaleString()} tokens in,{" "}
+                {usage.output.toLocaleString()} out.
+              </p>
             )}
 
             {failed.length > 0 && (

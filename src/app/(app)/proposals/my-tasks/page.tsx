@@ -23,7 +23,7 @@ export default function MyTasksPage() {
       <PageHead
         eyebrow="Proposals"
         title="My tasks"
-        lead="Rows from the SharePoint Proposals list assigned to you. Read-only here — SharePoint stays the place this work is done."
+        lead="Your enquiries, soonest deadline first. Quoting starts under Quote requests."
         actions={
           <Button
             icon={RefreshCw}
@@ -43,7 +43,7 @@ export default function MyTasksPage() {
         <Empty
           icon={UserX}
           title="You are not on the Proposals list"
-          body={`Nothing in SharePoint is assigned to ${data.email}. If that is wrong, whoever maintains the list needs to add you to it.`}
+          body={`Nothing in SharePoint is assigned to ${data.email}, so there is nothing here to quote for. If that is wrong, whoever maintains the Proposals list needs to add you to it.`}
         />
       ) : (
         <>

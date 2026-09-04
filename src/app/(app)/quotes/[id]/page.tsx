@@ -5,7 +5,7 @@ import Link from "next/link";
 import useSWR from "swr";
 import { Download, ExternalLink, FileText, Package, Paperclip, Receipt, ShoppingCart } from "lucide-react";
 import { files, withQuery } from "@/lib/api";
-import { bytes, date, money, num } from "@/lib/format";
+import { bytes, date, humanise, money, num } from "@/lib/format";
 import type { QuoteDetailOut, RelatedOut } from "@/lib/types";
 import { Badge, Panel, Meta, PageHead, PanelHead, Stat } from "@/components/ui/primitives";
 import { PillRail } from "@/components/ui/controls";
@@ -48,7 +48,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
                 href={(q.web_url ?? q.estimate_url)!}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex h-10 items-center gap-2 rounded-full bg-accent px-4 text-[13.5px] font-medium text-[var(--c-accent-ink)]"
+                className="inline-flex h-10 items-center gap-2 rounded-full bg-accent px-4 text-[13.5px] font-medium text-accent-ink"
               >
                 <ExternalLink className="size-4" />
                 Open in Zoho
@@ -122,6 +122,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
                           </p>
                           <p className="truncate text-[11.5px] text-ink-4">
                             {[
+                              doc.file_type?.toUpperCase(),
                               doc.file_size_formatted ?? bytes(doc.file_size),
                               doc.uploaded_by,
                               doc.uploaded_on ? date(doc.uploaded_on) : null,
@@ -133,9 +134,15 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
                         {doc.id && (
                           // Streamed by the API with the session cookie — a
                           // plain navigation, not a fetch, so the browser
-                          // handles the download itself.
+                          // handles the download itself. The path comes from
+                          // the response where Zoho gave one, so this does not
+                          // become a second place the URL is decided.
                           <a
-                            href={files.quoteDocument(q.id, doc.id)}
+                            href={
+                              doc.download_url
+                                ? files.fromApiPath(doc.download_url)
+                                : files.quoteDocument(q.id, doc.id)
+                            }
                             target="_blank"
                             rel="noreferrer"
                             className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-line-strong px-3.5 text-[12.5px] font-medium transition hover:border-accent"
@@ -190,6 +197,38 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
               </div>
             </dl>
           </Panel>
+
+          {(q.billing_address || q.shipping_address) && (
+            <Panel className="p-6">
+              <PanelHead title="Addresses" />
+              <div className="mt-4 grid gap-5 sm:grid-cols-2">
+                <Address label="Billing" value={q.billing_address} />
+                <Address label="Shipping" value={q.shipping_address} />
+              </div>
+            </Panel>
+          )}
+
+          {Object.keys(q.custom_fields ?? {}).length > 0 && (
+            <Panel className="p-6">
+              <PanelHead
+                title="Custom fields"
+                count={Object.keys(q.custom_fields).length}
+                hint="Set on the quote in Zoho"
+              />
+              <dl className="mt-4 space-y-2.5">
+                {Object.entries(q.custom_fields).map(([key, value]) => (
+                  <div key={key} className="flex items-baseline justify-between gap-4">
+                    <dt className="min-w-0 truncate text-[12.5px] text-ink-3">
+                      {humanise(key)}
+                    </dt>
+                    <dd className="shrink-0 text-right text-[12.5px] text-ink">
+                      {formatCustom(value)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </Panel>
+          )}
 
           {(q.notes || q.terms) && (
             <Panel className="p-4">
@@ -260,6 +299,9 @@ function LineItems({ quote }: { quote: QuoteDetailOut }) {
               </td>
               <td className="tnum bg-inset py-3 text-right text-ink-3">
                 {item.discount ? `${item.discount}%` : "—"}
+                {item.tax_name && (
+                  <span className="block text-[10.5px] text-ink-4">{item.tax_name}</span>
+                )}
               </td>
               <td className="tnum rounded-r-2xl bg-inset py-3 pr-3.5 text-right font-semibold">
                 {money(item.total, quote.currency_code)}
@@ -332,6 +374,12 @@ function Related({
         </div>
       )}
 
+      {related && related.included.length > 0 && (
+        <p className="text-[11.5px] text-ink-4">
+          Read from Zoho: {related.included.join(", ")}.
+        </p>
+      )}
+
       {branches
         .filter(({ branch }) => branch && !branch.ok)
         .map(({ key, label, branch }) => (
@@ -349,4 +397,52 @@ function Related({
       )}
     </div>
   );
+}
+
+/**
+ * A Zoho address block.
+ *
+ * Zoho returns these as a loose object whose keys vary by organisation, so
+ * this renders the ones that are conventionally present in the order an
+ * address is actually read, and quietly skips whatever is missing.
+ */
+function Address({
+  label,
+  value,
+}: {
+  label: string;
+  value: Record<string, unknown> | null;
+}) {
+  const lines = value
+    ? ["attention", "address", "street2", "city", "state", "zip", "country"]
+        .map((key) => value[key])
+        .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+    : [];
+
+  return (
+    <div className="min-w-0">
+      <p className="text-[11.5px] text-ink-3">{label}</p>
+      {lines.length === 0 ? (
+        <p className="mt-2 text-[13px] text-ink-4">Not recorded</p>
+      ) : (
+        <address className="mt-2 not-italic text-[13px] leading-relaxed text-ink">
+          {lines.map((line, i) => (
+            <span key={i} className="block">
+              {line}
+            </span>
+          ))}
+        </address>
+      )}
+      {value && typeof value.phone === "string" && value.phone && (
+        <p className="mt-2 text-[12px] text-ink-3">{value.phone}</p>
+      )}
+    </div>
+  );
+}
+
+/** Custom field values arrive as whatever Zoho stored — string, number, bool. */
+function formatCustom(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return String(value);
 }

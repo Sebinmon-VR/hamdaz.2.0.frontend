@@ -48,7 +48,7 @@ function LoginScreen() {
           <ThemeSwitch />
         </div>
 
-        <div className="rounded-[18px] border border-line bg-panel p-6 shadow-[var(--shadow-panel)]">
+        <div className="rounded-[14px] border border-line bg-panel p-6 shadow-[var(--shadow-panel)]">
           <h1 className="text-[16px] font-semibold tracking-tight">Sign in</h1>
           <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-3">
             Use your Hamdaz work account. There is no separate password for this

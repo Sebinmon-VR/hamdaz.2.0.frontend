@@ -8,7 +8,13 @@ import { api, withQuery } from "@/lib/api";
 import { date, humanise } from "@/lib/format";
 import { useAction, useDebounced } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
-import type { MemberOut, OrgUserPage, RoleOut, TeamDetailOut } from "@/lib/types";
+import type {
+  BulkResult,
+  MemberOut,
+  OrgUserPage,
+  RoleOut,
+  TeamDetailOut,
+} from "@/lib/types";
 import { Avatar, Badge, Panel, PageHead, PanelHead } from "@/components/ui/primitives";
 import { Button, ChipPicker, SearchInput } from "@/components/ui/controls";
 import {
@@ -22,7 +28,9 @@ import {
 
 export default function MembersPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
-  const session = useSession();
+  // A profile carries somebody's whole record, so the link is offered
+  // only to the people allowed to open it.
+  const mayOpenProfile = useSession().roles.is_admin;
 
   const team = useSWR<TeamDetailOut>(`/teams/${slug}`);
   // Only team-scoped roles can be held through a membership; the global ones
@@ -47,7 +55,6 @@ export default function MembersPage({ params }: { params: Promise<{ slug: string
       <PageHead
         eyebrow={<Link href={`/teams/${slug}`}>{data.name}</Link>}
         title="Members"
-        lead="Everyone here holds at least one team role. What the team can reach is set separately, under module access."
         actions={
           <Button variant="accent" icon={UserPlus} onClick={() => setAdding(true)}>
             Add people
@@ -72,12 +79,23 @@ export default function MembersPage({ params }: { params: Promise<{ slug: string
             }
           />
         ) : (
-          <ul className="mt-2 divide-y divide-[var(--c-line)]">
+          <ul className="mt-2 divide-y divide-line">
             {data.members.map((member) => (
               <li key={member.user_id} className="flex flex-wrap items-center gap-2.5 py-2">
                 <Avatar name={member.display_name} seed={member.user_id} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[14px] font-medium">{member.display_name}</p>
+                  <p className="truncate text-[14px] font-medium">
+                    {mayOpenProfile ? (
+                      <Link
+                        href={`/admin/users/${member.user_id}`}
+                        className="transition hover:text-accent-text"
+                      >
+                        {member.display_name}
+                      </Link>
+                    ) : (
+                      member.display_name
+                    )}
+                  </p>
                   <p className="truncate text-[12px] text-ink-4">
                     {member.email} · joined {date(member.joined_at)}
                   </p>
@@ -129,6 +147,7 @@ export default function MembersPage({ params }: { params: Promise<{ slug: string
           setAdding(false);
           team.mutate();
         }}
+        onRefresh={() => team.mutate()}
       />
 
       <EditRoles
@@ -157,6 +176,7 @@ function AddMembers({
   roleOptions,
   onClose,
   onAdded,
+  onRefresh,
 }: {
   slug: string;
   open: boolean;
@@ -164,6 +184,8 @@ function AddMembers({
   roleOptions: { value: string; label: string }[];
   onClose: () => void;
   onAdded: () => void;
+  /** Reload the member list without closing — used on a partial success. */
+  onRefresh: () => void;
 }) {
   const [search, setSearch] = useState("");
   const debounced = useDebounced(search, 350);
@@ -174,12 +196,18 @@ function AddMembers({
     open ? withQuery("/directory/users", { search: debounced || undefined, limit: 40 }) : null,
   );
 
-  const add = useAction(async () =>
-    api.post(`/teams/${slug}/members/bulk`, {
+  // Every person is attempted independently on the backend, so a partial
+  // success is the normal outcome for a bad id in the middle of a batch —
+  // reporting only "added" would quietly lose the ones that did not take.
+  const [failed, setFailed] = useState<BulkResult["failed"]>([]);
+  const add = useAction(async () => {
+    const result = await api.post<BulkResult>(`/teams/${slug}/members/bulk`, {
       user_ids: Object.keys(picked),
       role_keys: withRoles,
-    }),
-  );
+    });
+    setFailed(result.failed);
+    return result;
+  });
 
   const chosen = Object.entries(picked);
 
@@ -198,11 +226,14 @@ function AddMembers({
             loading={add.pending}
             disabled={chosen.length === 0 || withRoles.length === 0}
             onClick={async () => {
-              if ((await add.run()) !== undefined) {
-                setPicked({});
-                setSearch("");
-                onAdded();
-              }
+              const result = await add.run();
+              if (!result) return;
+              setPicked({});
+              setSearch("");
+              // Some went in and some did not: stay open so the failures can
+              // actually be read, and refresh what did land behind the dialog.
+              if (result.failed.length === 0) onAdded();
+              else onRefresh();
             }}
           >
             Add {chosen.length || ""} {chosen.length === 1 ? "person" : "people"}
@@ -212,6 +243,17 @@ function AddMembers({
     >
       <div className="space-y-4 pb-4">
         {add.error && <InlineNotice tone="danger">{add.error}</InlineNotice>}
+
+        {failed.length > 0 && (
+          <InlineNotice tone="warn">
+            {failed.length} of the people chosen could not be added:
+            <ul className="mt-1.5 space-y-0.5">
+              {failed.map((entry) => (
+                <li key={entry.user_id}>· {entry.reason}</li>
+              ))}
+            </ul>
+          </InlineNotice>
+        )}
 
         <div>
           <p className="mb-2 text-[12.5px] font-medium text-ink-2">Roles they will hold</p>
@@ -242,7 +284,7 @@ function AddMembers({
                     return next;
                   })
                 }
-                className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-[12px] font-medium text-[var(--c-accent-ink)]"
+                className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-[12px] font-medium text-accent-ink"
               >
                 {name}
                 <span aria-hidden>×</span>
@@ -264,7 +306,7 @@ function AddMembers({
           ) : (directory.data?.users.length ?? 0) === 0 ? (
             <p className="p-6 text-[13px] text-ink-3">Nobody matches that.</p>
           ) : (
-            <ul className="divide-y divide-[var(--c-line)]">
+            <ul className="divide-y divide-line">
               {directory.data!.users.map((person) => {
                 const already = existing.has(person.object_id);
                 const on = person.object_id in picked;
@@ -299,7 +341,7 @@ function AddMembers({
                       {already ? (
                         <Badge>Already in</Badge>
                       ) : on ? (
-                        <span className="grid size-6 place-items-center rounded-full bg-accent text-[var(--c-accent-ink)]">
+                        <span className="grid size-6 place-items-center rounded-full bg-accent text-accent-ink">
                           <Check className="size-3.5" strokeWidth={3} />
                         </span>
                       ) : (
