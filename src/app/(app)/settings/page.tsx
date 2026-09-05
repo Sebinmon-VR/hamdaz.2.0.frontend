@@ -2,11 +2,26 @@
 
 import clsx from "clsx";
 import { useState } from "react";
-import { Check, LogOut, Monitor, Moon, ShieldCheck, Sun } from "lucide-react";
+import {
+  Check,
+  ImagePlus,
+  LogOut,
+  Monitor,
+  Moon,
+  ShieldCheck,
+  Sun,
+} from "lucide-react";
 import { signOutAndReturnToLogin } from "@/lib/api";
 import { humanise } from "@/lib/format";
 import { useSession } from "@/lib/session";
-import { isHex, PALETTES, useTheme, type ModeChoice } from "@/lib/theme";
+import {
+  isHex,
+  MAX_IMAGE_BYTES,
+  PALETTES,
+  useTheme,
+  type CustomTheme,
+  type ModeChoice,
+} from "@/lib/theme";
 import {
   Avatar,
   Badge,
@@ -15,7 +30,8 @@ import {
   Panel,
   PanelHead,
 } from "@/components/ui/primitives";
-import { Button } from "@/components/ui/controls";
+import { Button, PillRail } from "@/components/ui/controls";
+import { InlineNotice } from "@/components/ui/feedback";
 
 /**
  * Settings.
@@ -130,16 +146,20 @@ export default function SettingsPage() {
                     onChange={(background) => setCustom({ ...custom, background })}
                     onClear={() => setCustom({ ...custom, background: "" })}
                   />
-                  {/* Said plainly because the word "super admin" implies
-                      otherwise. There is no user-preferences endpoint on the
-                      backend — the theme docstring says so — so nothing here
-                      can reach anybody else's browser. */}
-                  <p className="text-[11.5px] leading-relaxed text-ink-4">
-                    Stored on this browser only. Setting it does not change what
-                    colleagues see — that would need somewhere on the server to keep it,
-                    which does not exist yet.
-                  </p>
                 </div>
+
+                <p className="mt-5 micro text-ink-4">Background picture</p>
+                <BackgroundImage custom={custom} setCustom={setCustom} />
+
+                {/* Said plainly because the word "super admin" implies
+                    otherwise. There is no user-preferences endpoint on the
+                    backend — the theme docstring says so — so nothing here
+                    can reach anybody else's browser. */}
+                <p className="mt-3 text-[11.5px] leading-relaxed text-ink-4">
+                  Both are stored on this browser only. Setting them does not change what
+                  colleagues see — that would need somewhere on the server to keep it,
+                  which does not exist yet.
+                </p>
               </>
             )}
 
@@ -360,6 +380,151 @@ function ColourField({
         >
           Reset
         </Button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A picture behind the app.
+ *
+ * Two ways in, because they answer different needs: a file for something off
+ * this machine, a URL for something already hosted. A file is read to a data
+ * URL and kept in localStorage like every other preference here — which is
+ * also the constraint, since that store is a few megabytes for the whole
+ * origin. Oversized files are refused with a reason rather than swallowed by
+ * the try/catch around the write, where a failure looks like the button not
+ * working.
+ */
+function BackgroundImage({
+  custom,
+  setCustom,
+}: {
+  custom: CustomTheme;
+  setCustom: (next: CustomTheme) => void;
+}) {
+  const [url, setUrl] = useState(custom.image.startsWith("data:") ? "" : custom.image);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  function pick(file: File | undefined) {
+    setProblem(null);
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setProblem("That is not an image.");
+      return;
+    }
+    // A data URL is about a third larger than the file, and the whole origin
+    // shares one quota with the theme, the rail and the tab strip.
+    if (file.size > MAX_IMAGE_BYTES) {
+      setProblem(
+        `That file is ${(file.size / 1_000_000).toFixed(1)} MB. The limit is ${(
+          MAX_IMAGE_BYTES / 1_000_000
+        ).toFixed(1)} MB — link to it by URL instead, or use a smaller copy.`,
+      );
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setUrl("");
+      setCustom({ ...custom, image: String(reader.result) });
+    };
+    reader.onerror = () => setProblem("That file could not be read.");
+    reader.readAsDataURL(file);
+  }
+
+  return (
+    <div className="mt-2 space-y-3 rounded-[13px] bg-panel-2 p-3.5">
+      {problem && <InlineNotice tone="danger">{problem}</InlineNotice>}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="inline-flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-[13px] border border-line px-3.5 text-[12px] font-medium text-ink-2 transition hover:border-line-strong hover:text-ink">
+          <ImagePlus className="size-3.5" strokeWidth={2} />
+          Choose a file
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => pick(e.target.files?.[0])}
+          />
+        </label>
+        <span className="text-[11.5px] text-ink-4">or</span>
+        <input
+          value={url}
+          placeholder="https://…"
+          spellCheck={false}
+          onChange={(e) => setUrl(e.target.value)}
+          onBlur={() => {
+            const next = url.trim();
+            if (next && next !== custom.image) setCustom({ ...custom, image: next });
+          }}
+          className="h-9 min-w-0 flex-1 rounded-xl bg-panel px-3 text-[12px] text-ink outline-none ring-1 ring-line focus:ring-accent"
+        />
+        {custom.image && (
+          <Button
+            size="sm"
+            onClick={() => {
+              setUrl("");
+              setProblem(null);
+              setCustom({ ...custom, image: "" });
+            }}
+          >
+            Remove
+          </Button>
+        )}
+      </div>
+
+      {custom.image && (
+        <>
+          <div
+            className="h-24 rounded-xl ring-1 ring-line"
+            style={{
+              backgroundImage: `url("${custom.image}")`,
+              backgroundSize: custom.imageFit === "tile" ? "auto" : custom.imageFit,
+              backgroundRepeat: custom.imageFit === "tile" ? "repeat" : "no-repeat",
+              backgroundPosition: "center",
+            }}
+            aria-label="Preview"
+          />
+
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="w-16 shrink-0 text-[12px] text-ink-3">Fit</span>
+            <PillRail
+              value={custom.imageFit}
+              onChange={(imageFit) => setCustom({ ...custom, imageFit })}
+              options={[
+                { value: "cover" as const, label: "Fill" },
+                { value: "contain" as const, label: "Fit" },
+                { value: "tile" as const, label: "Tile" },
+              ]}
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="w-16 shrink-0 text-[12px] text-ink-3">Fade</span>
+            <input
+              type="range"
+              min={0}
+              max={95}
+              step={1}
+              value={custom.imageDim}
+              onChange={(e) => setCustom({ ...custom, imageDim: Number(e.target.value) })}
+              className="h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-panel-3 accent-[var(--accent)]"
+            />
+            <span className="tnum w-10 shrink-0 text-right text-[12px] text-ink-4">
+              {custom.imageDim}%
+            </span>
+          </div>
+
+          {/* The rail and the tab strip are translucent. At a low fade a
+              photograph sits directly behind their text, and no amount of
+              taste in the picture fixes that. */}
+          {custom.imageDim < 45 && (
+            <InlineNotice tone="warn">
+              Below about 45% the sidebar and tab labels start competing with the picture.
+              Worth checking they are still readable.
+            </InlineNotice>
+          )}
+        </>
       )}
     </div>
   );

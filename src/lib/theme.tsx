@@ -123,6 +123,12 @@ d.style.setProperty("--on-second",ink(c.second));}
 if(hex.test(c.background||"")){
 d.style.setProperty("--app",c.background);
 d.style.setProperty("--bezel","color-mix(in oklab, "+c.background+" 86%, #000000)");}
+if(c.image){var dim=Math.min(95,Math.max(0,typeof c.imageDim==="number"?c.imageDim:72));
+var w="color-mix(in srgb, var(--app) "+dim+"%, transparent)";
+d.style.setProperty("--app-image",'url("'+String(c.image).replace(/"/g,'\\"')+'")');
+d.style.setProperty("--app-scrim","linear-gradient("+w+", "+w+")");
+d.style.setProperty("--app-image-size",c.imageFit==="tile"?"auto":(c.imageFit||"cover"));
+d.style.setProperty("--app-image-repeat",c.imageFit==="tile"?"repeat":"no-repeat");}
 }catch(e){
 document.documentElement.setAttribute("data-palette",${JSON.stringify(DEFAULT_PALETTE)});
 document.documentElement.setAttribute("data-theme","dark");
@@ -152,11 +158,22 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       const raw = localStorage.getItem(CUSTOM_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<CustomTheme>;
-        setCustomState({
+        const restored: CustomTheme = {
           accent: isHex(parsed.accent ?? "") ? parsed.accent! : DEFAULT_CUSTOM.accent,
           second: isHex(parsed.second ?? "") ? parsed.second! : DEFAULT_CUSTOM.second,
           background: isHex(parsed.background ?? "") ? parsed.background! : "",
-        });
+          image: typeof parsed.image === "string" ? parsed.image : "",
+          imageFit:
+            parsed.imageFit === "contain" || parsed.imageFit === "tile"
+              ? parsed.imageFit
+              : "cover",
+          imageDim:
+            typeof parsed.imageDim === "number" ? parsed.imageDim : DEFAULT_CUSTOM.imageDim,
+        };
+        setCustomState(restored);
+        // The pre-paint script already stamped these; re-applying keeps React
+        // and the DOM agreeing after a palette change later in the session.
+        applyCustom(restored, storedPalette === "custom");
       }
     } catch {
       // Private mode, or storage disabled. The defaults are a fine answer.
@@ -292,14 +309,34 @@ export const isHex = (value: string): boolean => /^#[0-9a-fA-F]{6}$/.test(value.
 export interface CustomTheme {
   accent: string;
   second: string;
-  /** The app's ground. Empty means the palette's own. */
+  /** The app's ground colour. Empty means the palette's own. */
   background: string;
+  /** A picture behind the app: an http(s) URL, or a data URL from a file. */
+  image: string;
+  imageFit: ImageFit;
+  /**
+   * How much of the ground colour is washed over the image, 0–95.
+   *
+   * Not decoration. Panels are near-solid but the rail and the tab strip are
+   * not, and a photograph directly behind them turns text into noise. The
+   * default is heavy for that reason — it can be taken down, but it starts
+   * somewhere legible.
+   */
+  imageDim: number;
 }
+
+export type ImageFit = "cover" | "contain" | "tile";
+
+/** Bigger than this and localStorage refuses the write, silently. */
+export const MAX_IMAGE_BYTES = 2_000_000;
 
 export const DEFAULT_CUSTOM: CustomTheme = {
   accent: "#7c6cff",
   second: "#ff9f43",
   background: "",
+  image: "",
+  imageFit: "cover",
+  imageDim: 72,
 };
 
 /** Applied as inline variables, which beat the stylesheet's palette blocks. */
@@ -324,5 +361,24 @@ export function applyCustom(custom: CustomTheme, active: boolean): void {
   } else {
     root.style.removeProperty("--app");
     root.style.removeProperty("--bezel");
+  }
+
+  if (custom.image) {
+    const dim = Math.min(95, Math.max(0, custom.imageDim));
+    const wash = `color-mix(in srgb, var(--app) ${dim}%, transparent)`;
+    root.style.setProperty("--app-image", `url("${custom.image.replace(/"/g, '\\"')}")`);
+    root.style.setProperty("--app-scrim", `linear-gradient(${wash}, ${wash})`);
+    root.style.setProperty(
+      "--app-image-size",
+      custom.imageFit === "tile" ? "auto" : custom.imageFit,
+    );
+    root.style.setProperty(
+      "--app-image-repeat",
+      custom.imageFit === "tile" ? "repeat" : "no-repeat",
+    );
+  } else {
+    for (const name of ["--app-image", "--app-scrim", "--app-image-size", "--app-image-repeat"]) {
+      root.style.removeProperty(name);
+    }
   }
 }

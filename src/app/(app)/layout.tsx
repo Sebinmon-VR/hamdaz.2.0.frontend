@@ -138,7 +138,7 @@ function Shell({ children }: { children: React.ReactNode }) {
  */
 function Frame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative isolate flex h-dvh gap-3.5 overflow-hidden bg-app p-3 text-ink sm:p-4">
+    <div className="app-ground relative isolate flex h-dvh gap-3.5 overflow-hidden bg-app p-3 text-ink sm:p-4">
       <Doodles />
       {/* Above everything, including the modal layer: the one thing that must
           stay visible while a screen is being replaced is the fact that it is
