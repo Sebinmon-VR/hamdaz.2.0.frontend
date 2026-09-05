@@ -12,11 +12,15 @@
  */
 
 import {
+  Briefcase,
   Building2,
   CalendarDays,
   CalendarRange,
+  ClipboardList,
   FilePen,
+  FolderLock,
   GaugeCircle,
+  IdCard,
   KeyRound,
   LayoutList,
   ListChecks,
@@ -24,13 +28,16 @@ import {
   Scale,
   Settings,
   Sliders,
+  Star,
   Tag,
   Trophy,
   UserCheck,
+  UserSearch,
   ShieldCheck,
   Users,
   type LucideIcon,
 } from "lucide-react";
+import { isHrViewer } from "@/lib/hr";
 import type { Session } from "@/lib/session";
 
 export interface NavItem {
@@ -138,7 +145,64 @@ export function buildNav(session: Session): Nav {
       });
     }
   }
+  // The two HR pages that are not HR's. Both endpoints behind them take a
+  // bare session and narrow themselves to the caller's own rows, so everybody
+  // gets them — and everybody needs them, since being nominated to write a
+  // review is the one HR task that lands on an ordinary colleague.
+  if (can("hr", "my_reviews")) {
+    people.push({
+      label: "Reviews to write",
+      href: "/hr/my-reviews",
+      icon: Star,
+      match: "/hr/my-reviews",
+    });
+  }
+  if (can("hr", "my_record")) {
+    people.push({ label: "My HR record", href: "/hr/me", icon: IdCard, match: "/hr/me" });
+  }
   if (people.length) more.push({ label: "People", items: people });
+
+  // HR proper: the personnel files, gated on membership of the HR team rather
+  // than on a module grant, because that is what the backend checks. Kept as
+  // its own group instead of folded into "People" — an offer letter and a
+  // colleague's phone number do not belong under one heading, and the group
+  // simply not existing is the clearest way to say the whole area is closed.
+  //
+  // `isHrViewer` rather than the bare `isHr` used above for leave: the HR
+  // module also admits the super admin and the CEO, and a super admin who
+  // could open every one of these screens but could not see them in the menu
+  // would be a puzzle rather than a safeguard.
+  if (isHrViewer(session)) {
+    more.push({
+      label: "HR",
+      items: [
+        { label: "Job openings", href: "/hr/openings", icon: Briefcase, match: "/hr/openings", badge: "hr" },
+        {
+          label: "Applications",
+          href: "/hr/applications",
+          icon: UserSearch,
+          match: "/hr/applications",
+          badge: "hr",
+        },
+        {
+          label: "Staff documents",
+          href: "/hr/people",
+          icon: FolderLock,
+          match: "/hr/people",
+          badge: "hr",
+        },
+        {
+          label: "Review cycles",
+          href: "/hr/reviews",
+          icon: ClipboardList,
+          // Not a prefix on "/hr" — that would swallow "Reviews to write" and
+          // "My HR record", which are not this entry and are not HR-only.
+          match: "/hr/reviews",
+          badge: "hr",
+        },
+      ],
+    });
+  }
 
   // Admin modules are never granted to a team — reaching them depends on a
   // global admin role, and the endpoints enforce that themselves. Hiding them
@@ -230,6 +294,12 @@ const STATIC_LABELS: Record<string, string> = {
   "/assignment/labels": "Labels",
   "/assignment/policy": "Assignment policy",
   "/assignment/user-analytics": "User analytics",
+  "/hr/openings": "Job openings",
+  "/hr/applications": "Applications",
+  "/hr/people": "Staff documents",
+  "/hr/reviews": "Review cycles",
+  "/hr/my-reviews": "Reviews to write",
+  "/hr/me": "My HR record",
 };
 
 export function labelFor(pathname: string): string {
@@ -250,6 +320,15 @@ export function labelFor(pathname: string): string {
   if (parts[0] === "directory") return `Person ${short(parts[1])}`;
   if (parts[0] === "admin" && parts[1] === "users") return `User ${short(parts[2])}`;
   if (parts[0] === "assignment" && parts[1] === "runs") return `Run ${short(parts[2])}`;
+  // HR's four detail routes. Named by what the id points at rather than by the
+  // section, because two open tabs of the same section are the normal case
+  // here — comparing candidates is the whole job.
+  if (parts[0] === "hr" && parts.length >= 3) {
+    if (parts[1] === "openings") return `Opening ${short(parts[2])}`;
+    if (parts[1] === "applications") return `Candidate ${short(parts[2])}`;
+    if (parts[1] === "people") return `Person ${short(parts[2])}`;
+    if (parts[1] === "reviews") return `Cycle ${short(parts[2])}`;
+  }
 
   const last = parts[parts.length - 1];
   return last.charAt(0).toUpperCase() + last.slice(1).replace(/-/g, " ");

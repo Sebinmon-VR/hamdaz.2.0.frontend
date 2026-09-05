@@ -56,6 +56,18 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
   const leads = data.members.filter((m) => m.role_keys.includes("team_lead"));
   const isAdmin = session.roles.is_admin;
 
+  // Who may open this team's proposal work, mirroring what
+  // /proposals/team-tasks itself enforces: an administrator, or this team's
+  // own lead or manager. Gating it on `can("proposals", "team_tasks")` instead
+  // asked the wrong question — that is whether the *viewer's* team holds the
+  // proposals module, which is neither necessary nor sufficient here. It hid
+  // the link from the lead the page was built for and offered it to members
+  // who get a 403.
+  const heldHere =
+    session.teams.find((t) => t.team.slug === slug)?.role_keys ?? [];
+  const oversees =
+    isAdmin || heldHere.includes("team_lead") || heldHere.includes("team_manager");
+
   return (
     <div className="space-y-4">
       <PageHead
@@ -69,7 +81,7 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
                 Dashboard
               </LinkButton>
             )}
-            {session.can("proposals", "team_tasks") && (
+            {oversees && (
               <LinkButton href={`/teams/${slug}/proposals`} icon={ListChecks}>
                 Proposals
               </LinkButton>

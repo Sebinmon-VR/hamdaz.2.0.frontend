@@ -43,7 +43,7 @@ src/
     (app)/
       layout.tsx          the shell — frame, doodles, top bar, tabs, session
       dashboard/          overview
-      teams/              list, detail, members, team dashboard, team proposals
+      teams/              list, detail, members, team dashboard, team proposal work
       directory/          Entra, list and person
       leave/              mine, request, calendar, HR queue, rules
       proposals/my-tasks/ SharePoint tasks assigned to the viewer
@@ -198,7 +198,7 @@ name and disagree on what goes in it:
 | Endpoint | `team` is |
 | --- | --- |
 | `/assignment/preview`, `/labels…` | the team's **UUID** |
-| `/analytics/…`, `/proposals/workload` | the team's **slug** |
+| `/analytics/…`, `/proposals/workload`, `/proposals/team-tasks` | the team's **slug** |
 
 Sending the wrong one fails as a 422 about an "invalid character" — nothing in
 that message names the real problem. `withQuery` in [api.ts](src/lib/api.ts)
@@ -231,6 +231,23 @@ So `ALWAYS_OPEN` in [session.tsx](src/lib/session.tsx) lists **leave, quotes
 and assignment**, and the nav shows them regardless of grant. Hiding the
 assignment screens behind one would have directly defeated the reason their
 router gives for being open.
+
+**Team proposal work is the exception to both.** `/teams/[slug]/proposals` shows
+every member's individual tasks, and `/proposals/team-tasks` behind it is gated
+on neither a module grant nor the global admin role. It asks a third question:
+does the caller have authority over *this* team — an administrator, or that
+team's own `team_lead` or `team_manager`. A lead is refused on every other team,
+which is what makes the team-scoped roles worth holding.
+
+So the link to that page is gated the same way, from `session.teams`, and not on
+`can("proposals", "team_tasks")` as it used to be. That asked whether the
+*viewer's* team holds the proposals module, which is neither necessary nor
+sufficient: it hid the page from the lead it was built for and offered it to
+ordinary members, who got a 403.
+
+The page also no longer reads `/proposals/workload`. That endpoint is
+`AdminUser`-only, so the one screen named after a lead's team was the one screen
+they could not open.
 
 Writes are a separate question and stay gated: label edits need a super admin,
 the CEO or a manager; policy edits follow the reach rule; the HR queue checks

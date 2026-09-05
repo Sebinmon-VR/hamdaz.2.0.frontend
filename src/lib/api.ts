@@ -11,6 +11,8 @@
  * `unauthorised` one into a bounce to /login.
  */
 
+import { mutate } from "swr";
+
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const PREFIX = process.env.NEXT_PUBLIC_API_PREFIX ?? "/api/v1";
 
@@ -46,10 +48,11 @@ type Query = Record<string, string | number | boolean | undefined | null>;
  * `team` is not one convention across this API. Four modules take a parameter
  * of that name and they do not agree on what goes in it:
  *
- *   /assignment/preview   uuid    (the team's id)
- *   /labels…              uuid
- *   /analytics/…          slug    (the team's handle)
- *   /proposals/workload   slug
+ *   /assignment/preview     uuid    (the team's id)
+ *   /labels…                uuid
+ *   /analytics/…            slug    (the team's handle)
+ *   /proposals/workload     slug
+ *   /proposals/team-tasks   slug
  *
  * Sending the wrong one fails as a 422 about an "invalid character" rather
  * than as anything that names the real problem, so the check below turns it
@@ -59,7 +62,7 @@ type Query = Record<string, string | number | boolean | undefined | null>;
  */
 const TEAM_PARAM: { uuid: RegExp; slug: RegExp } = {
   uuid: /^\/(assignment\/preview|labels)/,
-  slug: /^\/(analytics|proposals\/workload)/,
+  slug: /^\/(analytics|proposals\/(workload|team-tasks))/,
 };
 
 const LOOKS_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -96,6 +99,43 @@ export function apiUrl(path: string, query?: Query): string {
   return `${API_ROOT}${withQuery(path, query)}`;
 }
 
+/**
+ * Modules whose cached reads are dropped after a write to the same module.
+ *
+ * The shell sets a 60-second `dedupingInterval` and turns revalidation on
+ * focus off, both deliberately: the expensive screens sweep SharePoint and
+ * Entra, and re-running those because somebody alt-tabbed is waste. The
+ * side effect is that SWR also skips revalidate-on-mount inside that window,
+ * so navigating back to a list after changing something showed the answer
+ * from before the change — nominate six reviewers, return to the cycle, and
+ * it still reads none.
+ *
+ * A screen refreshing its *own* key already handles itself. What it cannot do
+ * is know which other screens it invalidated: nominating changes the cycle,
+ * the cycles list and each reviewer's own queue; posting an opening changes
+ * the opening and the list. Enumerating that at fourteen call sites is how one
+ * gets missed, so a write invalidates its module instead.
+ *
+ * **Only HR is listed**, on purpose. The same staleness exists elsewhere, but
+ * widening this would start re-sweeping SharePoint and Zoho on every write in
+ * those modules — a real cost, and a change nobody has asked for. Add a prefix
+ * here when a module wants the same behaviour.
+ */
+const REVALIDATE_AFTER_WRITE = ["/hr"];
+
+/** Revalidate — never clear. Screens keep the last answer while the next loads. */
+function invalidateModule(path: string): void {
+  const prefix = REVALIDATE_AFTER_WRITE.find(
+    (p) => path === p || path.startsWith(`${p}/`),
+  );
+  if (!prefix) return;
+  void mutate(
+    (key) =>
+      typeof key === "string" &&
+      (key === prefix || key.startsWith(`${prefix}/`) || key.startsWith(`${prefix}?`)),
+  );
+}
+
 interface RequestOptions {
   method?: string;
   /** Sent as JSON. Use `form` for multipart instead. */
@@ -128,7 +168,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     throw new ApiError(0, "Could not reach the Hamdaz API.", cause);
   }
 
-  if (response.status === 204) return undefined as T;
+  if (response.status === 204) {
+    if (method !== "GET") invalidateModule(path);
+    return undefined as T;
+  }
 
   const isJson = response.headers.get("content-type")?.includes("application/json");
   const payload = isJson ? await response.json().catch(() => null) : await response.text();
@@ -136,6 +179,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (!response.ok) {
     throw new ApiError(response.status, detailOf(payload) ?? response.statusText, payload);
   }
+  // Only once it has actually succeeded: a refused write changed nothing, and
+  // re-fetching after one would just cost a round trip to prove it.
+  if (method !== "GET") invalidateModule(path);
   return payload as T;
 }
 

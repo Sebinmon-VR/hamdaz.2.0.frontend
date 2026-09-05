@@ -484,6 +484,68 @@ export function activeOf(person: PersonWorkloadOut): number {
   return Math.max(0, person.open - person.overdue);
 }
 
+/**
+ * One team member's proposal rows, as their lead sees them.
+ *
+ * The identity here is the ERP user, not the name on the SharePoint row. The
+ * join ran that way round — this team's members were looked up in SharePoint,
+ * rather than rows being attributed to whoever they happen to name — which is
+ * what makes the people in a {@link TeamTasksOut} exactly the team and nobody
+ * else. So `name` and `email` are safe to key on; `task.assigned_to_name` is
+ * still only a display name and still must not be.
+ */
+export interface MemberTasksOut {
+  user_id: string;
+  name: string;
+  email: string;
+  /** Roles held *inside this team*, so a lead reads differently to a member. */
+  role_keys: string[];
+  sharepoint_user_id: string | null;
+  /**
+   * False when they have no presence on the SharePoint site at all. Different
+   * from having nothing assigned, and it needs saying differently: one is
+   * "they are clear", the other is "nothing could ever reach them here".
+   */
+  in_sharepoint: boolean;
+  /** Everything assigned to them, before `open_only`. */
+  total: number;
+  /** Not finished, whatever the deadline — mostly bids that closed long ago. */
+  open_count: number;
+  /**
+   * Not finished **and** the bid is still open. The number to lead with, and
+   * the same quantity {@link activeOf} derives for the workload aggregate.
+   */
+  active_count: number;
+  /** Live rows whose deadline falls inside the `soon_days` horizon. */
+  due_soon_count: number;
+  /** The nearest deadline still ahead of them; past ones are not "next". */
+  next_deadline: string | null;
+  tasks: TaskOut[];
+}
+
+/**
+ * A whole team's proposal work, member by member, with the rows attached.
+ *
+ * The counterpart to {@link WorkloadOut}, and the reason there are two: the
+ * workload aggregate is admin-only and carries counts alone, while this is
+ * open to the team's own lead and carries the rows behind those counts. A
+ * lead being shown a number they cannot open was the gap this closes.
+ */
+export interface TeamTasksOut {
+  scope: ScopeOut;
+  soon_days: number;
+  generated_at: string;
+  member_count: number;
+  /** Summed from `members` server-side, so header and list cannot disagree. */
+  total: number;
+  open_count: number;
+  active_count: number;
+  /** Busiest first, on live work rather than on the archive. Do not re-sort. */
+  members: MemberTasksOut[];
+  cached: boolean;
+  age_seconds: number;
+}
+
 export interface WorkloadOut {
   organisation: PersonWorkloadOut;
   people: PersonWorkloadOut[];
@@ -1528,4 +1590,499 @@ export interface RunSummaryOut {
 
 export interface RunIn {
   notes?: string | null;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * HR — hiring, employee documents and performance reviews
+ *
+ * Appended as its own section rather than woven in: the module landed whole,
+ * and keeping it in one block is what makes it obvious which shapes came from
+ * `app/hr/schemas.py` when the backend changes them.
+ * ════════════════════════════════════════════════════════════════════ */
+
+// ── HR: the enumerations ───────────────────────────────────────────────
+//
+// Every one of these is a StrEnum on the backend and arrives as its value, so
+// they are unions of literals rather than `string`. `/hr/meta` returns the same
+// lists at runtime; the unions are what make a typo a compile error, and the
+// meta call is what a picker should actually iterate so a value added on the
+// backend appears in the UI without a deploy here.
+//
+// Names carry an `Hr` prefix throughout. Not the house convention of mirroring
+// the backend class name, but `DocumentOut` and `ReviewAction` were already
+// taken by the Zoho and proposals sections of this file, and two different
+// `DocumentOut`s is a worse problem than a prefix.
+
+export type HrOpeningStatus = "draft" | "open" | "closed" | "filled";
+
+export type HrEmploymentType =
+  | "full_time"
+  | "part_time"
+  | "contract"
+  | "internship"
+  | "temporary";
+
+export type HrApplicationStage =
+  | "new"
+  | "shortlisted"
+  | "interviewed"
+  | "offered"
+  | "hired"
+  | "rejected"
+  /** They pulled out. Kept apart from rejected — it matters if they reapply. */
+  | "withdrawn";
+
+export type HrDocumentKind =
+  | "offer_letter"
+  | "contract"
+  | "amendment"
+  | "id_document"
+  | "visa"
+  | "certificate"
+  | "payslip"
+  | "appraisal"
+  | "warning"
+  | "resignation"
+  | "other";
+
+export type HrCycleStatus = "draft" | "open" | "closed";
+
+export type HrReviewStatus = "pending" | "draft" | "submitted" | "declined";
+
+/** How the reviewer knows the subject. Context only — never a permission. */
+export type HrReviewerRelation = "self" | "manager" | "peer" | "report" | "hr" | "other";
+
+// ── HR: scoring ────────────────────────────────────────────────────────
+
+/**
+ * One tag's slice of a score, as `app.forms.scoring.TagScore.as_dict` writes it.
+ *
+ * Tags are the point of the whole scoring apparatus: one percentage says
+ * somebody scored 71%, the tags say they are strong technically and weak on
+ * delivery. A field feeds every tag it lists at full weight, so the tag
+ * maximums deliberately do not add up to the overall maximum — totalling them
+ * would double-count every question that carries two tags.
+ */
+export interface HrTagScore {
+  tag: string;
+  points: number;
+  max: number;
+  /** Scorable fields carrying this tag that were actually answered. */
+  answered: number;
+  /** Null when nothing scorable was answered — not zero, which reads as "bad". */
+  percent: number | null;
+}
+
+/** `app.forms.scoring.Score.as_dict`. All zeros when the form scores nothing. */
+export interface HrScore {
+  points: number;
+  max: number;
+  percent: number | null;
+  answered: number;
+  /** Scorable fields left blank. A near-empty review should look near-empty. */
+  skipped: number;
+  tags: HrTagScore[];
+}
+
+/** What `/hr/meta` says about one of the two forms the module depends on. */
+/** One template HR may choose between, as `/hr/meta` lists it. */
+export interface HrMetaForm {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  version: number;
+  field_count: number;
+  /** Every scoring tag the template mentions, in template order. */
+  tags: string[];
+  is_default: boolean;
+}
+
+/**
+ * Every active template of one kind, and which of them is the fallback.
+ *
+ * There is deliberately no single "the form". A super admin can ship a short
+ * application beside a technical one, and collapsing them to one would hide
+ * the variants they went to the trouble of writing — so HR chooses, per
+ * opening and per review cycle.
+ *
+ * `default_id` is what the backend uses when a request names no template. It
+ * is **not** "the newest": the convention is the template whose key equals its
+ * kind, which makes the fallback a decision rather than whichever happened to
+ * be saved last and changed under HR without anybody choosing.
+ */
+export interface HrMetaForms {
+  default_id: string | null;
+  templates: HrMetaForm[];
+}
+
+/**
+ * `GET /hr/meta` — any signed-in user.
+ *
+ * A form list being **empty** is the case worth surfacing loudly: without a
+ * job application form there is nothing to post an opening against, and
+ * finding that out at the moment somebody clicks "post" is finding out too
+ * late.
+ */
+export interface HrMetaOut {
+  document_kinds: HrDocumentKind[];
+  employment_types: HrEmploymentType[];
+  application_stages: HrApplicationStage[];
+  opening_statuses: HrOpeningStatus[];
+  reviewer_relations: HrReviewerRelation[];
+  /** The advert HR fills in. Empty until a super admin ships a posting form. */
+  posting_forms: HrMetaForms;
+  /** What a candidate fills in on an opening's share link. */
+  application_forms: HrMetaForms;
+  /** What a nominated reviewer fills in for a cycle. */
+  review_forms: HrMetaForms;
+}
+
+/**
+ * What a deletion destroyed.
+ *
+ * The HR deletes answer with this rather than a bare 204, because the blast
+ * radius is not obvious from the thing you clicked: removing one opening takes
+ * every application to it and every CV with it. `summary` is the backend's own
+ * sentence — show that rather than assembling one here, so the confirmation a
+ * super admin reads is the server's account of what it actually did.
+ */
+export interface HrRemovedOut {
+  openings: number;
+  applications: number;
+  files: number;
+  documents: number;
+  cycles: number;
+  reviews: number;
+  summary: string;
+}
+
+// ── HR: job openings ───────────────────────────────────────────────────
+
+/** A row of `GET /hr/openings`. Deliberately lighter than `HrOpeningOut`. */
+export interface HrOpeningSummaryOut {
+  id: string;
+  title: string;
+  slug: string;
+  status: HrOpeningStatus;
+  department: string | null;
+  location: string | null;
+  employment_type: HrEmploymentType;
+  publicly_listed: boolean;
+  posted_at: string | null;
+  closes_on: string | null;
+  application_count: number;
+  new_application_count: number;
+}
+
+export interface HrOpeningOut {
+  id: string;
+  title: string;
+  /** The internal handle. Explicitly *not* the public link — see `share_url`. */
+  slug: string;
+  reference: string | null;
+  team_id: string | null;
+  team_name: string | null;
+  department: string | null;
+  location: string | null;
+  employment_type: HrEmploymentType;
+  headcount: number;
+  salary_range: string | null;
+  summary: string | null;
+  description: string | null;
+  requirements: string | null;
+
+  /** The application form candidates fill in. Always set. */
+  template_id: string;
+  template_name: string | null;
+  template_version: number;
+
+  /**
+   * The advert itself, as a form rather than as columns.
+   *
+   * A posting template is assigned automatically when one is active, so this
+   * is normally set even though HR never named it. That matters at posting
+   * time: `POST /openings/{ref}/post` validates `details` against this
+   * template with required fields enforced, so an opening whose posting form
+   * is half-filled is a draft that cannot go out. It is the one place the
+   * module fails late rather than early, which is why the create and edit
+   * screens render these fields rather than trusting the columns above.
+   */
+  posting_template_id: string | null;
+  posting_template_name: string | null;
+  posting_template_version: number;
+  /** Answers to the posting form, keyed by field. */
+  details: Record<string, unknown>;
+  /** The posting form's own shape, so the screen renders it without a second call. */
+  posting_fields: TemplateFieldOut[];
+  posting_sections: TemplateSectionOut[];
+
+  status: HrOpeningStatus;
+  /** Whether it appears on the organisation's public careers list at all. */
+  publicly_listed: boolean;
+  /** Whether the backend serves a ready-made application page for the link. */
+  hosted_form: boolean;
+  /** Computed on the row: posted, not closed, and not past `closes_on`. */
+  accepts_applications: boolean;
+  posted_at: string | null;
+  closes_on: string | null;
+  closed_at: string | null;
+  created_by_name: string | null;
+  created_at: string;
+
+  /**
+   * The link HR copies for candidates, built around an unguessable token.
+   * Null while the opening is a draft — a link to a draft goes nowhere, so
+   * there is nothing to show, and showing one invites it being sent anyway.
+   */
+  share_url: string | null;
+  /** The same token as JSON, for an organisation with its own careers site. */
+  share_api_url: string | null;
+
+  application_count: number;
+  /** Applications still at stage `new`. The "nobody has looked yet" count. */
+  new_application_count: number;
+}
+
+/** `POST /hr/openings`. Everything but the title has a backend default. */
+export interface HrOpeningIn {
+  title: string;
+  /** The application form. Unset uses `application_forms.default_id`. */
+  template_id?: string | null;
+  /** The advert's own form. Unset uses `posting_forms.default_id`. */
+  posting_template_id?: string | null;
+  /**
+   * Answers to the posting form. Required fields are enforced when the opening
+   * is **posted**, not while it is a draft — so this may be partial here and
+   * still has to be complete before the advert can go out.
+   */
+  details?: Record<string, unknown> | null;
+  reference?: string | null;
+  team_id?: string | null;
+  department?: string | null;
+  location?: string | null;
+  employment_type?: HrEmploymentType;
+  headcount?: number;
+  salary_range?: string | null;
+  summary?: string | null;
+  description?: string | null;
+  requirements?: string | null;
+  closes_on?: string | null;
+  publicly_listed?: boolean;
+  hosted_form?: boolean;
+}
+
+/** `PATCH /hr/openings/{ref}`. Anything left out is untouched. */
+export type HrOpeningUpdateIn = Partial<HrOpeningIn>;
+
+// ── HR: applications ───────────────────────────────────────────────────
+
+export interface HrAttachmentOut {
+  id: string;
+  /** Which form field the candidate attached it to. Null for a stray file. */
+  field_key: string | null;
+  file_name: string;
+  content_type: string | null;
+  size_bytes: number;
+}
+
+export interface HrApplicationOut {
+  id: string;
+  opening_id: string;
+  opening_title: string | null;
+  candidate_name: string;
+  candidate_email: string;
+  candidate_phone: string | null;
+  /** Keyed by template field key. `template_version` says which keys those are. */
+  answers: Record<string, unknown>;
+  /** The template version the candidate actually filled in, frozen on submit. */
+  template_version: number;
+  /** Frozen at submission too, so editing the template cannot rewrite a score. */
+  score: HrScore;
+  /**
+   * A decimal *string*, not a number — it is a Pydantic `Decimal` on the wire.
+   * `score.percent` is the same figure as a float, and is the one to compare
+   * against; this one is for display.
+   */
+  score_percent: string | null;
+  stage: HrApplicationStage;
+  stage_note: string | null;
+  /** HR's own notes. The candidate has no route back, so nobody else sees them. */
+  internal_notes: string | null;
+  submitted_at: string;
+  /** Set by *any* stage move, not only by a hire or a rejection. */
+  decided_at: string | null;
+  decided_by_name: string | null;
+  /** The employee record they became, once hired and once they have signed in. */
+  hired_user_id: string | null;
+  attachments: HrAttachmentOut[];
+}
+
+export interface HrStageIn {
+  stage: HrApplicationStage;
+  note?: string | null;
+}
+
+export interface HrHireIn {
+  /** A local Hamdaz user id. One exists only after a first Microsoft sign-in. */
+  user_id: string;
+  close_opening?: boolean;
+}
+
+// ── HR: employee documents ─────────────────────────────────────────────
+
+export interface HrDocumentOut {
+  id: string;
+  user_id: string;
+  user_name: string | null;
+  /** A label, not a schema — every kind is stored identically. */
+  kind: HrDocumentKind;
+  title: string;
+  note: string | null;
+  file_name: string;
+  content_type: string | null;
+  size_bytes: number;
+  issued_on: string | null;
+  expires_on: string | null;
+  /** Computed per request, not stored — a stored flag would go stale nightly. */
+  expired: boolean;
+  /**
+   * Whether the person it is about may read it. False is the interesting case:
+   * they cannot learn the document exists at all, and asking for it by id gets
+   * a 404 rather than a 403.
+   */
+  visible_to_employee: boolean;
+  uploaded_by_name: string | null;
+  created_at: string;
+}
+
+export interface HrDocumentUpdateIn {
+  kind?: HrDocumentKind;
+  title?: string;
+  note?: string | null;
+  issued_on?: string | null;
+  expires_on?: string | null;
+  visible_to_employee?: boolean;
+}
+
+// ── HR: review cycles ──────────────────────────────────────────────────
+
+export interface HrCycleIn {
+  name: string;
+  /** Unset uses the newest active performance-review template. */
+  template_id?: string | null;
+  description?: string | null;
+  period_start?: string | null;
+  period_end?: string | null;
+  due_on?: string | null;
+  shared_with_subjects?: boolean;
+}
+
+export interface HrCycleOut {
+  id: string;
+  name: string;
+  description: string | null;
+  template_id: string;
+  template_name: string | null;
+  template_version: number;
+  period_start: string | null;
+  period_end: string | null;
+  due_on: string | null;
+  status: HrCycleStatus;
+  /**
+   * Whether subjects may read submitted reviews of themselves. Half of the
+   * rule only — a review must also be submitted, so turning this on cannot
+   * expose a reviewer's work in progress.
+   */
+  shared_with_subjects: boolean;
+  opened_at: string | null;
+  closed_at: string | null;
+  created_by_name: string | null;
+  created_at: string;
+
+  /** Reviews created in this cycle — nominations, so people are counted twice. */
+  nominated: number;
+  submitted: number;
+  /** Distinct people being reviewed. Always ≤ `nominated`. */
+  subjects: number;
+}
+
+export interface HrNominateIn {
+  subject_id: string;
+  reviewer_id: string;
+  /** Forced to `self` by the backend when the two ids match. */
+  relation?: HrReviewerRelation;
+  due_on?: string | null;
+}
+
+export interface HrBulkNominateIn {
+  /** All or nothing: one bad nomination fails the whole request. */
+  nominations: HrNominateIn[];
+}
+
+export interface HrReviewOut {
+  id: string;
+  cycle_id: string;
+  cycle_name: string | null;
+  subject_id: string;
+  subject_name: string | null;
+  reviewer_id: string;
+  reviewer_name: string | null;
+  relation: HrReviewerRelation;
+  status: HrReviewStatus;
+  /**
+   * Null when the caller may not read the content — a different question from
+   * whether the review exists. A subject can always see that they are being
+   * reviewed and by whom; `answers`, `score`, `score_percent`, `comment` and
+   * `declined_reason` all arrive null until the cycle is shared *and* the
+   * review is submitted. So null here means "withheld", not "empty".
+   */
+  answers: Record<string, unknown> | null;
+  score: HrScore | null;
+  /** A decimal string, not a number. Null when withheld or unscored alike. */
+  score_percent: string | null;
+  comment: string | null;
+  declined_reason: string | null;
+  due_on: string | null;
+  submitted_at: string | null;
+  /**
+   * The questions. Sent only by `GET /hr/reviews/{id}`, and only to the
+   * nominated reviewer or to HR — every list endpoint leaves both null, so a
+   * screen that wants to render the form has to fetch the single review.
+   */
+  fields: TemplateFieldOut[] | null;
+  sections: TemplateSectionOut[] | null;
+}
+
+export interface HrReviewAnswersIn {
+  answers: Record<string, unknown>;
+  comment?: string | null;
+  /** False saves a draft; true submits and freezes the score for good. */
+  submit?: boolean;
+}
+
+/**
+ * Somebody's combined score across every *submitted* review of them.
+ *
+ * Combined by points and maximums rather than by averaging percentages, so a
+ * reviewer who answered two questions does not get the same say as one who
+ * answered twenty. Not gated on the cycle being shared: a person is entitled
+ * to the aggregate about themselves, which is a different thing from reading
+ * an individual colleague's words.
+ */
+export interface HrPerformanceOut {
+  user_id: string;
+  user_name: string | null;
+  reviews: number;
+  /** How many of those reviews the person wrote about themselves. */
+  self_reviews: number;
+  /** Cycle ids as strings, sorted. Not names — the endpoint resolves none. */
+  cycles: string[];
+  points: number;
+  max: number;
+  /** Null when nothing scorable was answered anywhere. */
+  percent: number | null;
+  answered: number;
+  skipped: number;
+  tags: HrTagScore[];
 }

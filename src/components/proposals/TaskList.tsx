@@ -27,9 +27,9 @@ type Filter = "all" | "live" | "due_soon" | "overdue" | "closed" | "done";
  *   due     not finished, still open, deadline within `soonDays`
  *   live    not finished, still open, nothing pressing
  */
-type Kind = "done" | "closed" | "overdue" | "due" | "live";
+export type Kind = "done" | "closed" | "overdue" | "due" | "live";
 
-function classify(task: TaskOut, days: number | null, soonDays: number): Kind {
+export function classify(task: TaskOut, days: number | null, soonDays: number): Kind {
   if (!task.is_open) return "done";
   if (task.bid_closing_date) {
     const closed =
@@ -231,14 +231,39 @@ export function TaskList({ tasks, soonDays = 7 }: { tasks: TaskOut[]; soonDays?:
   );
 }
 
-function TaskDetail({ task, onClose }: { task: TaskOut | null; onClose: () => void }) {
+/**
+ * Exported because the team board opens the same rows, and a task has to read
+ * identically whoever is looking at it. A lead comparing what they see against
+ * what the person carrying it sees, and finding two different sets of fields,
+ * would have no way to know which one SharePoint actually holds.
+ */
+export function TaskDetail({
+  task,
+  onClose,
+  /**
+   * Whether to offer the way into quoting. False on the team board: the
+   * picker raises a quote for whoever is signed in, so offering it on a
+   * colleague's row would invite a lead to start a quote against a bid
+   * somebody else is carrying, under their own name. Reading somebody's work
+   * is what this screen is for; taking it over is not.
+   */
+  quotable = true,
+}: {
+  task: TaskOut | null;
+  onClose: () => void;
+  quotable?: boolean;
+}) {
   return (
     <Modal
       open={Boolean(task)}
       onClose={onClose}
       width="lg"
       title={task ? truncate(task.title, 80) : "Task"}
-      description="The enquiry as SharePoint holds it. Editing happens there; pricing it happens here."
+      description={
+        quotable
+          ? "The enquiry as SharePoint holds it. Editing happens there; pricing it happens here."
+          : "The enquiry as SharePoint holds it. Read-only — editing happens there."
+      }
       footer={
         <>
           {task?.web_url && (
@@ -255,7 +280,7 @@ function TaskDetail({ task, onClose }: { task: TaskOut | null; onClose: () => vo
           {/* Goes to the quoting picker rather than raising from here, so the
               existing quote against this enquiry — if there is one — is seen
               before a second gets made. */}
-          {task?.is_open && (
+          {quotable && task?.is_open && (
             <LinkButton href="/quote-requests/new" variant="accent" icon={FileText}>
               Quote this enquiry
             </LinkButton>
@@ -263,7 +288,23 @@ function TaskDetail({ task, onClose }: { task: TaskOut | null; onClose: () => vo
         </>
       }
     >
-      {task && (
+      {task && <TaskFacts task={task} />}
+    </Modal>
+  );
+}
+
+
+/**
+ * One task's fields, laid out the same wherever they are read.
+ *
+ * Split out of the modal so the team board's split view can show them in a
+ * pane rather than over the top of the list. Sharing the component rather than
+ * writing a second layout is the point: a lead comparing what they see against
+ * what the person carrying the work sees, and finding two different sets of
+ * fields, has no way to know which one SharePoint actually holds.
+ */
+export function TaskFacts({ task }: { task: TaskOut }) {
+  return (
         <div className="space-y-5 pb-4">
           <dl className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3">
             <Meta label="Status">{task.status ?? "—"}</Meta>
@@ -306,7 +347,5 @@ function TaskDetail({ task, onClose }: { task: TaskOut | null; onClose: () => vo
             {humanise(task.is_open ? "open" : "closed")}
           </p>
         </div>
-      )}
-    </Modal>
   );
 }

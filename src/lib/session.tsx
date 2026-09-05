@@ -50,8 +50,19 @@ const SessionContext = createContext<Session | null>(null);
  * exactly. Writing is still gated — by role and team membership, checked by
  * the backend, with `may_edit` coming back per policy so the UI reports the
  * real answer rather than guessing.
+ *
+ * HR is the awkward one and is only half here. Its catalogue entry says in so
+ * many words that being listed is for navigation and that "who may actually
+ * use it is membership of the HR team", so a grant is not what opens it and
+ * `hr` belongs in this list. But most of its router depends on `HRUser`, not
+ * `CurrentUser`, so only the two genuinely personal pages are listed in
+ * OPEN_PAGES below — `my_reviews` and `my_record`, whose endpoints narrow
+ * themselves to the caller's own rows. Everything else in HR is gated on
+ * `isHr` at the call site, exactly as the leave queue already is, because a
+ * module grant does not make anybody HR and offering a colleague a link to
+ * the personnel files would only ever produce a 403.
  */
-const ALWAYS_OPEN = ["leave", "quotes", "assignment"] as const;
+const ALWAYS_OPEN = ["leave", "quotes", "assignment", "hr"] as const;
 
 export function useSession(): Session {
   const session = useContext(SessionContext);
@@ -139,6 +150,10 @@ const OPEN_PAGES: Record<(typeof ALWAYS_OPEN)[number], string[]> = {
   leave: ["mine", "request", "calendar", "queue", "rules"],
   quotes: ["list", "detail"],
   assignment: ["labels", "policy", "preview"],
+  // Only the two pages whose endpoints take a bare `CurrentUser`. The other
+  // eight HR pages are `HRUser` on the backend and are gated on `isHr`, so
+  // listing them here would hand every colleague a guaranteed 403.
+  hr: ["my_reviews", "my_record"],
 };
 
 export function SessionProvider({
