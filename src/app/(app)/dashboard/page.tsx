@@ -8,9 +8,11 @@ import {
   ArrowUpRight,
   CalendarPlus,
   ExternalLink,
+  Flame,
   ListChecks,
   Plane,
   RefreshCw,
+  Star,
   Users,
 } from "lucide-react";
 import { withQuery } from "@/lib/api";
@@ -22,6 +24,8 @@ import type {
   CalendarOut,
   DashboardOut,
   LeaveSummaryOut,
+  HrReviewOut,
+  LeaveRequestOut,
   MyTasksOut,
   TaskOut,
   WorkloadOut,
@@ -42,6 +46,7 @@ import { CircleGroup, LinkButton } from "@/components/ui/controls";
 import { Empty, ErrorState, PanelSkeleton } from "@/components/ui/feedback";
 import { NoWidgets, Widget, WidgetGrid } from "@/components/widgets";
 import { OrgWorkload } from "@/components/proposals/OrgWorkload";
+import { Greeting, SessionClock } from "@/components/shell/Clock";
 
 /**
  * Overview.
@@ -97,6 +102,18 @@ export default function DashboardPage() {
     shouldRetryOnError: false,
   });
 
+  // Reviews somebody nominated you to write, and — for HR — the queue that is
+  // their actual job here. Both are Postgres reads, both gated, and both are
+  // things you are late for without knowing unless you go looking.
+  const myReviews = useSWR<HrReviewOut[]>(
+    session.can("hr", "my_reviews") ? "/hr/reviews/mine" : null,
+    { revalidateOnFocus: false },
+  );
+  const leaveQueue = useSWR<LeaveRequestOut[]>(
+    session.isHr ? withQuery("/leave/requests", { status: "pending" }) : null,
+    { revalidateOnFocus: false },
+  );
+
   const firstName = session.user.display_name.split(" ")[0];
   const away = offToday.data?.days?.[today] ?? [];
   // Only the open rows are bucketed — a completed task has no urgency left.
@@ -111,8 +128,20 @@ export default function DashboardPage() {
   return (
     <>
       <PageHead
-        eyebrow={fmtDate(today)}
-        title={`Good morning, ${firstName}`}
+        // Both tick in components of their own. Hanging the interval on this
+        // page would re-render the task list, the leave summary and every
+        // team widget once a second to move one digit.
+        eyebrow={
+          // `flex-wrap` here is what made the whole bar two rows tall: the
+          // header stopped wrapping, but this wrapped inside it and took the
+          // header's height with it. The date drops away first on a narrow
+          // window — the clock beside it already says today.
+          <span className="flex items-center gap-x-2.5 whitespace-nowrap">
+            <span className="hidden 2xl:inline">{fmtDate(today)}</span>
+            <SessionClock since={session.user.last_login_at} />
+          </span>
+        }
+        title={<Greeting name={firstName} />}
         faces={
           away.length > 0 && (
             <span className="lift flex h-10 items-center gap-2.5 rounded-full bg-panel py-1 pl-1 pr-4 text-[12px] text-ink-2">
@@ -146,11 +175,18 @@ export default function DashboardPage() {
                 { icon: Users, label: "Teams", href: "/teams" },
               ]}
             />
-            {session.can("leave") && (
-              <LinkButton href="/leave/request" variant="accent" size="lg" icon={CalendarPlus}>
-                Request leave
-              </LinkButton>
-            )}
+            {/* Whatever is actually most pressing, rather than a fixed
+                "Request leave". Booking time off is a thing people do a few
+                times a year; it was occupying the one slot on the screen that
+                should answer "what needs me now". It is still one click away
+                in the ring to the left and in the Leave section. */}
+            <NextAction
+              overdue={open.overdue}
+              dueSoon={open.today + open.week}
+              reviews={(myReviews.data ?? []).filter((r) => r.status === "pending").length}
+              leaveQueue={leaveQueue.data?.length ?? 0}
+              canLeave={session.can("leave")}
+            />
           </>
         }
       />
@@ -640,4 +676,74 @@ function bucket(tasks: TaskOut[]) {
     .map((row) => row.task);
 
   return { ...out, sorted };
+}
+
+/**
+ * The one thing on this screen that should say "do this next".
+ *
+ * It used to be a fixed *Request leave*. Booking time off is something people
+ * do a handful of times a year, and it sat in the most prominent slot on the
+ * page every single day — while the things that are genuinely late (a bid
+ * closing tomorrow, a review somebody is waiting on, an approval queue with
+ * eleven people in it) had no presence in the header at all.
+ *
+ * Ordered by who is kept waiting. Work already late outranks work about to be;
+ * both outrank a review, because a bid closes whether or not it is ready and a
+ * review does not. The HR queue comes next: it is other people waiting on you,
+ * which is worse than your own backlog, but it is only ever shown to the
+ * handful of people who can act on it.
+ *
+ * The fallback is the old button. When nothing is pressing, offering to book
+ * leave is a perfectly good use of the space — it is being the *default* that
+ * was wrong.
+ */
+function NextAction({
+  overdue,
+  dueSoon,
+  reviews,
+  leaveQueue,
+  canLeave,
+}: {
+  overdue: number;
+  dueSoon: number;
+  reviews: number;
+  leaveQueue: number;
+  canLeave: boolean;
+}) {
+  if (overdue > 0) {
+    return (
+      <LinkButton href="/proposals/my-tasks" variant="second" size="lg" icon={Flame}>
+        {overdue} overdue
+      </LinkButton>
+    );
+  }
+  if (dueSoon > 0) {
+    return (
+      <LinkButton href="/proposals/my-tasks" variant="accent" size="lg" icon={ListChecks}>
+        {dueSoon} due this week
+      </LinkButton>
+    );
+  }
+  if (reviews > 0) {
+    return (
+      <LinkButton href="/hr/my-reviews" variant="accent" size="lg" icon={Star}>
+        {reviews} {reviews === 1 ? "review" : "reviews"} to write
+      </LinkButton>
+    );
+  }
+  if (leaveQueue > 0) {
+    return (
+      <LinkButton href="/leave/requests" variant="accent" size="lg" icon={ListChecks}>
+        {leaveQueue} awaiting you
+      </LinkButton>
+    );
+  }
+  if (canLeave) {
+    return (
+      <LinkButton href="/leave/request" variant="accent" size="lg" icon={CalendarPlus}>
+        Request leave
+      </LinkButton>
+    );
+  }
+  return null;
 }

@@ -372,8 +372,32 @@ export interface TaskOut {
   created_at: string | null;
   modified_at: string | null;
   web_url: string | null;
+  /** Whether the item has files at all — cheap, and present on every row. */
+  has_attachments: boolean;
+  /**
+   * Straight to SharePoint's attachment folder, or null when empty.
+   *
+   * Opening it uses the **viewer's own** SharePoint access rather than the
+   * app's service identity, which is what makes it the honest fallback for
+   * somebody the task is not assigned to: `/proposals/tasks/{id}/attachments`
+   * answers 404 for them by design, but this link still works if SharePoint
+   * itself knows them.
+   */
+  attachments_url: string | null;
   is_open: boolean;
   deadline: string | null;
+}
+
+/**
+ * One file on a proposal task.
+ *
+ * `download_url` is absolute and points at **Hamdaz**, not SharePoint, so the
+ * ERP session authorises the fetch and no SharePoint token is ever handed to a
+ * browser. Use it as-is rather than rebuilding it from the file name.
+ */
+export interface TaskAttachmentOut {
+  file_name: string;
+  download_url: string;
 }
 
 export interface MyTasksOut {
@@ -2085,4 +2109,98 @@ export interface HrPerformanceOut {
   answered: number;
   skipped: number;
   tags: HrTagScore[];
+}
+
+// ── meetings (the caller's own Outlook calendar) ───────────────────────
+
+/**
+ * How somebody answered an invitation.
+ *
+ * `none` and `notResponded` are not the same thing and the calendar means
+ * both: `none` is Graph's answer for the organiser and for events with no
+ * invitation at all, `notResponded` is a person who was asked and has not
+ * said. Rendering them identically loses the only part that needs chasing.
+ */
+export type MeetingResponse =
+  | "none"
+  | "organizer"
+  | "tentativelyAccepted"
+  | "accepted"
+  | "declined"
+  | "notResponded";
+
+export interface AttendeeOut {
+  name: string;
+  email: string | null;
+  /** required | optional | resource */
+  kind: string;
+  response: MeetingResponse;
+  responded_at: string | null;
+  is_organizer: boolean;
+  /** A room or equipment rather than a person — listed apart, never counted. */
+  is_resource: boolean;
+}
+
+/**
+ * One row of the calendar listing.
+ *
+ * Deliberately lighter than {@link MeetingDetailOut}: a week is dozens of
+ * events, and shipping every attendee list and body inside the listing makes a
+ * payload that is mostly text nobody renders.
+ */
+export interface MeetingOut {
+  /**
+   * Graph's event id, and what `GET /meetings/{event_id}` takes.
+   *
+   * For a recurring meeting this identifies **the occurrence**, not the
+   * series — so it is safe as a React key and safe to link to, but it is not
+   * stable across a series being edited.
+   */
+  event_id: string;
+  subject: string;
+  start: string | null;
+  end: string | null;
+  is_all_day: boolean;
+  is_cancelled: boolean;
+  is_organizer: boolean;
+  organizer: AttendeeOut | null;
+  /** People invited, the organiser included, rooms excluded. */
+  attendee_count: number;
+  location: string | null;
+  is_online: boolean;
+  /** Teams (or whichever provider) join link. Null for an in-person meeting. */
+  join_url: string | null;
+  online_provider: string | null;
+  /** The caller's own answer to the invitation. */
+  my_response: MeetingResponse;
+  show_as: string | null;
+  is_recurring: boolean;
+  /** Opens the event in Outlook on the web. */
+  web_link: string | null;
+}
+
+export interface MeetingDetailOut extends MeetingOut {
+  body_preview: string | null;
+  /** Organiser first, then required, optional, and rooms last. Already sorted. */
+  attendees: AttendeeOut[];
+  sensitivity: string | null;
+  importance: string | null;
+  categories: string[];
+  /** Set when this is one occurrence of a recurring series. */
+  series_master_id: string | null;
+  /** singleInstance | occurrence | exception | seriesMaster */
+  occurrence_type: string | null;
+  last_modified_at: string | null;
+}
+
+export interface MeetingPage {
+  /** The window actually read, after defaults — echoed back for a caller that sent none. */
+  window_start: string;
+  window_end: string;
+  /** Matches after filtering, before the window is applied. */
+  total: number;
+  count: number;
+  offset: number;
+  limit: number;
+  meetings: MeetingOut[];
 }

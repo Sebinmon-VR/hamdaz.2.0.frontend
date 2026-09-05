@@ -10,6 +10,7 @@ import { Badge, Panel, Meta } from "@/components/ui/primitives";
 import { LinkButton, PillRail, SearchInput, Select } from "@/components/ui/controls";
 import { Empty, Modal } from "@/components/ui/feedback";
 import { DueChip } from "@/components/widgets";
+import { AttachmentMark, TaskAttachments } from "@/components/proposals/TaskAttachments";
 
 type Filter = "all" | "live" | "due_soon" | "overdue" | "closed" | "done";
 
@@ -211,6 +212,7 @@ export function TaskList({ tasks, soonDays = 7 }: { tasks: TaskOut[]; soonDays?:
                           .join(" · ") || "No end user recorded"}
                       </p>
                     </div>
+                    <AttachmentMark task={task} />
                     {task.status && <Badge>{task.status}</Badge>}
                     {task.priority && (
                       <Badge tone={/high|urgent/i.test(task.priority) ? "danger" : "neutral"}>
@@ -341,6 +343,8 @@ export function TaskFacts({ task }: { task: TaskOut }) {
               </p>
             </div>
           )}
+
+          <TaskAttachments task={task} />
 
           <p className="text-[11.5px] text-ink-4">
             Last changed {date(task.modified_at)} · created {date(task.created_at)} ·{" "}

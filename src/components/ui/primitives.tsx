@@ -7,6 +7,8 @@ import { ArrowUpRight, Plus, Search } from "lucide-react";
 import type { ComponentProps, ElementType, ReactNode } from "react";
 import { avatarHue, initials } from "@/lib/format";
 import { FetchDot } from "@/components/shell/RouteProgress";
+import { FitText } from "@/components/ui/FitText";
+import { NextMeeting } from "@/components/meetings/NextMeeting";
 
 /* ── surfaces ────────────────────────────────────────────────────────── */
 
@@ -617,10 +619,35 @@ export function PageHead({
   meta?: ReactNode;
 }) {
   return (
-    <header className="lift sticky top-0 z-20 flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-[20px] bg-panel px-4 py-2.5 sm:px-5">
-      <h1 className="display truncate text-[22px] sm:text-[26px]">{title}</h1>
+    // One row, always.
+    //
+    // This wrapped, and a header that becomes two rows tall on a long title
+    // pushes every screen down and jumps as you navigate. `truncate` was
+    // already on the title and did nothing: a flex item defaults to
+    // `min-width: auto`, so it refuses to shrink below its text and the
+    // overflow rule never gets a chance — the row grew instead and wrapped.
+    // `min-w-0` is what lets it shrink, and the ellipsis follows from that.
+    //
+    // Deliberately *not* `overflow-hidden`: the schedule strip's popover hangs
+    // below this element, and clipping the row would clip that with it. The
+    // shrink rules are what keep the content inside, not a clip.
+    <header className="lift sticky top-0 z-20 flex items-center gap-x-2.5 rounded-[20px] bg-panel px-4 py-2.5 sm:px-5">
+      {/* Shrinks to fit rather than ending in an ellipsis. A cut-off title
+          says less than the same words a point smaller, and it is the element
+          that tells you which screen you are on — so it gives up size, not
+          words. Flex shrinks every flexible item in proportion, and the higher
+          factor is what makes the title absorb the squeeze rather than dragging
+          the schedule strip and breadcrumb down with it.
 
-      <span className="mx-1 hidden h-6 w-px bg-line sm:block" />
+          It stays an `h1`: this is the page's heading, and a pair of spans is
+          not. FitText only manages the size inside it. */}
+      <h1 className="display min-w-0 shrink-[4]">
+        <FitText max={26} min={15}>
+          {title}
+        </FitText>
+      </h1>
+
+      <span className="mx-1 hidden h-6 w-px shrink-0 bg-line sm:block" />
 
       <PathPill />
 
@@ -633,33 +660,51 @@ export function PageHead({
           )
         }
         aria-label="Search everything"
-        className="flex h-[26px] items-center gap-2 rounded-[9px] bg-panel-2 px-2.5 text-ink-3 transition hover:text-ink"
+        className="flex h-[26px] shrink-0 items-center gap-2 rounded-[9px] bg-panel-2 px-2.5 text-ink-3 transition hover:text-ink"
       >
         <Search className="size-3.5" strokeWidth={2} />
         <kbd className="micro hidden text-ink-4 sm:block">⌘K</kbd>
       </button>
 
       {count !== undefined && (
-        <span className="tnum flex h-[26px] items-center rounded-[9px] bg-panel-2 px-2.5 text-[11.5px] font-medium text-ink-2">
+        <span className="tnum flex h-[26px] shrink-0 items-center rounded-[9px] bg-panel-2 px-2.5 text-[11.5px] font-medium text-ink-2">
           {count}
         </span>
       )}
 
       {eyebrow && (
-        <span className="hidden text-[11.5px] text-ink-4 lg:block">{eyebrow}</span>
+        <span className="hidden min-w-0 shrink truncate whitespace-nowrap text-[11.5px] text-ink-4 xl:block">
+          {eyebrow}
+        </span>
       )}
 
       {lead && (
-        <span className="hidden max-w-[420px] truncate text-[11.5px] text-ink-3 xl:block">
+        <span className="hidden min-w-0 max-w-[420px] shrink truncate whitespace-nowrap text-[11.5px] text-ink-3 xl:block">
           {lead}
         </span>
       )}
 
-      <div className="ml-auto flex flex-wrap items-center gap-2">
-        <FetchDot />
-        {meta && <span className="micro hidden text-ink-4 lg:block">{meta}</span>}
-        {faces}
-        {actions}
+      {/* The controls. The group itself can give ground — otherwise the strip
+          inside it never yields, because a `shrink-0` parent sizes to its
+          content and its children are never asked to compress. So the group
+          shrinks, everything that must stay clickable is pinned, and the
+          schedule strip is the one thing left that absorbs it. A half-cut
+          button is worse than a shortened timeline. */}
+      <div className="ml-auto flex min-w-0 items-center gap-2">
+        <span className="shrink-0">
+          <FetchDot />
+        </span>
+        {meta && (
+          <span className="micro hidden shrink-0 text-ink-4 lg:block">{meta}</span>
+        )}
+        {/* Every screen, because the whole value of a reminder is being where
+            you already are. It draws nothing when the calendar is clear, so
+            the bar is unchanged on a day with no meetings. */}
+        <NextMeeting />
+        {faces && <span className="flex shrink-0 items-center">{faces}</span>}
+        {actions && (
+          <span className="flex shrink-0 items-center gap-2">{actions}</span>
+        )}
       </div>
     </header>
   );

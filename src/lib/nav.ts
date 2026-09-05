@@ -124,7 +124,20 @@ export function buildNav(session: Session): Nav {
   }
   if (assignment.length) more.push({ label: "Work assignment", items: assignment });
 
-  const people: NavItem[] = [];
+  // Meetings has **no catalogue entry**, so there is no `can("meetings")` to
+  // ask. That is not an oversight to work around: its endpoints take a bare
+  // `CurrentUser` and read the caller's own mailbox, so like leave and quotes
+  // it is open to everybody who is signed in. Listed unconditionally for that
+  // reason — and worth a catalogue entry on the backend so this file does not
+  // have to be the one place that knows.
+  const people: NavItem[] = [
+    {
+      label: "Meetings",
+      href: "/meetings",
+      icon: CalendarRange,
+      match: "/meetings",
+    },
+  ];
   if (can("directory")) {
     people.push({ label: "Directory", href: "/directory", icon: Building2, match: "/directory" });
   }
@@ -277,6 +290,7 @@ const STATIC_LABELS: Record<string, string> = {
   "/leave": "My leave",
   "/leave/request": "Request leave",
   "/leave/calendar": "Who is off",
+  "/meetings": "Meetings",
   "/leave/requests": "Leave requests",
   "/leave/settings": "Leave rules",
   "/proposals/my-tasks": "My proposals",

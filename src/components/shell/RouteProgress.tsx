@@ -1,9 +1,13 @@
 "use client";
 
-import clsx from "clsx";
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
-import { endRoute, startRoute, useInFlight, useRoutePending } from "@/lib/progress";
+import { useEffect, useRef, useState } from "react";
+import {
+  endRoute,
+  startRoute,
+  useInFlight,
+  useRoutePending,
+} from "@/lib/progress";
 
 /**
  * A bar across the top of the app that says something is happening.
@@ -23,17 +27,48 @@ import { endRoute, startRoute, useInFlight, useRoutePending } from "@/lib/progre
  * a progress bar that claims a percentage it has not measured is a lie people
  * learn to distrust. It eases towards 90% and only completes when the new
  * pathname actually commits.
+ *
+ * **It only ever moves forward.** The first version drove the width from a
+ * ternary over two signals — the route being pending, and any SWR request
+ * being in flight — and the two fought:
+ *
+ *   - a request in flight pinned the bar at 100%, so it read "finished"
+ *     while a screen was still filling in;
+ *   - clicking a link then set it to 90%, so the bar animated *backwards*
+ *     over six seconds on every navigation started while anything was
+ *     revalidating, which on a dashboard is most of the time.
+ *
+ * So the width is now a small state machine with one direction: reset to zero
+ * out of sight, creep to 90%, complete, fade, reset again. Requests in flight
+ * no longer touch it at all — that is what `FetchDot` below is for, and its
+ * own comment already says why the two are different questions.
  */
+
+/** Where the creep stops. It cannot know the rest, so it does not pretend to. */
+const CREEP_TO = 90;
+/** How long completing takes, and how long the fade after it takes. */
+const FINISH_MS = 260;
+const FADE_MS = 380;
+
 export function RouteProgress() {
   const pathname = usePathname();
   const pending = useRoutePending();
-  const inFlight = useInFlight();
+
+  const [width, setWidth] = useState(0);
+  // False while the bar is being put back to zero, so the reset is instant and
+  // invisible instead of being animated backwards across the screen.
+  const [animated, setAnimated] = useState(false);
+  const [visible, setVisible] = useState(false);
+  // Whether this cycle ever started, so a stray `endRoute` cannot make a bar
+  // appear and complete when nothing was ever navigating.
+  const running = useRef(false);
 
   useEffect(() => {
     function onClick(event: MouseEvent) {
       // Anything but a plain left click is the browser's business, not ours.
       if (event.defaultPrevented || event.button !== 0) return;
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+        return;
 
       const anchor = (event.target as Element | null)?.closest?.("a");
       if (!(anchor instanceof HTMLAnchorElement)) return;
@@ -46,7 +81,10 @@ export function RouteProgress() {
       const next = new URL(anchor.href, window.location.href);
       if (next.origin !== window.location.origin) return;
       // Same page: nothing will change, so a bar would just flash.
-      if (next.pathname === window.location.pathname && next.search === window.location.search) {
+      if (
+        next.pathname === window.location.pathname &&
+        next.search === window.location.search
+      ) {
         return;
       }
 
@@ -70,36 +108,83 @@ export function RouteProgress() {
     return () => clearTimeout(bail);
   }, [pending]);
 
-  const busy = pending || inFlight > 0;
+  // The whole cycle, in one place, driven by the one signal that means
+  // "a navigation is happening".
+  useEffect(() => {
+    if (pending) {
+      running.current = true;
+      // Back to zero with transitions off, then creep from there on the next
+      // frame. Without the reset the bar would ease from wherever it was left,
+      // which is what made it travel backwards.
+      setAnimated(false);
+      setWidth(0);
+      setVisible(true);
+      const frame = requestAnimationFrame(() => {
+        setAnimated(true);
+        setWidth(CREEP_TO);
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+
+    if (!running.current) return;
+    running.current = false;
+
+    setAnimated(true);
+    setWidth(100);
+    const fade = setTimeout(() => setVisible(false), FINISH_MS);
+    const reset = setTimeout(() => {
+      setAnimated(false);
+      setWidth(0);
+    }, FINISH_MS + FADE_MS);
+    return () => {
+      clearTimeout(fade);
+      clearTimeout(reset);
+    };
+  }, [pending]);
 
   return (
     <div
       aria-hidden
-      className="pointer-events-none fixed inset-x-0 top-0 z-[70] h-[7px] overflow-hidden"
+      className="pointer-events-none fixed inset-x-0 top-0 z-[70] h-[3px] overflow-hidden"
     >
-      {/* Thicker than a hairline, with a glow. At 2px against the app's own
-          background this read as an artefact of the display on some screens,
-          which defeats the point of it — the bar only works if it is noticed
-          without being looked for. Height is set on the track above; the glow
-          is what stops it looking like a flat block at any thickness. */}
       <div
-        className={clsx(
-          "h-full rounded-r-full bg-accent transition-[width,opacity]",
-          pending
-            ? "w-[90%] opacity-100 duration-[6000ms] ease-out"
-            : busy
-              ? "w-full opacity-90 duration-200"
-              : "w-full opacity-0 duration-500",
-        )}
-        // The glow is written here rather than as an arbitrary Tailwind class:
-        // a multi-shadow arbitrary value that Tailwind fails to parse produces
-        // no class at all and no warning, so the bar would quietly go back to
-        // being a hairline. A style attribute either works or is obvious.
+        className="relative h-full rounded-r-full bg-accent"
+        // Width, timing and opacity are inline because they are state, not
+        // variants — and because the glow has to be. A multi-shadow arbitrary
+        // value that Tailwind fails to parse produces no class at all and no
+        // warning, so the bar would quietly stop glowing and nobody would know
+        // why it had become hard to see.
         style={{
-          boxShadow: "0 0 10px var(--accent), 0 0 3px var(--accent)",
-          ...(pending ? { width: "90%" } : null),
+          width: `${width}%`,
+          opacity: visible ? 1 : 0,
+          boxShadow: "0 0 6px var(--accent)",
+          transitionProperty: animated ? "width, opacity" : "opacity",
+          // The creep is slow and eased so it never looks stalled; completing
+          // is quick, because by then the answer has actually arrived.
+          transitionDuration: animated
+            ? `${width === 100 ? FINISH_MS : 6000}ms, ${FADE_MS}ms`
+            : `0ms, ${FADE_MS}ms`,
+          transitionTimingFunction: "ease-out",
         }}
-      />
+      >
+        {/* The tip.
+        
+            Three pixels of line is easy to miss on a bright screen, and the
+            answer is not a thicker bar — it is a brighter end. The eye is
+            drawn to the point that moves, which is exactly the thing worth
+            watching. It breathes very slightly so the bar reads as live during
+            the long middle of a creep, where the width barely changes.
+
+            Rendered only while visible: an infinite animation behind
+            `opacity: 0` would keep the compositor busy all session to show
+            nobody anything. */}
+        {visible && (
+          <span
+            className="progress-tip absolute right-0 top-1/2 h-[7px] w-[7px] -translate-y-1/2 translate-x-1/3 rounded-full bg-accent"
+            style={{ boxShadow: "0 0 12px 2px var(--accent)" }}
+          />
+        )}
+      </div>
     </div>
   );
 }

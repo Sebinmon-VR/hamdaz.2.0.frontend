@@ -28,6 +28,7 @@ import { Button, PillRail, SearchInput, Select } from "@/components/ui/controls"
 import { Empty } from "@/components/ui/feedback";
 import { DueChip } from "@/components/widgets";
 import { PersonHover } from "@/components/people/PersonHover";
+import { AttachmentMark } from "@/components/proposals/TaskAttachments";
 import {
   classify,
   TaskDetail,
@@ -542,6 +543,7 @@ function MemberCard({
                           "No end user recorded"}
                       </p>
                     </div>
+                    <AttachmentMark task={task} />
                     {task.status && <Badge>{task.status}</Badge>}
                     {task.priority && (
                       <Badge tone={/high|urgent/i.test(task.priority) ? "danger" : "neutral"}>

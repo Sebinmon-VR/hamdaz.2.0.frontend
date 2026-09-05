@@ -359,6 +359,41 @@ html {
   background-attachment: scroll, fixed;
 }
 
+/* ── the route progress bar ──────────────────────────────────────────────
+   A thin line that creeps, with a brighter tip. The bar cannot know how far
+   along it is, so the width is the only thing that carries meaning and nothing
+   else on it moves — an earlier version had a sweep, a pulsing head and
+   particles converging on the edge, which in three pixels of height read as a
+   rendering fault rather than as progress.
+
+   The tip breathes, and only just. During the long middle of a creep the width
+   barely changes for seconds at a time, and something has to say the wait is
+   still being served.
+   ───────────────────────────────────────────────────────────────────────── */
+
+@keyframes progress-tip {
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.progress-tip {
+  animation: progress-tip 1.4s ease-in-out infinite;
+}
+
+/* Decoration is the first thing to go when somebody has asked the system to
+   stop moving things. The bar still works: it is the width that informs. */
+@media (prefers-reduced-motion: reduce) {
+  .progress-tip {
+    animation: none;
+    opacity: 0.9;
+  }
+}
+
 body {
   background: var(--bezel);
   color: var(--ink);
