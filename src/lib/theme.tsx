@@ -52,6 +52,22 @@ export const PALETTES = [
     accent: "#ffab2e",
     second: "#ef4896",
   },
+  {
+    id: "mono",
+    name: "Black and white",
+    blurb: "No colour at all. The data is the only thing on screen with a hue.",
+    // Shown on the swatch. The real accents flip with the mode — see the
+    // mono blocks in globals.css for why one value cannot serve both.
+    accent: "#f2f2f5",
+    second: "#6a6a76",
+  },
+  {
+    id: "custom",
+    name: "Custom",
+    blurb: "Your own two colours, and the background behind them.",
+    accent: "#7c6cff",
+    second: "#ff9f43",
+  },
 ] as const;
 
 export type PaletteId = (typeof PALETTES)[number]["id"];
@@ -61,6 +77,7 @@ export type Resolved = "light" | "dark";
 const PALETTE_KEY = "hamdaz-palette";
 const MODE_KEY = "hamdaz-mode";
 const DEFAULT_PALETTE: PaletteId = "electric";
+const CUSTOM_KEY = "hamdaz-custom";
 
 interface ThemeValue {
   palette: PaletteId;
@@ -71,6 +88,9 @@ interface ThemeValue {
   /** What is actually on screen once "system" is resolved. */
   resolved: Resolved;
   toggle: () => void;
+  /** The colours behind the "custom" palette, and the shared background. */
+  custom: CustomTheme;
+  setCustom: (next: CustomTheme) => void;
 }
 
 const ThemeContext = createContext<ThemeValue | null>(null);
@@ -83,10 +103,26 @@ const ThemeContext = createContext<ThemeValue | null>(null);
 export const THEME_SCRIPT = `(function(){try{
 var d=document.documentElement;
 var p=localStorage.getItem(${JSON.stringify(PALETTE_KEY)})||${JSON.stringify(DEFAULT_PALETTE)};
-if(!/^(electric|magenta|acid|ember)$/.test(p))p=${JSON.stringify(DEFAULT_PALETTE)};
+if(!/^(electric|magenta|acid|ember|mono|custom)$/.test(p))p=${JSON.stringify(DEFAULT_PALETTE)};
 var m=localStorage.getItem(${JSON.stringify(MODE_KEY)})||"system";
 if(m!=="light"&&m!=="dark")m=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";
 d.setAttribute("data-palette",p);d.setAttribute("data-theme",m);
+/* Custom colours are inline variables, so they must be stamped here too —
+   otherwise a custom theme shows one frame of the default accent on every
+   hard load, which is the exact flash this script exists to prevent. */
+var c=JSON.parse(localStorage.getItem(${JSON.stringify(CUSTOM_KEY)})||"{}");
+var hex=/^#[0-9a-fA-F]{6}$/;
+function ink(h){var n=parseInt(h.slice(1),16),f=function(v){v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4)};
+return 0.2126*f(n>>16&255)+0.7152*f(n>>8&255)+0.0722*f(n&255)>0.42?"#0a0a0e":"#ffffff"}
+if(p==="custom"&&hex.test(c.accent||"")&&hex.test(c.second||"")){
+d.style.setProperty("--accent",c.accent);
+d.style.setProperty("--accent-hover","color-mix(in oklab, "+c.accent+" 82%, #ffffff)");
+d.style.setProperty("--on-accent",ink(c.accent));
+d.style.setProperty("--second",c.second);
+d.style.setProperty("--on-second",ink(c.second));}
+if(hex.test(c.background||"")){
+d.style.setProperty("--app",c.background);
+d.style.setProperty("--bezel","color-mix(in oklab, "+c.background+" 86%, #000000)");}
 }catch(e){
 document.documentElement.setAttribute("data-palette",${JSON.stringify(DEFAULT_PALETTE)});
 document.documentElement.setAttribute("data-theme","dark");
@@ -103,6 +139,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [palette, setPaletteState] = useState<PaletteId>(DEFAULT_PALETTE);
   const [mode, setModeState] = useState<ModeChoice>("system");
   const [resolved, setResolved] = useState<Resolved>("dark");
+  const [custom, setCustomState] = useState<CustomTheme>(DEFAULT_CUSTOM);
 
   useEffect(() => {
     let storedPalette: PaletteId = DEFAULT_PALETTE;
@@ -112,6 +149,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       if (PALETTES.some((entry) => entry.id === p)) storedPalette = p as PaletteId;
       const m = localStorage.getItem(MODE_KEY);
       if (m === "light" || m === "dark" || m === "system") storedMode = m;
+      const raw = localStorage.getItem(CUSTOM_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<CustomTheme>;
+        setCustomState({
+          accent: isHex(parsed.accent ?? "") ? parsed.accent! : DEFAULT_CUSTOM.accent,
+          second: isHex(parsed.second ?? "") ? parsed.second! : DEFAULT_CUSTOM.second,
+          background: isHex(parsed.background ?? "") ? parsed.background! : "",
+        });
+      }
     } catch {
       // Private mode, or storage disabled. The defaults are a fine answer.
     }
@@ -135,15 +181,34 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => media.removeEventListener("change", onChange);
   }, []);
 
-  const setPalette = useCallback((id: PaletteId) => {
-    setPaletteState(id);
-    document.documentElement.setAttribute("data-palette", id);
-    try {
-      localStorage.setItem(PALETTE_KEY, id);
-    } catch {
-      // Not being able to remember it does not stop it applying now.
-    }
-  }, []);
+  const setPalette = useCallback(
+    (id: PaletteId) => {
+      setPaletteState(id);
+      document.documentElement.setAttribute("data-palette", id);
+      // Leaving "custom" has to clear the inline variables, or they would
+      // outrank the palette just chosen and nothing would appear to change.
+      applyCustom(custom, id === "custom");
+      try {
+        localStorage.setItem(PALETTE_KEY, id);
+      } catch {
+        // Not being able to remember it does not stop it applying now.
+      }
+    },
+    [custom],
+  );
+
+  const setCustom = useCallback(
+    (next: CustomTheme) => {
+      setCustomState(next);
+      applyCustom(next, palette === "custom");
+      try {
+        localStorage.setItem(CUSTOM_KEY, JSON.stringify(next));
+      } catch {
+        // As above.
+      }
+    },
+    [palette],
+  );
 
   const setMode = useCallback((next: ModeChoice) => {
     setModeState(next);
@@ -163,7 +228,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   return (
     <ThemeContext.Provider
-      value={{ palette, setPalette, mode, setMode, resolved, toggle }}
+      value={{ palette, setPalette, mode, setMode, resolved, toggle, custom, setCustom }}
     >
       {children}
     </ThemeContext.Provider>
@@ -174,4 +239,90 @@ export function useTheme(): ThemeValue {
   const value = useContext(ThemeContext);
   if (!value) throw new Error("useTheme used outside ThemeProvider");
   return value;
+}
+
+/**
+ * A colour someone typed, and the ink that stays legible on it.
+ *
+ * `--on-accent` is the one value a custom palette cannot be allowed to get
+ * wrong: it is the text on every filled button, and a shipped palette hand-picks
+ * it. Derived here from relative luminance instead, because the alternative is
+ * asking somebody to choose their own button text colour, which nobody wants to
+ * be asked.
+ */
+export function readableInk(hex: string): string {
+  const clean = hex.replace("#", "");
+  const full =
+    clean.length === 3
+      ? clean
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : clean;
+  const int = Number.parseInt(full, 16);
+  if (!Number.isFinite(int) || full.length !== 6) return "#0a0a0e";
+  const channel = (v: number) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance =
+    0.2126 * channel((int >> 16) & 255) +
+    0.7152 * channel((int >> 8) & 255) +
+    0.0722 * channel(int & 255);
+  return luminance > 0.42 ? "#0a0a0e" : "#ffffff";
+}
+
+/** Nudged towards white so a hover is visibly lighter without a second picker. */
+function lighten(hex: string): string {
+  return `color-mix(in oklab, ${hex} 82%, #ffffff)`;
+}
+
+export const isHex = (value: string): boolean => /^#[0-9a-fA-F]{6}$/.test(value.trim());
+
+/**
+ * Everything a custom theme lets somebody set.
+ *
+ * Deliberately three values and not thirty. The shipped palettes each tune
+ * eleven neutrals by hand against their accent; exposing that would be handing
+ * people a job they did not ask for and a hundred ways to make the app
+ * unreadable. Accent, second, and the ground behind it all — the three that
+ * change how the app *feels* — are enough, and the neutral surfaces stay on a
+ * grey that works with any of them.
+ */
+export interface CustomTheme {
+  accent: string;
+  second: string;
+  /** The app's ground. Empty means the palette's own. */
+  background: string;
+}
+
+export const DEFAULT_CUSTOM: CustomTheme = {
+  accent: "#7c6cff",
+  second: "#ff9f43",
+  background: "",
+};
+
+/** Applied as inline variables, which beat the stylesheet's palette blocks. */
+export function applyCustom(custom: CustomTheme, active: boolean): void {
+  const root = document.documentElement;
+  const vars: Record<string, string> = {
+    "--accent": custom.accent,
+    "--accent-hover": lighten(custom.accent),
+    "--on-accent": readableInk(custom.accent),
+    "--second": custom.second,
+    "--on-second": readableInk(custom.second),
+  };
+  for (const [name, value] of Object.entries(vars)) {
+    if (active && isHex(custom.accent) && isHex(custom.second)) root.style.setProperty(name, value);
+    else root.style.removeProperty(name);
+  }
+  // The ground is independent of the palette: somebody may want the shipped
+  // Electric accents on a background of their own, so it applies either way.
+  if (isHex(custom.background)) {
+    root.style.setProperty("--app", custom.background);
+    root.style.setProperty("--bezel", `color-mix(in oklab, ${custom.background} 86%, #000000)`);
+  } else {
+    root.style.removeProperty("--app");
+    root.style.removeProperty("--bezel");
+  }
 }

@@ -26,10 +26,12 @@ import { Empty, ErrorState, InlineNotice, RowsSkeleton } from "@/components/ui/f
  * figure here belongs to a team by construction, and `scope` comes back saying
  * how many of that team's members it actually matched.
  *
- * What it shows is totals, not tasks. The Proposals endpoints only ever hand a
- * person their own rows, so no view here — administrator or not — can list
- * somebody else's tasks. Per-person figures are a click away on each team's
- * own page; this is the level above that.
+ * What it shows is totals, not tasks — but only because this is the wrong
+ * altitude for them, not because they cannot be had. That was true once: the
+ * Proposals endpoints only ever handed a person their own rows. It stopped
+ * being true when `/proposals/team-tasks` was added, so each row here links
+ * into that team's own board, where the rows are listed per member. Org,
+ * team, person, task: four steps, each one narrowing.
  *
  * Admin-only, and that is the backend's rule rather than this component's:
  * `/proposals/workload` is gated there and answers 403 to anyone else. The

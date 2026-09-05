@@ -4,7 +4,19 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
-import { Building2, Crown, Eraser, ShieldCheck, Trash2 } from "lucide-react";
+import {
+  Building2,
+  CalendarDays,
+  Crown,
+  Eraser,
+  IdCard,
+  ListChecks,
+  Settings,
+  ShieldCheck,
+  Star,
+  Trash2,
+  type LucideIcon,
+} from "lucide-react";
 import { api } from "@/lib/api";
 import { date, humanise, num, relative } from "@/lib/format";
 import { useAction, useProgressive } from "@/lib/hooks";
@@ -186,10 +198,18 @@ export default function AdminUserPage({ params }: { params: Promise<{ id: string
         </InlineNotice>
       )}
 
-      {/* Live work, the policy's reading of them, and their standing —
-          the three questions a profile is opened to answer, none of which
-          used to be on it. */}
-      <ProposalWork email={data.email} name={data.display_name} />
+      {/* Your own profile opens with what you can do next, not with a
+          SharePoint sweep reporting zero.
+
+          The proposal panel below is genuinely the point when an
+          administrator is looking somebody up — "what is this person
+          carrying" is the question a colleague's profile is opened to answer.
+          It is not the question you open your own with: you already know, and
+          the answer in full is one click away on My tasks. So it is shown
+          about other people and replaced here. */}
+      {isSelf ? <Shortcuts /> : null}
+
+      {!isSelf && <ProposalWork email={data.email} name={data.display_name} />}
 
       <div className="grid gap-3 lg:grid-cols-3">
         <Panel className="p-4 lg:col-span-2">
@@ -523,5 +543,86 @@ function DangerDialog({
         </Field>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * What you can do next, on your own profile.
+ *
+ * Replaces the proposal sweep that used to lead this page for its owner. That
+ * panel answers "what is this person carrying", which is a question about
+ * somebody else — on your own record it reported a number you already knew,
+ * after a slow read of SharePoint, above the thing you actually came for.
+ *
+ * Every entry is gated on what the viewer can genuinely reach, so this is the
+ * same list the rail would show, minus everything that is not personal. A
+ * shortcut to a page that 403s is worse than no shortcut.
+ */
+function Shortcuts() {
+  const session = useSession();
+
+  const links: { label: string; hint: string; href: string; icon: LucideIcon }[] = [];
+
+  if (session.can("proposals", "my_tasks")) {
+    links.push({
+      label: "My tasks",
+      hint: "Enquiries assigned to you",
+      href: "/proposals/my-tasks",
+      icon: ListChecks,
+    });
+  }
+  if (session.can("leave")) {
+    links.push({
+      label: "My leave",
+      hint: "Balance, and what is booked",
+      href: "/leave",
+      icon: CalendarDays,
+    });
+  }
+  if (session.can("hr", "my_reviews")) {
+    links.push({
+      label: "Reviews to write",
+      hint: "Colleagues who nominated you",
+      href: "/hr/my-reviews",
+      icon: Star,
+    });
+  }
+  if (session.can("hr", "my_record")) {
+    links.push({
+      label: "My HR record",
+      hint: "Documents HR has shared with you",
+      href: "/hr/me",
+      icon: IdCard,
+    });
+  }
+  links.push({
+    label: "Settings",
+    hint: "Appearance, and signing out",
+    href: "/settings",
+    icon: Settings,
+  });
+
+  return (
+    <Panel className="p-4">
+      <PanelHead title="Yours" hint="Only you see these" />
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        {links.map((link) => {
+          const Icon = link.icon;
+          return (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="flex items-center gap-3 rounded-xl bg-inset px-3 py-2.5 transition hover:bg-panel-3"
+            >
+              <Icon className="size-4 shrink-0 text-ink-3" strokeWidth={1.9} />
+              <span className="min-w-0">
+                <span className="block truncate text-[13px] font-medium">{link.label}</span>
+                <span className="block truncate text-[11.5px] text-ink-4">{link.hint}</span>
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    </Panel>
   );
 }

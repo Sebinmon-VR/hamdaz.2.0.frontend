@@ -25,6 +25,7 @@ import {
   RowsSkeleton,
   Spinner,
 } from "@/components/ui/feedback";
+import { PersonHover } from "@/components/people/PersonHover";
 
 export default function MembersPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
@@ -82,7 +83,13 @@ export default function MembersPage({ params }: { params: Promise<{ slug: string
           <ul className="mt-2 divide-y divide-line">
             {data.members.map((member) => (
               <li key={member.user_id} className="flex flex-wrap items-center gap-2.5 py-2">
-                <Avatar name={member.display_name} seed={member.user_id} />
+                <PersonHover
+                  userId={member.user_id}
+                  name={member.display_name}
+                  email={member.email}
+                >
+                  <Avatar name={member.display_name} seed={member.user_id} />
+                </PersonHover>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[14px] font-medium">
                     {mayOpenProfile ? (

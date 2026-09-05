@@ -4,8 +4,18 @@ import clsx from "clsx";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { ArrowRight, Building2, CornerDownLeft, ReceiptText, Search, Users } from "lucide-react";
-import { withQuery } from "@/lib/api";
+import {
+  ArrowRight,
+  Building2,
+  CornerDownLeft,
+  LogOut,
+  ReceiptText,
+  Search,
+  Settings,
+  UserRound,
+  Users,
+} from "lucide-react";
+import { signOutAndReturnToLogin, withQuery } from "@/lib/api";
 import { useDebounced } from "@/lib/hooks";
 import { buildNav } from "@/lib/nav";
 import { useSession } from "@/lib/session";
@@ -94,6 +104,35 @@ export function CommandPalette() {
       }
     }
 
+    const account: Result[] = [
+      {
+        id: "account:profile",
+        group: "Account",
+        label: "My profile",
+        href: `/admin/users/${session.user.id}`,
+        icon: UserRound,
+      },
+      {
+        id: "account:settings",
+        group: "Account",
+        label: "Settings",
+        href: "/settings",
+        icon: Settings,
+      },
+      {
+        id: "account:signout",
+        group: "Account",
+        label: "Sign out",
+        hint: session.user.email,
+        href: "",
+        icon: LogOut,
+        run: signOutAndReturnToLogin,
+      },
+    ];
+    for (const item of account) {
+      if (!needle || item.label.toLowerCase().includes(needle)) out.push(item);
+    }
+
     for (const person of people.data?.users ?? []) {
       out.push({
         id: `person:${person.object_id}`,
@@ -139,6 +178,11 @@ export function CommandPalette() {
   const active = Math.min(cursor, Math.max(0, results.length - 1));
 
   function go(result: Result | undefined) {
+    if (result?.run) {
+      setOpen(false);
+      void result.run();
+      return;
+    }
     if (!result) return;
     setOpen(false);
     router.push(result.href);
@@ -250,8 +294,18 @@ interface Result {
   group: string;
   label: string;
   hint?: string;
+  /** Where it goes. Empty for a result that runs `run` instead. */
   href: string;
   icon?: React.ElementType;
   /** Draws an avatar instead of an icon — people only. */
   seed?: string;
+  /**
+   * Performed instead of navigating.
+   *
+   * Signing out is the reason this exists: it lived only behind the rail's
+   * account row, which is a bare avatar at 62px with nothing saying it opens
+   * anything. The palette is where people look for a command they cannot see,
+   * so the command has to be in it.
+   */
+  run?: () => void | Promise<void>;
 }

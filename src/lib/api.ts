@@ -230,6 +230,34 @@ export async function signOut() {
 }
 
 /**
+ * Sign out and land on the login screen, whatever happens.
+ *
+ * Two things went wrong with doing this at the call site, and both looked
+ * from the outside like the button doing nothing at all:
+ *
+ * **The redirect was conditional on the request succeeding.** `await signOut()`
+ * throws on a network failure, on CORS, and on a session that has already
+ * expired — and an uncaught throw inside an onClick means no navigation and no
+ * error, just a click that appears to be ignored. Being signed out locally is
+ * the point; the server having agreed is not a precondition for leaving.
+ *
+ * **It was a client-side navigation.** `router.replace` unmounts the shell but
+ * leaves SWR's module-level cache intact, so `/auth/me` and every read behind
+ * it stay warm — the shell has a 60-second dedupe window and does not
+ * revalidate on focus. Coming back inside that window re-mounted a session
+ * that had been thrown away. A full page load is the only way to be sure
+ * nothing survives, which is exactly what signing out is asking for.
+ */
+export async function signOutAndReturnToLogin(): Promise<void> {
+  try {
+    await signOut();
+  } catch {
+    // Already gone, or unreachable. Either way the local session is finished.
+  }
+  window.location.assign("/login");
+}
+
+/**
  * A URL the browser can open for a file the API streams (quote attachments,
  * comparison documents). These carry the session cookie because they are
  * same-site navigations to the API origin, so no token juggling is needed.

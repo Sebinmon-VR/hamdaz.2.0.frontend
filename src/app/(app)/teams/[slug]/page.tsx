@@ -31,6 +31,8 @@ import {
 } from "@/components/ui/primitives";
 import { Button, Field, Input, LinkButton, Textarea } from "@/components/ui/controls";
 import { Empty, ErrorState, InlineNotice, Modal, RowsSkeleton } from "@/components/ui/feedback";
+import { TeamWidgets } from "@/components/widgets/TeamWidgets";
+import { PersonHover } from "@/components/people/PersonHover";
 
 export default function TeamPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
@@ -56,17 +58,26 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
   const leads = data.members.filter((m) => m.role_keys.includes("team_lead"));
   const isAdmin = session.roles.is_admin;
 
-  // Who may open this team's proposal work, mirroring what
-  // /proposals/team-tasks itself enforces: an administrator, or this team's
-  // own lead or manager. Gating it on `can("proposals", "team_tasks")` instead
-  // asked the wrong question — that is whether the *viewer's* team holds the
-  // proposals module, which is neither necessary nor sufficient here. It hid
-  // the link from the lead the page was built for and offered it to members
-  // who get a 403.
-  const heldHere =
-    session.teams.find((t) => t.team.slug === slug)?.role_keys ?? [];
+  // Two different questions, and the link needs both answered yes.
+  //
+  // *May* they open it: an administrator, or this team's own lead or manager —
+  // mirroring what /proposals/team-tasks enforces. Gating on
+  // `can("proposals", "team_tasks")` asked whether the *viewer's* team holds
+  // the module, which is neither necessary nor sufficient: it hid the link
+  // from the lead it was built for and offered it to members who get a 403.
+  const heldHere = session.teams.find((t) => t.team.slug === slug)?.role_keys ?? [];
   const oversees =
     isAdmin || heldHere.includes("team_lead") || heldHere.includes("team_manager");
+
+  // *Should* they see it: does this team do proposals at all. HR holds leave,
+  // teams, assignment, dashboard and directory — not proposals — so the link
+  // opened a screen reading "0 live, 0 due" about work the team was never
+  // given. A team page should offer that team's own work, and an empty module
+  // it does not hold is not that.
+  const holds = (key: string) =>
+    Boolean(access.data?.modules.some((m) => m.module_key === key));
+  const doesProposals = holds("proposals");
+  const showDashboard = session.can("dashboard", "team") && holds("dashboard");
 
   return (
     <div className="space-y-4">
@@ -76,12 +87,17 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
         lead={data.description ?? undefined}
         actions={
           <>
-            {session.can("dashboard", "team") && (
+            {/* Same two questions as Proposals: the viewer's own dashboard
+                access says nothing about whether *this* team was given one.
+                The cards themselves are on this page now, so this is the way
+                to the full-width view and the widget chooser rather than the
+                only way to see any numbers at all. */}
+            {showDashboard && (
               <LinkButton href={`/teams/${slug}/dashboard`} icon={GaugeCircle}>
-                Dashboard
+                Full dashboard
               </LinkButton>
             )}
-            {oversees && (
+            {oversees && doesProposals && (
               <LinkButton href={`/teams/${slug}/proposals`} icon={ListChecks}>
                 Proposals
               </LinkButton>
@@ -100,6 +116,23 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
           This team was archived on {date(data.archived_at)}. Its module grants no longer
           reach its members.
         </InlineNotice>
+      )}
+
+      {showDashboard && (
+        <Panel className="p-4">
+          <PanelHead
+            title="At a glance"
+            hint="This team's dashboard cards"
+            action={
+              <LinkButton href={`/teams/${slug}/dashboard`} size="sm" icon={GaugeCircle}>
+                Open full
+              </LinkButton>
+            }
+          />
+          <div className="mt-4">
+            <TeamWidgets slug={slug} compact />
+          </div>
+        </Panel>
       )}
 
       <div className="grid gap-3 lg:grid-cols-3">
@@ -133,7 +166,13 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
             <ul className="mt-2 divide-y divide-line">
               {data.members.map((member) => (
                 <li key={member.user_id} className="flex items-center gap-2.5 py-2">
-                  <Avatar name={member.display_name} seed={member.user_id} />
+                  <PersonHover
+                    userId={member.user_id}
+                    name={member.display_name}
+                    email={member.email}
+                  >
+                    <Avatar name={member.display_name} seed={member.user_id} />
+                  </PersonHover>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[14px] font-medium">
                       {member.display_name}

@@ -27,6 +27,7 @@ import {
 import { Button, PillRail, SearchInput, Select } from "@/components/ui/controls";
 import { Empty } from "@/components/ui/feedback";
 import { DueChip } from "@/components/widgets";
+import { PersonHover } from "@/components/people/PersonHover";
 import {
   classify,
   TaskDetail,
@@ -447,7 +448,9 @@ function MemberCard({
             aria-hidden
           />
         )}
-        <Avatar name={member.name} seed={member.email} size="sm" />
+        <PersonHover userId={member.user_id} name={member.name} email={member.email}>
+          <Avatar name={member.name} seed={member.email} size="sm" />
+        </PersonHover>
 
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-2 truncate text-[14px] font-medium">
@@ -624,7 +627,9 @@ function SplitView({ rows }: { rows: OwnedRow[] }) {
         {groups.map(({ member, rows: theirs }) => (
           <div key={member.user_id}>
             <div className="sticky top-0 z-10 -mx-1 flex items-center gap-2 bg-panel/95 px-1 py-1.5 backdrop-blur">
-              <Avatar name={member.name} seed={member.email} size="xs" />
+              <PersonHover userId={member.user_id} name={member.name} email={member.email}>
+                <Avatar name={member.name} seed={member.email} size="xs" />
+              </PersonHover>
               <span className="min-w-0 flex-1 truncate text-[12px] font-semibold">
                 {member.name}
               </span>

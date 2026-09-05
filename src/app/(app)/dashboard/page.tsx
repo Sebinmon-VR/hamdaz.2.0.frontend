@@ -14,6 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import { withQuery } from "@/lib/api";
+import { activeOf } from "@/lib/types";
 import { date as fmtDate, daysAway, isoDay, num, truncate } from "@/lib/format";
 import { useProgressive } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
@@ -23,6 +24,7 @@ import type {
   LeaveSummaryOut,
   MyTasksOut,
   TaskOut,
+  WorkloadOut,
 } from "@/lib/types";
 import {
   Avatar,
@@ -74,6 +76,26 @@ export default function DashboardPage() {
       : null,
     { dedupingInterval: 120_000 },
   );
+
+  /**
+   * Whose work this screen is about.
+   *
+   * An administrator opening this was being shown their own eleven proposals
+   * first, which is not what they came for — they are not the person doing
+   * the bidding, and their own row is the least useful one on the page. So
+   * for them the headline is the organisation and their personal work moves
+   * below it. For everybody else nothing changes: their tasks are the answer.
+   */
+  const overseeing = session.roles.is_admin;
+
+  // Org-wide totals. Admin-only, and that is the backend's rule rather than
+  // this screen's — /proposals/workload answers 403 to anyone else. Cached
+  // hard because it sweeps SharePoint and every admin gets the same figures.
+  const org = useSWR<WorkloadOut>(overseeing ? "/proposals/workload" : null, {
+    revalidateOnFocus: false,
+    dedupingInterval: 300_000,
+    shouldRetryOnError: false,
+  });
 
   const firstName = session.user.display_name.split(" ")[0];
   const away = offToday.data?.days?.[today] ?? [];
@@ -136,29 +158,54 @@ export default function DashboardPage() {
       <div className="grid gap-4 lg:grid-cols-[1.58fr_1fr]">
         <HeroPanel className="p-7">
           <div className="flex flex-wrap gap-x-14 gap-y-6">
-            {session.can("proposals", "my_tasks") && (
+            {overseeing ? (
               <>
                 <Figure
-                  label="Proposal tasks assigned"
-                  value={num(assigned)}
+                  label="Live across the organisation"
+                  value={num(org.data ? activeOf(org.data.organisation) : 0)}
                   sub={
-                    tasks.data && !tasks.data.in_sharepoint
-                      ? "not on the list"
-                      : `${num(closed)} closed`
+                    org.data
+                      ? `${num(org.data.organisation.due_soon)} due soon`
+                      : "reading SharePoint"
                   }
                 />
                 <Figure
-                  label="Live right now"
-                  value={num(open.total)}
-                  sub={
-                    open.closed > 0
-                      ? `${num(open.closed)} bids since closed`
-                      : "nothing parked"
-                  }
+                  label="People carrying work"
+                  value={num(org.data?.person_count ?? 0)}
+                  sub={org.data ? `${num(org.data.row_count ?? 0)} rows swept` : undefined}
                 />
+                {/* Their own, kept but demoted — an administrator is usually
+                    on the Proposals list too, and losing it entirely would
+                    mean visiting another screen to find their own deadline. */}
+                {session.can("proposals", "my_tasks") && open.total > 0 && (
+                  <Figure label="Yours" value={num(open.total)} sub="live right now" />
+                )}
               </>
+            ) : (
+              session.can("proposals", "my_tasks") && (
+                <>
+                  <Figure
+                    label="Proposal tasks assigned"
+                    value={num(assigned)}
+                    sub={
+                      tasks.data && !tasks.data.in_sharepoint
+                        ? "not on the list"
+                        : `${num(closed)} closed`
+                    }
+                  />
+                  <Figure
+                    label="Live right now"
+                    value={num(open.total)}
+                    sub={
+                      open.closed > 0
+                        ? `${num(open.closed)} bids since closed`
+                        : "nothing parked"
+                    }
+                  />
+                </>
+              )
             )}
-            {open.overdue > 0 && (
+            {!overseeing && open.overdue > 0 && (
               <Figure label="Actually late" value={num(open.overdue)} tone="second" />
             )}
             {leave.data && (
@@ -173,7 +220,32 @@ export default function DashboardPage() {
           {/* Everything open, laid on one scale from "no deadline" through to
               "already late". The ramp is the legend; there is nothing else to
               look up. */}
-          {open.total > 0 && (
+          {overseeing && org.data ? (
+            <div className="mt-8">
+              <div className="mb-2.5 flex items-baseline justify-between">
+                <span className="text-[12px] text-ink-3">
+                  The organisation&rsquo;s live work, by how close it is to late
+                </span>
+                <Link
+                  href="/teams"
+                  className="text-[12px] text-ink-4 transition hover:text-ink"
+                >
+                  By team
+                </Link>
+              </div>
+              {/* The closed-bid pile is deliberately not a segment. It
+                  outnumbers live work several times over on this list, so
+                  including it drew one flat smear that said nothing. */}
+              <RampBar
+                height={40}
+                segments={[
+                  { value: org.data.organisation.no_deadline, label: "No deadline" },
+                  { value: org.data.organisation.later, label: "Later" },
+                  { value: org.data.organisation.due_soon, label: "Due soon" },
+                ]}
+              />
+            </div>
+          ) : open.total > 0 ? (
             <div className="mt-8">
               <div className="mb-2.5 flex items-baseline justify-between">
                 <span className="text-[12px] text-ink-3">
@@ -218,7 +290,7 @@ export default function DashboardPage() {
                 ))}
               </div>
             </div>
-          )}
+          ) : null}
 
           {session.teams.length === 0 && (
             <p className="mt-8 max-w-xl text-[12.5px] leading-relaxed text-ink-3">
@@ -275,6 +347,18 @@ export default function DashboardPage() {
         </Panel>
       </div>
 
+      {/* ── every team, for the people who run them ───────────────── */}
+      {/* Above the personal slab, not below it. An administrator's own
+          proposals are the least useful rows on this page — they are not the
+          person doing the bidding — so the teams they are accountable for
+          come first and their own work follows.
+
+          Admin-only, and the backend says so: /proposals/workload is gated
+          there and answers 403 to anyone else. This check exists so an
+          ordinary user is not shown a panel that would only fail — it is not
+          the protection, because nothing running in a browser can be. */}
+      {overseeing && <OrgWorkload />}
+
       {/* ── the slab: what needs you ──────────────────────────────── */}
       {session.can("proposals", "my_tasks") && open.sorted.length > 0 && (
         <Panel tone="slab" className="grid gap-5 p-5 lg:grid-cols-[1fr_1.4fr]">
@@ -303,13 +387,6 @@ export default function DashboardPage() {
           {selected && <TaskDetail task={selected} />}
         </Panel>
       )}
-
-      {/* ── every team, for the people who run them ───────────────── */}
-      {/* Admin-only, and the backend says so: /proposals/workload is gated
-          there and answers 403 to anyone else. This check exists so an
-          ordinary user is not shown a panel that would only fail — it is not
-          the protection, because nothing running in a browser can be. */}
-      {session.roles.is_admin && <OrgWorkload />}
 
       {/* ── team dashboards ───────────────────────────────────────── */}
       {dashboards.error ? (

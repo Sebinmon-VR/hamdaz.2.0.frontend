@@ -5,7 +5,7 @@
 
    Two independent axes, both stamped on <html> by lib/theme.tsx:
 
-     data-palette = electric | magenta | acid | ember    (which accent)
+     data-palette = electric | magenta | acid | ember | mono | custom
      data-theme   = dark | light                          (which mode)
 
    "Follow the system" is resolved to one of dark/light in JS before first
@@ -109,6 +109,47 @@
   --bezel: #cfc8bc; --app: #ebe5da; --panel: #fffdfa; --panel-2: #f6f1e8; --panel-3: #e8e1d5;
   --line: #e7e0d5; --line-strong: #d7cec0;
   --ink: #0a0806; --ink-2: #5c5449; --ink-3: #867d71; --ink-4: #aba397;
+}
+
+/* ── mono, and custom ────────────────────────────────────────────────────
+   Both set their accents inside the mode blocks below rather than up here.
+
+   Mono has to: an accent is one value across both modes, and there is no
+   single grey that is legible as a filled button on white and on black. Near
+   white on dark and near black on light is the only honest reading of "black
+   and white", and it needs the mode to know which.
+
+   Custom takes its accents from inline variables the theme provider stamps on
+   <html> — an inline style beats a stylesheet rule, so nothing is declared for
+   them here. What is declared is the neutral ground they sit on, kept grey on
+   purpose: the shipped palettes tint their surfaces towards their own accent,
+   which cannot be done for a colour that is not known until someone picks it.
+   ───────────────────────────────────────────────────────────────────────── */
+
+[data-palette="mono"][data-theme="dark"] {
+  --accent: #f2f2f5; --accent-hover: #ffffff; --on-accent: #0a0a0e;
+  --second: #9a9aa5; --on-second: #0a0a0e;
+  --bezel: #050505; --app: #0a0a0a; --panel: #161616; --panel-2: #222222; --panel-3: #2d2d2d;
+  --line: #272727; --line-strong: #383838;
+  --ink: #ffffff; --ink-2: #a8a8a8; --ink-3: #6f6f6f; --ink-4: #555555;
+}
+[data-palette="mono"][data-theme="light"] {
+  --accent: #14141a; --accent-hover: #2c2c34; --on-accent: #ffffff;
+  --second: #6a6a76; --on-second: #ffffff;
+  --bezel: #c9c9c9; --app: #e7e7e7; --panel: #ffffff; --panel-2: #f2f2f2; --panel-3: #e4e4e4;
+  --line: #e3e3e3; --line-strong: #d1d1d1;
+  --ink: #0a0a0a; --ink-2: #545454; --ink-3: #7d7d7d; --ink-4: #a3a3a3;
+}
+
+[data-palette="custom"][data-theme="dark"] {
+  --bezel: #050506; --app: #0a0a0c; --panel: #161618; --panel-2: #222225; --panel-3: #2d2d31;
+  --line: #27272b; --line-strong: #38383d;
+  --ink: #ffffff; --ink-2: #a8a8ae; --ink-3: #6f6f76; --ink-4: #55555c;
+}
+[data-palette="custom"][data-theme="light"] {
+  --bezel: #c9c9cc; --app: #e7e7ea; --panel: #ffffff; --panel-2: #f2f2f4; --panel-3: #e4e4e8;
+  --line: #e3e3e7; --line-strong: #d1d1d6;
+  --ink: #0a0a0c; --ink-2: #545459; --ink-3: #7d7d84; --ink-4: #a3a3aa;
 }
 
 /* ── surfaces and status, by mode only ───────────────────────────────── */

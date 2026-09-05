@@ -2,10 +2,16 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { LogOut, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
-import { signOut } from "@/lib/api";
+import {
+  ChevronsUpDown,
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings,
+} from "lucide-react";
+import { signOutAndReturnToLogin } from "@/lib/api";
 import { buildNav, isActive, type NavGroup } from "@/lib/nav";
 import { useSession } from "@/lib/session";
 import { Avatar } from "@/components/ui/primitives";
@@ -192,7 +198,8 @@ function AccountButton({
     <button
       onClick={onToggle}
       aria-expanded={open}
-      title={session.user.display_name}
+      aria-haspopup="menu"
+      title={`${session.user.display_name} — account and sign out`}
       className={clsx(
         "flex h-10 w-full items-center gap-3 rounded-[13px] pl-[9px] pr-2.5 text-left transition",
         open ? "bg-panel-2" : "hover:bg-panel-2",
@@ -221,6 +228,15 @@ function AccountButton({
               : "Member"}
         </span>
       </span>
+      <ChevronsUpDown
+        className={clsx(
+          "size-3.5 shrink-0 text-ink-4 opacity-0 transition-opacity",
+          "group-hover/rail:opacity-100 group-focus-within/rail:opacity-100",
+          pinned && "opacity-100",
+        )}
+        strokeWidth={1.8}
+        aria-hidden
+      />
     </button>
   );
 }
@@ -228,14 +244,22 @@ function AccountButton({
 /** The popover, which lives outside it. */
 function AccountMenu({ onClose }: { onClose: () => void }) {
   const session = useSession();
-  const router = useRouter();
   const box = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
+  // Closing on navigation is the point. The first run is not a navigation:
+  // this component is mounted only while the menu is open, so an effect that
+  // fires on mount closed it in the same tick it appeared — the menu could
+  // never be seen, and sign-out was unreachable from the interface entirely.
+  // Keeping `onClose` out of the deps was already deliberate; skipping the
+  // mount run is the other half of the same guard.
+  const navigated = useRef(false);
   useEffect(() => {
+    if (!navigated.current) {
+      navigated.current = true;
+      return;
+    }
     onClose();
-    // Closing on navigation is the point; re-running when onClose changes is
-    // not, and would shut the menu the moment it opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
@@ -280,10 +304,7 @@ function AccountMenu({ onClose }: { onClose: () => void }) {
         Settings
       </Link>
       <button
-        onClick={async () => {
-          await signOut();
-          router.replace("/login");
-        }}
+        onClick={() => void signOutAndReturnToLogin()}
         className="flex w-full items-center gap-2.5 rounded-[11px] px-2.5 py-2 text-left text-[12.5px] font-medium text-ink-2 transition hover:bg-danger-soft hover:text-danger"
       >
         <LogOut className="size-4 text-ink-4" strokeWidth={1.8} />
