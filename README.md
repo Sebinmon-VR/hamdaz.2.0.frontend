@@ -50,12 +50,15 @@ src/
       quotes/             Zoho Books, list and detail
       comparisons/        list, new (upload → check → compare), saved detail
       assignment/         labels, the policy, who would get what, and the ranking
+      assistant/          the chat agent, and hands-free voice mode
       admin/              roles, assignments, team access, user administration
+      admin/assistant/    its switches, permissions, audience, runs and cost
       settings/           accent palette and light/dark, per browser
   components/
     ui/                   primitives, controls, feedback — the design system
     shell/                top bar, tab strip, doodles, wordmark, theme switch
     widgets/              one renderer per backend dashboard widget
+    assistant/            the orb, the two voice screens, the tool trace, the confirm card
     comparison/ leave/ proposals/ quotes/   module-specific pieces
   lib/
     api.ts     the only place that talks to the backend
@@ -66,6 +69,9 @@ src/
     nav.ts     the pill bar, the overflow menu and the tab labels
     format.ts  dates, money, names
     hooks.ts   useAction, useDebounced
+    assistant.ts  the SSE client and one conversation's state
+    speech.ts     dictation in the browser, playback from the server
+    realtime.ts   the spoken conversation: WebRTC straight to OpenAI
 ```
 
 ## The design
@@ -326,6 +332,249 @@ the UI reports the real refusal rather than guessing at it.
 twice: the policy screens set numbers, the ranking says who *should* get the
 next task and why, and handing it over stays a person's action. Nothing is ever
 written back to SharePoint.
+
+## The assistant
+
+A chat agent over the ERP's own modules, run **as the person asking**. That
+phrase is the whole access model and it decides most of what this UI looks like:
+a tool call is an HTTP request to the real endpoint carrying the caller's own
+session cookie, so whatever that route refuses the assistant is refused too, and
+no policy can hand anybody a right they did not already hold.
+
+Six screens. One is the assistant; five are its administration.
+
+| Screen | What it is |
+| --- | --- |
+| [/assistant](src/app/(app)/assistant/page.tsx) | The chat, its history, and both voice screens |
+| [/admin/assistant](src/app/(app)/admin/assistant/page.tsx) | The master switch, the model, the limits |
+| […/permissions](src/app/(app)/admin/assistant/permissions/page.tsx) | What it may read and write, per module and per tool |
+| […/access](src/app/(app)/admin/assistant/access/page.tsx) | Who it is released to |
+| […/runs](src/app/(app)/admin/assistant/runs/page.tsx) | Every turn anyone has taken, with its full log |
+| […/analytics](src/app/(app)/admin/assistant/analytics/page.tsx) | Usage and cost |
+
+**It is off until somebody turns it on.** `enabled` defaults to false on the
+backend, deliberately — an assistant nobody has configured should reach nobody,
+super admins included. So a fresh install shows "The assistant is switched off"
+on `/assistant` until `/admin/assistant` has been visited, and that is the
+expected first experience rather than a fault.
+
+**The five admin routes are super admin only, and that is narrower than it looks.**
+The backend does not use its usual `ADMIN_ROLES` here: a CEO or a manager gets a
+403 on every one of them, on the stated grounds that deciding what an assistant
+may do on everybody's behalf is a different question from running a team. Each
+screen therefore gates on `is_super_admin` rather than `is_admin`, which is what
+those endpoints will actually say.
+
+### Streaming, and why it is fetch rather than EventSource
+
+Sending a message answers with Server-Sent Events, not JSON — a turn calls tools
+as it goes and can take a while. `streamTurn` in
+[assistant.ts](src/lib/assistant.ts) does the reading, with `fetch` for two
+reasons that are both requirements: `EventSource` cannot POST, and the message
+has to go in a body; and it cannot be aborted in a way that leaves the caller in
+control.
+
+The parser buffers until it sees a blank line rather than working line by line.
+A frame can be split anywhere by the network, and anything less drops half a
+token eventually — which is the kind of bug that shows up as a word missing from
+one answer in fifty.
+
+**Stopping is not cancelling, and the button says so.** The backend runs a turn
+in a background task and the HTTP response merely watches a queue — deliberately,
+because a turn that died with the connection *after* it had already made a write
+would be worse than one that finishes unwatched. So the stop button detaches the
+screen, says the turn is still finishing, and offers a refresh. Actually
+cancelling a run is a super admin action and lives on the runs screen.
+
+### The three things that make an agent legible
+
+**The tool trace.** Every call is shown as it happens — what was asked for, what
+came back, and how long it took. Refusals stay on screen rather than vanishing
+once the answer arrives, because the backend returns a 403 naming who *is*
+allowed and the model is told to pass that on. An answer is only as good as what
+the asker was permitted to read, and hiding that would leave somebody unable to
+tell a complete answer from a narrow one.
+
+**The confirmation card.** A write the policy says must be approved parks the
+whole run as `awaiting_confirmation`; nothing has happened when the card appears,
+and the loop resumes from exactly that point on an answer. So the card *is* the
+action, not a notice about one — which is why it shows the arguments in full
+rather than the model's summary of them. Where the two disagree, the arguments
+are what will be sent. Declining is not an error: the model is told the person
+said no and gets to respond, so both buttons carry the conversation on.
+
+**The effective column.** On the permissions screen a tool's own switch, its
+module's, and the global default fold together, and a per-tool override is easy
+to get wrong without seeing the answer they produce. Every row shows what a turn
+would actually be given, not what was set.
+
+Two more states share that screen, and both are marked rather than left to be
+inferred. A **planned** tool is a roadmap entry: in the catalogue, offered to
+nobody, and unreachable however the switches are set — so its switches are
+replaced by a note, which is what stops somebody toggling them and wondering why
+nothing changed. A **deferred** tool is live but kept out of the prompt until the
+model searches for it: with ninety-odd tools, sending them all would cost tokens
+on every "hi" and, worse, cost attention. The header therefore counts what the
+model is actually carrying — so many in the prompt, so many a search away —
+because that number explains more about a given answer than the total does.
+
+### Voice
+
+**Heard in the browser, spoken by the server**, and the asymmetry is the
+backend's decision rather than an accident of what was easy.
+
+Listening is the browser's. There is no speech-to-text endpoint, nothing from
+the microphone is uploaded or stored, and the assistant receives exactly the
+text a person would have typed. `SpeechRecognition` is a Chrome, Edge and
+Safari feature that **Firefox does not ship**, so every screen has to work with
+the microphone missing — the hands-free button is hidden rather than broken
+where it is.
+
+Speaking is the server's. Answers are read by an OpenAI speech model through
+`POST /assistant/speech`, steered by a voice and a sentence of direction a super
+admin sets under [the voice panel](src/app/(app)/admin/assistant/page.tsx). The
+backend spells out why it is not `speechSynthesis`: the built-in voices are
+whatever the operating system ships, they differ on every machine, and on most
+of them the reading is flat enough that people stop pressing the button. This
+sounds the same for everyone.
+
+Three consequences the UI has to carry, all in [speech.ts](src/lib/speech.ts):
+
+- **It is fetched a sentence at a time**, with the next requested while the
+  current one plays. Generating a whole paragraph before any sound arrives feels
+  broken even when it is quick; a short first clip gets a voice into the room and
+  the rest arrives under cover of playback.
+- **The browser voice survives only as a fallback** — the voice switched off, no
+  API key, a laptop with no connection. A worse voice beats silence. It is never
+  used for a *sample*, where the whole question is how one particular voice
+  sounds, and answering that with a different one answers nothing.
+- **It is billed per character**, unlike the browser's, which was free and local.
+  So reading an answer in the chat is a button on that answer, not something that
+  happens on its own. The hands-free screen is where speaking is the default,
+  because there it is the entire point.
+
+Two questions the chat asks separately, because they now have different answers:
+talking to it needs a microphone and so is unavailable in Firefox, while hearing
+it back needs nothing of the browser and is offered wherever the voice is on.
+
+The voices are **unlabelled on purpose** in the admin panel. How one sounds is
+not a judgement anybody should make from a name, and the backend says exactly
+that where it lists them — so each has a play button and they all say the same
+sentence, which is the only way to choose. Sampling a named voice is a super
+admin power that the speech endpoint enforces itself.
+
+The [voice screen](src/components/assistant/VoiceOverlay.tsx) is a **loop, not a
+mode**, which is the difference between a voice assistant and a dictation box:
+listen, send at the natural end of the utterance, read the answer back, listen
+again. Nobody taps between turns, because a hands-free interface that needs a
+hand is not one. Three things break the loop and nothing else does — the person
+pausing it, a write that needs approving, or an error.
+
+Two details there are load-bearing:
+
+- **It stops listening while it talks.** Without that the spoken answer returns
+  through the microphone and the assistant answers itself, which is the
+  characteristic failure of a naive build of this.
+- **A spoken "yes" can approve a write, and an unclear answer cannot.**
+  `yesOrNo` returns null for anything ambiguous and the card stays up. The lists
+  are short and matched on whole words, so "now", "nothing" and "yesterday" are
+  none of them an answer — a misheard approval is the one mistake on that screen
+  that cannot be taken back.
+
+The [orb](src/components/assistant/Orb.tsx) is a canvas rather than decoration.
+A voice interface has no cursor and no button being pressed, so how it moves is
+the only thing saying the machine is hearing you — it is driven by the real
+microphone level at sixty frames a second, which is also why it is not React.
+It draws in the app's own accent → second ramp, read from the CSS variables, so
+it follows the palette and the mode like everything else. Reduced motion stops
+the idle wobble and the rotation but **not** the response to the microphone,
+because that part is information.
+
+### The spoken conversation
+
+There are **two spoken modes and they are different arrangements**, not two
+settings for one feature. Which one the Talk button opens depends on what a
+super admin has switched on.
+
+*Reading an answer aloud* is this app's loop, described above: the browser
+transcribes, the text chat answers, a speech model reads it back. Three of our
+turns per exchange, and every one of them passes the same checks a typed turn
+does.
+
+*A spoken conversation* is **OpenAI's** loop. The browser opens a WebRTC
+connection straight to them, streams the microphone into it, and hears speech
+back with nothing of ours in between. That is what lets somebody interrupt it
+mid-sentence and what makes it feel like a conversation rather than a
+walkie-talkie. It lives in [realtime.ts](src/lib/realtime.ts) and
+[its own screen](src/components/assistant/RealtimeOverlay.tsx), separate from
+the dictation screen because almost nothing about the loop is shared.
+
+Two rules keep it inside the same access model as everything else, and the
+frontend enforces **neither** of them, which is the point:
+
+- **The session is furnished on the server.** Model, voice, instructions and the
+  tool list are all fixed when the ephemeral token is minted, so the browser
+  receives a key to a room it did not decorate. The client sends exactly one
+  `session.update`, asking only that what the person says be transcribed so the
+  screen can show it — it adds no tool and changes no instruction, and it must
+  stay that way. A client that could redefine its own session would make the
+  whole arrangement theatre.
+- **Tools never execute in the browser.** A call from the model is relayed to
+  `/assistant/realtime/call`, which resolves that person's policy again and runs
+  it through the same route as the text chat with their own session cookie. The
+  browser learns that a tool is called something; it never learns where it lives.
+
+**Confirmation is genuinely weaker here, and both the code and the screen say
+so.** In the chat, a write that needs approving parks the run and nothing
+happens until somebody answers. In a spoken conversation the server refuses the
+write once and tells the model to ask out loud; the model asks, hears an answer,
+and calls again — and it is the client that marks the second call confirmed. The
+judgement of "they said yes" is the model's. That is why
+`realtime_writes_enabled` is its own switch, off by default, and why a waiting
+write is put **on screen** as well as spoken: saying yes is the ordinary way
+through, but somebody should be able to see what was asked, in full, and refuse
+it without having to out-talk it.
+
+Three consequences worth knowing when reading the code:
+
+- The card is cleared **by tool, not by call id**. The retry after somebody says
+  yes is a new call with a new id, and matching on the id left the card on
+  screen for the rest of the conversation, asking about something that had
+  already happened.
+- Everything the connection owns is torn down together. A half-closed peer
+  connection keeps the microphone light on, which is the one bug in that file
+  somebody would notice from across the room.
+- Its cost **does not appear on the usage screen**. OpenAI bills a realtime
+  session directly and does not report usage back, so the run exists for the
+  audit trail but its tokens and cost do not.
+
+`/assistant/voices` serves the realtime model list alongside the speech ones, so
+the admin screen keeps no copy of its own to fall out of step.
+
+### Where the answers are rendered
+
+The model writes markdown — it is told to prefer short lists — so
+[Markdown.tsx](src/components/assistant/Markdown.tsx) renders the grammar it
+actually produces: paragraphs, bullets, numbered lists, bold, inline code and
+fences. It is forty lines rather than a dependency, and **it never produces
+HTML**: every branch returns React elements, so a tool result echoing markup back
+through an answer is text and can never be anything else. Unsupported syntax is
+left as the characters that were written.
+
+### Navigation
+
+`/assistant` is on the rail for **everybody**, and that is deliberate. Its
+catalogue entry on the backend says in so many words that it is listed "for
+navigation" and that who may use it is decided by the assistant's own access
+rules, which a super admin sets, not by a team grant — so gating the link on a
+grant would gate it on the one thing the backend says does not gate it. The
+screen asks `/assistant/status` instead, which answers with a sentence saying
+why whenever the answer is no: switched off, not released yet, blocked, or over
+one of the caps. Each of those is shown as written.
+
+Two of the five admin screens are on the rail; all five carry
+[a strip](src/components/assistant/AdminNav.tsx) linking the others. Five
+near-identical rail rows would crowd out everything else an administrator does.
 
 ## Widgets
 

@@ -28,6 +28,7 @@ import {
   Scale,
   Settings,
   Sliders,
+  Sparkles,
   Star,
   Tag,
   Trophy,
@@ -100,6 +101,18 @@ export function buildNav(session: Session): Nav {
   if (can("teams")) {
     primary.push({ label: "Teams", href: "/teams", icon: Users, match: "/teams" });
   }
+  // The assistant's catalogue entry says in so many words that it is listed
+  // "for navigation" and that who may use it is decided by its own access
+  // rules, which a super admin sets — not by a team grant. So the link is shown
+  // to everybody and the screen behind it asks `/assistant/status`, which
+  // answers with a sentence saying why when the answer is no. Hiding it on a
+  // grant would be gating it on the one thing the backend says does not gate it.
+  primary.push({
+    label: "Assistant",
+    href: "/assistant",
+    icon: Sparkles,
+    match: "/assistant",
+  });
 
   const more: NavGroup[] = [];
 
@@ -257,6 +270,27 @@ export function buildNav(session: Session): Nav {
       match: "/admin/templates",
       badge: "admin",
     });
+    // The assistant's own administration. Two entries rather than the
+    // catalogue's five: the other three are one click away through the strip
+    // those screens share, and five near-identical rows would crowd out every
+    // other thing an administrator does from the rail.
+    //
+    // Deliberately no `match` on the first. As a prefix it would swallow the
+    // whole subtree and light both rows at once — the same mistake the roles
+    // entries above already carry a note about.
+    admin.push({
+      label: "Assistant settings",
+      href: "/admin/assistant",
+      icon: Sparkles,
+      badge: "admin",
+    });
+    admin.push({
+      label: "Assistant usage",
+      href: "/admin/assistant/analytics",
+      icon: Trophy,
+      match: "/admin/assistant/analytics",
+      badge: "admin",
+    });
   }
   if (admin.length) more.push({ label: "Administration", items: admin });
 
@@ -304,6 +338,12 @@ const STATIC_LABELS: Record<string, string> = {
   "/admin/roles": "Roles",
   "/admin/roles/assignments": "Who holds what",
   "/admin/access": "Team access",
+  "/assistant": "Assistant",
+  "/admin/assistant": "Assistant settings",
+  "/admin/assistant/permissions": "Assistant permissions",
+  "/admin/assistant/access": "Assistant access",
+  "/admin/assistant/runs": "Assistant runs",
+  "/admin/assistant/analytics": "Assistant usage",
   "/settings": "Settings",
   "/assignment/labels": "Labels",
   "/assignment/policy": "Assignment policy",

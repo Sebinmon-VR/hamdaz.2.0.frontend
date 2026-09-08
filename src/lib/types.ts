@@ -2204,3 +2204,471 @@ export interface MeetingPage {
   limit: number;
   meetings: MeetingOut[];
 }
+
+// ── the assistant ──────────────────────────────────────────────────────
+
+/**
+ * Transcribed from `app/assistant/schemas.py`.
+ *
+ * Two halves, and the split is the backend's own: the chat is open to any
+ * signed-in person and refuses on its own terms, while everything under
+ * `/assistant/admin` is **super admin only** — deliberately narrower than the
+ * admin role used elsewhere, because deciding what an assistant may do on
+ * everybody's behalf is a different question from running a team.
+ */
+
+export type ToolKind = "read" | "write";
+
+export interface ToolCapabilityOut {
+  key: string;
+  label: string;
+  kind: ToolKind;
+  requires_confirmation: boolean;
+}
+
+export interface ModuleCapabilityOut {
+  key: string;
+  name: string;
+  tools: ToolCapabilityOut[];
+}
+
+/**
+ * Why the assistant is not available, when it is not.
+ *
+ * Each of these has its own sentence from the backend, written for a person to
+ * read — so `reason` is shown verbatim and the code only decides which shape of
+ * empty state to draw around it.
+ */
+export type AdmissionCode =
+  | "disabled"
+  | "blocked"
+  | "not_released"
+  | "rate_limited"
+  | "cost_cap_user"
+  | "cost_cap_total";
+
+/** What the frontend asks before showing the chat at all. */
+export interface AssistantStatusOut {
+  enabled: boolean;
+  admitted: boolean;
+  code: AdmissionCode | string | null;
+  reason: string | null;
+  /** Null unless admitted. */
+  model: string | null;
+  voice_enabled: boolean;
+  /** The configured voice. Null while the voice is switched off. */
+  voice: string | null;
+  /**
+   * Whether a spoken conversation can be opened.
+   *
+   * Its own switch, separate from `voice_enabled`, because they are different
+   * arrangements: read-aloud is this app's loop, and realtime is OpenAI's.
+   */
+  realtime_enabled: boolean;
+  /** What this person's turn would actually be given — drives the suggestions. */
+  modules: ModuleCapabilityOut[];
+}
+
+export interface ConversationOut {
+  id: string;
+  title: string | null;
+  created_at: string;
+  last_message_at: string | null;
+}
+
+export interface AssistantMessageOut {
+  id: string;
+  run_id: string | null;
+  seq: number;
+  role: string;
+  content: string;
+  /** One entry per tool the turn used. Null on a turn that used none. */
+  tool_calls: { tool_key?: string; ok?: boolean }[] | null;
+  created_at: string;
+}
+
+/** One write the model asked for that policy says a person must approve. */
+export interface PendingActionOut {
+  call_id: string;
+  tool_key: string;
+  label: string;
+  arguments: Record<string, unknown>;
+  warning: string | null;
+}
+
+export interface PendingOut {
+  run_id: string;
+  actions: PendingActionOut[];
+}
+
+export interface ConversationDetailOut extends ConversationOut {
+  messages: AssistantMessageOut[];
+  /** Set when the last turn stopped to ask before a write. */
+  pending: PendingOut | null;
+}
+
+export type RunStatus =
+  | "running"
+  | "awaiting_confirmation"
+  | "completed"
+  | "failed"
+  | "blocked"
+  | "cancelled";
+
+export interface AssistantRunOut {
+  id: string;
+  conversation_id: string;
+  user_id: string;
+  user_email: string;
+  user_name: string;
+  status: RunStatus | string;
+  model_key: string;
+  reasoning_effort: string;
+  started_at: string;
+  finished_at: string | null;
+  user_text: string;
+  answer_text: string | null;
+  error: string | null;
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
+  reasoning_tokens: number;
+  /** A decimal string — the backend prices in Numeric, so it is never a float. */
+  cost_usd: string;
+  tool_calls: number;
+  rounds: number;
+  cancel_requested: boolean;
+}
+
+/** Everything the loop did, in order. The audit trail behind one turn. */
+export interface RunEventOut {
+  seq: number;
+  kind: string;
+  tool_key: string | null;
+  payload: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface RunDetailOut extends AssistantRunOut {
+  events: RunEventOut[];
+  pending: PendingActionOut[] | null;
+}
+
+export interface RunPage {
+  runs: AssistantRunOut[];
+  total: number;
+}
+
+/* ── administration ──────────────────────────────────────────────────── */
+
+export type AudienceMode = "everyone" | "allow_list";
+
+export interface AssistantSettingsOut {
+  enabled: boolean;
+  model_key: string;
+  reasoning_effort: string;
+  max_tool_rounds: number;
+  max_output_tokens: number;
+  history_window: number;
+  turns_per_user_per_hour: number;
+  /** Decimal strings. Null means no cap. */
+  daily_cost_cap_user_usd: string | null;
+  daily_cost_cap_total_usd: string | null;
+  audience_mode: AudienceMode;
+  confirm_writes_default: boolean;
+  voice_enabled: boolean;
+  /** Whether a spoken conversation may be opened at all. Off by default. */
+  realtime_enabled: boolean;
+  realtime_model: string;
+  /**
+   * Whether the assistant may write during a spoken conversation.
+   *
+   * Its own switch, and off by default, for a stated reason: in the text chat
+   * the server parks the run and nothing happens until a person answers, while
+   * in a spoken conversation it is the *client* that asks. That is a genuinely
+   * weaker guarantee, and an administrator has to accept it deliberately.
+   */
+  realtime_writes_enabled: boolean;
+  /** Only gpt-4o-mini-tts acts on voice_instructions; the tts-1 pair ignore it. */
+  voice_model: string;
+  voice: string;
+  /** How it should sound. Null means the shipped wording is used. */
+  voice_instructions: string | null;
+  extra_instructions: string | null;
+  updated_by_id: string | null;
+  updated_at: string;
+  /** Whether an OpenAI key is set on the server. Not editable here. */
+  openai_configured: boolean;
+}
+
+/** Only the fields sent change. Null on a cap removes it. */
+export interface AssistantSettingsIn {
+  enabled?: boolean;
+  model_key?: string;
+  reasoning_effort?: string;
+  max_tool_rounds?: number;
+  max_output_tokens?: number;
+  history_window?: number;
+  turns_per_user_per_hour?: number;
+  daily_cost_cap_user_usd?: string | null;
+  daily_cost_cap_total_usd?: string | null;
+  audience_mode?: AudienceMode;
+  confirm_writes_default?: boolean;
+  voice_enabled?: boolean;
+  realtime_enabled?: boolean;
+  realtime_model?: string;
+  realtime_writes_enabled?: boolean;
+  voice_model?: string;
+  voice?: string;
+  /** Null or blank restores the shipped wording rather than removing steering. */
+  voice_instructions?: string | null;
+  extra_instructions?: string | null;
+}
+
+/** One of OpenAI's voices, as offered by GET /assistant/voices. */
+export interface VoiceOut {
+  key: string;
+  /** True for the one currently configured. */
+  active: boolean;
+}
+
+/** GET /assistant/voices — everything an admin needs to offer a picker. */
+export interface VoiceOptionsOut {
+  enabled: boolean;
+  model: string;
+  voice: string;
+  /** The steering actually in force, shipped default included. */
+  instructions: string;
+  /** Longest text POST /assistant/speech will accept in one request. */
+  max_chars: number;
+  voices: VoiceOut[];
+  speech_models: string[];
+  /** Served so the admin screen does not keep its own copy of this list. */
+  realtime_models: string[];
+  realtime_model: string;
+}
+
+/** POST /assistant/speech — returns audio/mpeg, not JSON. */
+export interface SpeakIn {
+  text: string;
+  /** Super admin only, for sampling. Others get the configured voice. */
+  voice?: string | null;
+}
+
+export interface AssistantModelOut {
+  key: string;
+  name: string;
+  description: string;
+  /** USD per one million tokens, as decimal strings. */
+  input_price: string;
+  cached_input_price: string;
+  output_price: string;
+  enabled: boolean;
+  /** The one the settings currently point at. */
+  active: boolean;
+}
+
+export type Gate = "open" | "access" | "admin";
+
+export interface ToolPolicyOut {
+  tool_key: string;
+  label: string;
+  kind: ToolKind;
+  method: string;
+  path: string;
+  description: string;
+  warning: string | null;
+  /**
+   * `planned` is a roadmap entry: in the catalogue, offered to nobody.
+   *
+   * It cannot be reached however the policy rows are set — the resolver builds
+   * from the live tools alone — which is the point of the distinction rather
+   * than a side effect of it.
+   */
+  status: "live" | "planned";
+  /**
+   * Kept out of the prompt until the model searches for it.
+   *
+   * The full catalogue is tens of kilobytes of JSON schema. Sending all of it
+   * would cost tokens on every "hi" and, worse, cost attention: a long list is
+   * one the model reads less carefully, and tool choice gets worse as it grows.
+   * So the everyday tools are always present and the rest are a search away.
+   */
+  deferred: boolean;
+  enabled: boolean;
+  confirm_override: boolean | null;
+  allowed_roles: string[] | null;
+  /** After the module policy and the global default are folded in. */
+  effective_enabled: boolean;
+  effective_confirm: boolean;
+  effective_roles: string[] | null;
+}
+
+export interface ModulePolicyOut {
+  module_key: string;
+  name: string;
+  gate: Gate;
+  description: string;
+  read_enabled: boolean;
+  write_enabled: boolean;
+  confirm_writes: boolean | null;
+  allowed_roles: string[] | null;
+  effective_confirm: boolean;
+  tools: ToolPolicyOut[];
+}
+
+export type RuleSubject = "user" | "team" | "role";
+export type RuleEffect = "allow" | "block";
+
+export interface AccessRuleOut {
+  id: string;
+  subject_type: string;
+  subject_id: string;
+  subject_label: string;
+  effect: string;
+  enabled: boolean;
+  note: string | null;
+  created_by_id: string | null;
+  created_at: string;
+}
+
+export interface AnalyticsBucket {
+  key: string;
+  label: string;
+  runs: number;
+  tool_calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: string;
+}
+
+export interface AssistantAnalyticsTotals {
+  runs: number;
+  completed: number;
+  failed: number;
+  blocked: number;
+  cancelled: number;
+  open: number;
+  people: number;
+  tool_calls: number;
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
+  reasoning_tokens: number;
+  cost_usd: string;
+  confirmations_requested: number;
+  confirmations_approved: number;
+  confirmations_declined: number;
+  refused_by_policy: number;
+}
+
+export interface AssistantAnalyticsOut {
+  since: string;
+  until: string;
+  totals: AssistantAnalyticsTotals;
+  by_day: AnalyticsBucket[];
+  by_user: AnalyticsBucket[];
+  /** A person on two teams counts for both, so team rows out-total the whole. */
+  by_team: AnalyticsBucket[];
+  by_model: AnalyticsBucket[];
+  by_tool: AnalyticsBucket[];
+}
+
+/** What exists before any policy applies, for the permissions screen. */
+export interface CatalogueOut {
+  modules: {
+    key: string;
+    name: string;
+    gate: Gate;
+    description: string;
+    tools: {
+      key: string;
+      label: string;
+      kind: ToolKind;
+      method: string;
+      path: string;
+      description: string;
+      warning: string | null;
+    }[];
+  }[];
+}
+
+/* ── the spoken conversation ─────────────────────────────────────────── */
+
+/**
+ * Realtime is a different arrangement from reading an answer aloud, and the
+ * difference decides how this is typed.
+ *
+ * Read-aloud is this app's loop: the chat answers in text, then a speech model
+ * reads it out. Realtime is **OpenAI's** loop — the browser streams microphone
+ * audio straight to them over WebRTC and hears speech back, with no turn of
+ * ours in between. That is what makes it feel like a conversation and what
+ * makes it the more delicate thing to secure.
+ *
+ * Two rules keep it inside the same access model as everything else, and both
+ * are enforced on the server rather than here:
+ *
+ * 1. The tool list, the instructions, the model and the voice are **fixed when
+ *    the token is minted**. A tampered client cannot add a tool, because the
+ *    session it connects to was already furnished.
+ * 2. Tools **never execute in the browser**. Every call comes back to
+ *    `/assistant/realtime/call`, where policy is resolved again and the call
+ *    travels the same route as the text chat with the person's own session.
+ */
+
+/** One tool as the browser needs to know it — to name it, not to run it. */
+export interface RealtimeToolOut {
+  /** The function name the model will use. */
+  name: string;
+  /** The key to post back, and what the trace displays. */
+  tool_key: string;
+  label: string;
+  kind: ToolKind;
+  requires_confirmation: boolean;
+  warning: string | null;
+}
+
+/** Everything a browser needs to open one spoken conversation. */
+export interface RealtimeSessionOut {
+  /**
+   * The ephemeral client secret. Short-lived and single-purpose: it is worth
+   * two minutes and its only job is to open one connection, immediately.
+   */
+  client_secret: string;
+  /** Epoch **seconds**, not milliseconds. Past this the secret opens nothing. */
+  expires_at: number;
+  model: string;
+  voice: string;
+  /** The run this conversation is recorded against, and what `end` closes. */
+  run_id: string;
+  /** What the session was minted with, so the client can render the calls. */
+  tools: RealtimeToolOut[];
+  writes_enabled: boolean;
+}
+
+/**
+ * A tool call relayed from the model.
+ *
+ * The client relays what was asked for; it does not decide what may run. A name
+ * that is not on this person's list is refused however convincingly the model
+ * asked for it.
+ */
+export interface RealtimeCallIn {
+  run_id: string;
+  /** The function name the model used, or the tool key. Either is accepted. */
+  name: string;
+  arguments: Record<string, unknown>;
+  /** Set only after the person has been asked and has said yes. */
+  confirmed?: boolean;
+}
+
+export interface RealtimeCallOut {
+  ok: boolean;
+  status: number;
+  /** The tool result as JSON text, to hand back to the model verbatim. */
+  output: string;
+  /** True when nothing ran because the person has not been asked yet. */
+  requires_confirmation: boolean;
+  label: string | null;
+  warning: string | null;
+}
