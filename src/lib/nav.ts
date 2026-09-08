@@ -24,6 +24,7 @@ import {
   KeyRound,
   LayoutList,
   ListChecks,
+  NotebookPen,
   ReceiptText,
   Scale,
   Settings,
@@ -100,6 +101,20 @@ export function buildNav(session: Session): Nav {
   }
   if (can("teams")) {
     primary.push({ label: "Teams", href: "/teams", icon: Users, match: "/teams" });
+  }
+  // Reports earns a pill rather than a menu entry because filing one is a daily
+  // act for everybody who has the module, not an occasional errand — and a
+  // daily act two clicks deep is one people stop doing. The reading side of it
+  // (the overview, another team's) hangs off this screen; the module grant is
+  // the only gate, since who may read *whose* is decided per report by the
+  // backend and cannot be answered here.
+  if (can("reports")) {
+    primary.push({
+      label: "Reports",
+      href: "/reports",
+      icon: NotebookPen,
+      match: "/reports",
+    });
   }
   // The assistant's catalogue entry says in so many words that it is listed
   // "for navigation" and that who may use it is decided by its own access
@@ -270,6 +285,17 @@ export function buildNav(session: Session): Nav {
       match: "/admin/templates",
       badge: "admin",
     });
+    // Who a filed report is mailed to, which template each team files, and the
+    // log of what actually went out. Not gated on the `reports` module grant:
+    // this decides the rule for every team, so it belongs to the person who
+    // administers the company rather than to anybody who happens to file one.
+    admin.push({
+      label: "Reports",
+      href: "/admin/reports",
+      icon: NotebookPen,
+      match: "/admin/reports",
+      badge: "admin",
+    });
     // The assistant's own administration. Two entries rather than the
     // catalogue's five: the other three are one click away through the strip
     // those screens share, and five near-identical rows would crowd out every
@@ -325,6 +351,9 @@ const STATIC_LABELS: Record<string, string> = {
   "/leave/request": "Request leave",
   "/leave/calendar": "Who is off",
   "/meetings": "Meetings",
+  "/reports": "Reports",
+  "/reports/new": "New report",
+  "/reports/overview": "Reporting overview",
   "/leave/requests": "Leave requests",
   "/leave/settings": "Leave rules",
   "/proposals/my-tasks": "My proposals",
@@ -333,6 +362,7 @@ const STATIC_LABELS: Record<string, string> = {
   "/quote-requests/new": "New quote",
   "/quote-requests/queue": "Ready for Zoho",
   "/admin/templates": "Form templates",
+  "/admin/reports": "Report settings",
   "/comparisons": "Comparisons",
   "/comparisons/new": "New comparison",
   "/admin/roles": "Roles",
@@ -370,6 +400,7 @@ export function labelFor(pathname: string): string {
   // An id is not a name, but it is at least unique, and the screen behind it
   // replaces this the moment it knows better.
   if (parts[0] === "quotes") return `Quote ${short(parts[1])}`;
+  if (parts[0] === "reports") return `Report ${short(parts[1])}`;
   if (parts[0] === "comparisons") return `Comparison ${short(parts[1])}`;
   if (parts[0] === "directory") return `Person ${short(parts[1])}`;
   if (parts[0] === "admin" && parts[1] === "users") return `User ${short(parts[2])}`;

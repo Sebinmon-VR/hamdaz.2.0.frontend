@@ -14,6 +14,7 @@ import type {
   AssistantModelOut,
   AssistantSettingsIn,
   AssistantSettingsOut,
+  AssistantVoiceModelOut,
 } from "@/lib/types";
 import { Badge, PageHead, Panel, PanelHead } from "@/components/ui/primitives";
 import { Button, Field, Input, Select, Textarea, Toggle } from "@/components/ui/controls";
@@ -41,6 +42,13 @@ export default function AssistantSettingsPage() {
     revalidateOnFocus: false,
   });
   const models = useSWR<AssistantModelOut[]>("/assistant/admin/models", {
+    revalidateOnFocus: false,
+  });
+  // Its own list, because the voice is not billed in the same unit as the chat:
+  // speech per character of text, a spoken conversation per token with audio
+  // dearer than text several times over. One list showing both under one set of
+  // column headings would be a list where most of the numbers meant nothing.
+  const voiceModels = useSWR<AssistantVoiceModelOut[]>("/assistant/admin/voice-models", {
     revalidateOnFocus: false,
   });
 
@@ -76,9 +84,11 @@ export default function AssistantSettingsPage() {
         <Editor
           settings={settings.data}
           models={models.data ?? []}
+          voiceModels={voiceModels.data ?? []}
           onSaved={() => {
             void settings.mutate();
             void models.mutate();
+            void voiceModels.mutate();
           }}
         />
       )}
@@ -89,10 +99,12 @@ export default function AssistantSettingsPage() {
 function Editor({
   settings,
   models,
+  voiceModels,
   onSaved,
 }: {
   settings: AssistantSettingsOut;
   models: AssistantModelOut[];
+  voiceModels: AssistantVoiceModelOut[];
   onSaved: () => void;
 }) {
   // The draft is seeded once per server payload. Re-seeding on every render
@@ -206,9 +218,9 @@ function Editor({
             </div>
           </Panel>
 
-          <VoicePanel draft={draft} set={set} />
+          <VoicePanel draft={draft} set={set} voiceModels={voiceModels} />
 
-          <RealtimePanel draft={draft} set={set} />
+          <RealtimePanel draft={draft} set={set} voiceModels={voiceModels} />
 
           {/* ── what it may do without asking ────────────────────── */}
           <Panel className="p-5">
@@ -346,7 +358,10 @@ function Editor({
                   onChange={(event) => set("turns_per_user_per_hour", Number(event.target.value))}
                 />
               </Field>
-              <Field label="Daily cap, one person" hint="USD. Empty for none.">
+              {/* Both caps now count the voice as well as the turns. Worth
+                  saying: reading long answers aloud all afternoon is real money,
+                  and until it was priced it was money no cap could see. */}
+              <Field label="Daily cap, one person" hint="USD across turns and reading aloud. Empty for none.">
                 <Input
                   inputMode="decimal"
                   value={draft.daily_cost_cap_user_usd ?? ""}
@@ -354,7 +369,7 @@ function Editor({
                   placeholder="No cap"
                 />
               </Field>
-              <Field label="Daily cap, everyone" hint="USD. Empty for none.">
+              <Field label="Daily cap, everyone" hint="USD across turns and reading aloud. Empty for none.">
                 <Input
                   inputMode="decimal"
                   value={draft.daily_cost_cap_total_usd ?? ""}
@@ -445,11 +460,14 @@ function Editor({
 function RealtimePanel({
   draft,
   set,
+  voiceModels,
 }: {
   draft: AssistantSettingsOut;
   set: <K extends keyof AssistantSettingsOut>(key: K, value: AssistantSettingsOut[K]) => void;
+  voiceModels: AssistantVoiceModelOut[];
 }) {
   const options = useVoiceOptions();
+  const priced = voiceModels.find((model) => model.key === draft.realtime_model);
   // Served by `/assistant/voices` now, so this screen no longer keeps its own
   // copy to fall out of step. A configured model missing from the list is still
   // shown rather than silently dropped, so a newer backend does not read as a
@@ -471,7 +489,7 @@ function RealtimePanel({
           checked={draft.realtime_enabled}
           onChange={(value) => set("realtime_enabled", value)}
           label="People can talk to it"
-          hint="Opens a live audio connection from the browser to OpenAI. It can be interrupted mid-sentence and answers without waiting for a round trip through this app. Its cost is not reported back to us, so it does not appear on the usage screen."
+          hint="Opens a live audio connection from the browser to OpenAI. It can be interrupted mid-sentence and answers without waiting for a round trip through this app. OpenAI bills the session directly, so what it cost is whatever the browser reported back as it closed."
         />
 
         {draft.realtime_enabled && (
@@ -484,13 +502,36 @@ function RealtimePanel({
                 value={draft.realtime_model}
                 onChange={(event) => set("realtime_model", event.target.value)}
               >
-                {models.map((model) => (
-                  <option key={model} value={model}>
-                    {model}
-                  </option>
-                ))}
+                {models.map((model) => {
+                  const named = voiceModels.find((entry) => entry.key === model);
+                  return (
+                    <option key={model} value={model} disabled={named ? !named.enabled : false}>
+                      {named ? named.name : model}
+                      {named && !named.enabled ? " — disabled" : ""}
+                    </option>
+                  );
+                })}
               </Select>
             </Field>
+
+            {priced && (
+              <div className="rounded-[13px] bg-panel-2 p-3.5">
+                <p className="text-[12px] leading-relaxed text-ink-3">{priced.description}</p>
+                <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <Price label="Audio in" value={priced.audio_input_price} />
+                  <Price label="Audio out" value={priced.audio_output_price} />
+                  <Price label="Text in" value={priced.text_input_price} />
+                  <Price label="Text out" value={priced.text_output_price} />
+                </dl>
+                <p className="mt-2 text-[10.5px] leading-relaxed text-ink-4">
+                  USD per million tokens. Audio is the dear one by an order of magnitude,
+                  and a spoken conversation is nearly all audio — a minute of talking costs
+                  what a long typed answer does. What a session used is reported by the
+                  browser when it closes, so a conversation whose tab was shut mid-sentence
+                  is missing from the usage screen rather than estimated.
+                </p>
+              </div>
+            )}
 
             <p className="text-[11.5px] leading-relaxed text-ink-4">
               It speaks in the voice chosen above. The tool list and the instructions are
@@ -556,11 +597,14 @@ const VOICE_SAMPLE =
 function VoicePanel({
   draft,
   set,
+  voiceModels,
 }: {
   draft: AssistantSettingsOut;
   set: <K extends keyof AssistantSettingsOut>(key: K, value: AssistantSettingsOut[K]) => void;
+  voiceModels: AssistantVoiceModelOut[];
 }) {
   const options = useVoiceOptions();
+  const priced = voiceModels.find((model) => model.key === draft.voice_model);
   const speaker = useSpeaker();
   const [sampling, setSampling] = useState<string | null>(null);
 
@@ -651,21 +695,52 @@ function VoicePanel({
           {speaker.error && <p className="mt-2 text-[11.5px] text-danger">{speaker.error}</p>}
         </div>
 
-        <Field
-          label="Speech model"
-          hint="Only gpt-4o-mini-tts acts on the direction below. The tts-1 pair ignore it rather than failing, and cost less."
-        >
-          <Select
-            value={draft.voice_model}
-            onChange={(event) => set("voice_model", event.target.value)}
+        <div>
+          <Field
+            label="Speech model"
+            hint="Only gpt-4o-mini-tts acts on the direction below. The tts-1 pair ignore it rather than failing, and cost less."
           >
-            {(options.data?.speech_models ?? [draft.voice_model]).map((model) => (
-              <option key={model} value={model}>
-                {model}
-              </option>
-            ))}
-          </Select>
-        </Field>
+            <Select
+              value={draft.voice_model}
+              onChange={(event) => set("voice_model", event.target.value)}
+            >
+              {(options.data?.speech_models ?? [draft.voice_model]).map((model) => {
+                const named = voiceModels.find((entry) => entry.key === model);
+                return (
+                  <option key={model} value={model} disabled={named ? !named.enabled : false}>
+                    {named ? named.name : model}
+                    {named && !named.enabled ? " — disabled" : ""}
+                  </option>
+                );
+              })}
+            </Select>
+          </Field>
+
+          {priced && (
+            <div className="mt-3 rounded-[13px] bg-panel-2 p-3.5">
+              <dl className="grid grid-cols-2 gap-2">
+                <Price label="Per million characters" value={priced.char_price} />
+                <div>
+                  <dt className="micro text-ink-4">A typical answer</dt>
+                  {/* Per million is the price OpenAI quotes and the wrong unit for
+                      judging it: nobody has an intuition for a million characters.
+                      A page of text is the thing being paid for, so it is priced
+                      here too — that is the number that decides whether a speaker
+                      button on every answer is affordable. */}
+                  <dd className="tnum mt-1 text-[12.5px] font-semibold">
+                    ${(Number(priced.char_price) * 0.0012).toFixed(4)}
+                  </dd>
+                </div>
+              </dl>
+              <p className="mt-2 text-[10.5px] leading-relaxed text-ink-4">
+                Charged per character of the text sent, not per token — and counted before
+                the audio is generated, so a clip somebody stops halfway through is still
+                billed in full. Roughly 1,200 characters is taken as an answer here. It
+                shows on the usage screen beside what the turns cost.
+              </p>
+            </div>
+          )}
+        </div>
 
         <Field
           label="How it should sound"

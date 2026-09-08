@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * The thing that says it is listening.
@@ -57,6 +57,43 @@ const GEOMETRY = {
   /** The halo fades to nothing exactly here. */
   HALO: 1,
 };
+
+/**
+ * An orb that fits the window it is drawn in.
+ *
+ * The voice screens are `fixed inset-0` columns: a bar, the orb, the
+ * conversation, and the controls. Only the conversation can give up space, so
+ * on a short window — a laptop with a dock, a phone held sideways — a
+ * fixed-size orb plus the controls came to more than the viewport and the
+ * controls went off the bottom edge, where nothing scrolls to reach them. The
+ * orb is the piece that can afford to be smaller, so it is the piece that
+ * yields.
+ *
+ * Rounded to eight pixels, because the animation lives on the canvas and a
+ * canvas resize restarts it: without the rounding, dragging a window edge would
+ * restart the orb on every pixel of the drag.
+ */
+export function useOrbSize(max = 200): number {
+  const [size, setSize] = useState(max);
+
+  useEffect(() => {
+    const fit = () => {
+      const next = Math.max(
+        88,
+        Math.min(
+          max,
+          Math.round(Math.min(window.innerHeight * 0.22, window.innerWidth * 0.5) / 8) * 8,
+        ),
+      );
+      setSize((current) => (current === next ? current : next));
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [max]);
+
+  return size;
+}
 
 export function Orb({
   state,

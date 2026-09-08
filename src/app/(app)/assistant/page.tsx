@@ -37,6 +37,7 @@ import { Empty, ErrorState, PanelSkeleton, Spinner } from "@/components/ui/feedb
 import { Markdown } from "@/components/assistant/Markdown";
 import { Orb } from "@/components/assistant/Orb";
 import { ToolTrace } from "@/components/assistant/ToolTrace";
+import { TurnArtifacts } from "@/components/assistant/ResultPreview";
 import { ConfirmCard } from "@/components/assistant/ConfirmCard";
 import { VoiceOverlay } from "@/components/assistant/VoiceOverlay";
 import { RealtimeOverlay } from "@/components/assistant/RealtimeOverlay";
@@ -56,7 +57,14 @@ import { RealtimeOverlay } from "@/components/assistant/RealtimeOverlay";
  * **The tool trace.** Every tool call is an HTTP request to the real endpoint
  * carrying the person's own session, so an answer is only as trustworthy as what
  * it was allowed to read. Showing the calls — including the refused ones — is
- * what makes that legible instead of magic.
+ * what makes that legible instead of magic. It runs along one line rather than
+ * down the page: a turn that calls eight tools used to push the answer off the
+ * bottom of the screen before it had finished arriving.
+ *
+ * **What a turn produced, as itself.** A tool that fetched a report puts the
+ * report under the answer rather than leaving the model to describe it. The card
+ * fetches through the reader's own session, so it can never show something the
+ * API would have refused them.
  *
  * **The confirmation card.** A write that policy says must be approved parks the
  * whole run. Nothing has happened when the card appears, and the loop resumes
@@ -477,6 +485,12 @@ function Thread({
                   ) : (
                     busy && <Thinking steps={turn.steps.length} />
                   )}
+
+                  {/* What the turn produced, as itself rather than as a
+                      paragraph about itself. Under the answer, because the
+                      answer is what was asked for and this is what it is
+                      about. */}
+                  <TurnArtifacts steps={turn.steps} />
 
                   {turn.phase === "confirming" && turn.pending && (
                     <ConfirmCard actions={turn.pending.actions} onRespond={(ok) => void respond(ok)} />

@@ -1,10 +1,11 @@
 "use client";
 
 import clsx from "clsx";
-import { useState } from "react";
-import { Check, ChevronRight, Loader2, TriangleAlert } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, Loader2, TriangleAlert, X } from "lucide-react";
 import { humanise } from "@/lib/format";
 import { moduleOf, type ToolStep } from "@/lib/assistant";
+import { ResultPreview } from "@/components/assistant/ResultPreview";
 
 /**
  * What the assistant actually did, while it does it.
@@ -13,110 +14,189 @@ import { moduleOf, type ToolStep } from "@/lib/assistant";
  * that a tool call goes through the real endpoint carrying the person's own
  * session — so "it read your leave balance" and "it was refused a colleague's"
  * are both true things about *their* permissions, and hiding them would leave
- * somebody with an answer and no way to tell which of those produced it.
+ * somebody with an answer and no way to tell which of those produced it. A
+ * refusal is the case worth designing for: the backend returns 403 with a
+ * sentence naming who *is* allowed, and the step stays on screen rather than
+ * disappearing once the answer arrives.
  *
- * A refusal is the case worth designing for. The backend returns 403 with a
- * sentence naming who *is* allowed, the model is told to pass that on, and the
- * step stays on screen rather than disappearing once the answer arrives.
+ * **It is drawn as a flow, along one line, and that is the fix for a real
+ * problem.** These were stacked cards, one under another, and a turn that calls
+ * eight tools — which is ordinary, since searching the catalogue then reading
+ * three modules is four on its own — pushed the answer off the bottom of the
+ * screen before it had finished arriving. Height that grows with the number of
+ * calls is the wrong shape for something that sits *inside* a message.
  *
- * Steps collapse to one line each and open to their arguments and the first 500
- * characters of what came back, which is all the backend keeps.
+ * So: one row, scrolling sideways, following the newest call as it arrives. The
+ * sequence is the thing worth seeing at a glance — what it looked up, in what
+ * order, and where it failed — and a left-to-right chain reads as a sequence in
+ * a way a vertical list of equal cards never did. Detail opens **below** the
+ * rail, one call at a time, in a box with a fixed ceiling. The whole trace is
+ * therefore the same height whether it holds two calls or twenty.
  */
 export function ToolTrace({ steps, className }: { steps: ToolStep[]; className?: string }) {
+  const [open, setOpen] = useState<number | null>(null);
+  const rail = useRef<HTMLDivElement | null>(null);
+
+  // Follow the newest call. Without this the rail sits on the first step while
+  // the work happens off the right-hand edge — which is the same failure as the
+  // stacked version, turned ninety degrees.
+  useEffect(() => {
+    const element = rail.current;
+    if (!element) return;
+    element.scrollTo({ left: element.scrollWidth, behavior: "smooth" });
+  }, [steps.length]);
+
   if (steps.length === 0) return null;
+
+  const selected = open !== null ? steps[open] : undefined;
+
   return (
-    <ul className={clsx("space-y-1", className)}>
-      {steps.map((step, index) => (
-        <li key={`${step.tool_key}-${index}`}>
-          <Step step={step} />
-        </li>
-      ))}
-    </ul>
+    <div className={clsx("min-w-0", className)}>
+      <div
+        ref={rail}
+        className="no-bar flex items-stretch gap-0 overflow-x-auto py-0.5"
+        role="list"
+        aria-label={`${steps.length} tool ${steps.length === 1 ? "call" : "calls"}`}
+      >
+        {steps.map((step, index) => (
+          <div key={`${step.tool_key}-${index}`} role="listitem" className="flex items-center">
+            {index > 0 && <Connector failed={step.ok === false} />}
+            <Node
+              step={step}
+              open={open === index}
+              onToggle={() => setOpen((was) => (was === index ? null : index))}
+            />
+          </div>
+        ))}
+      </div>
+
+      {selected && (
+        <Detail step={selected} onClose={() => setOpen(null)} />
+      )}
+    </div>
   );
 }
 
-function Step({ step }: { step: ToolStep }) {
-  const [open, setOpen] = useState(false);
+/**
+ * The line between two calls.
+ *
+ * Short, and it carries no meaning of its own — the model decides what to call
+ * next as it goes, so this is a sequence and emphatically not a dependency
+ * graph. Drawing it as one, with branches, would be inventing structure that
+ * the run does not have.
+ */
+function Connector({ failed }: { failed: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={clsx("h-px w-3 shrink-0", failed ? "bg-danger/40" : "bg-line")}
+    />
+  );
+}
+
+function Node({
+  step,
+  open,
+  onToggle,
+}: {
+  step: ToolStep;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const running = step.ok === undefined;
   const failed = step.ok === false;
-  const detail = Boolean(step.summary) || hasArguments(step.arguments);
 
   return (
-    <div
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      title={`${step.label} — ${humanise(moduleOf(step.tool_key))}${
+        failed && step.status ? ` · refused ${step.status}` : ""
+      }`}
       className={clsx(
-        "rounded-[11px] transition",
-        failed ? "bg-danger-soft" : "bg-panel-2",
+        "flex max-w-[13rem] shrink-0 items-center gap-2 rounded-[13px] px-3 py-2 text-left transition",
+        failed
+          ? "bg-danger-soft ring-1 ring-danger/30"
+          : running
+            ? "bg-panel-2 ring-1 ring-accent/40"
+            : "bg-panel-2 hover:bg-panel-3",
+        open && "ring-1 ring-accent",
       )}
     >
-      <button
-        type="button"
-        onClick={() => detail && setOpen((was) => !was)}
-        aria-expanded={detail ? open : undefined}
-        className={clsx(
-          "flex w-full items-center gap-2.5 px-3 py-2 text-left",
-          detail ? "cursor-pointer" : "cursor-default",
+      <span className="shrink-0">
+        {running ? (
+          <Loader2 className="size-3.5 animate-spin text-accent-text" />
+        ) : failed ? (
+          <TriangleAlert className="size-3.5 text-danger" strokeWidth={2.2} />
+        ) : (
+          <Check className="size-3.5 text-positive" strokeWidth={2.6} />
         )}
-      >
-        <span className="shrink-0">
-          {running ? (
-            <Loader2 className="size-3.5 animate-spin text-ink-4" />
-          ) : failed ? (
-            <TriangleAlert className="size-3.5 text-danger" strokeWidth={2.2} />
-          ) : (
-            <Check className="size-3.5 text-positive" strokeWidth={2.6} />
-          )}
-        </span>
+      </span>
 
+      <span className="min-w-0">
         <span
           className={clsx(
-            "min-w-0 flex-1 truncate text-[12px]",
+            "block truncate text-[12px] leading-tight",
             failed ? "text-danger" : running ? "text-ink-3" : "text-ink-2",
           )}
         >
           {step.label}
         </span>
+        <span className="micro block truncate text-ink-4">
+          {humanise(moduleOf(step.tool_key))}
+          {failed && step.status ? ` · ${step.status}` : ""}
+          {!failed && step.ms !== undefined ? ` · ${step.ms} ms` : ""}
+        </span>
+      </span>
+    </button>
+  );
+}
 
-        <span className="micro shrink-0 text-ink-4">{humanise(moduleOf(step.tool_key))}</span>
+/**
+ * One call, opened.
+ *
+ * Capped in height and scrolled inside itself, which is the other half of
+ * keeping the trace a fixed size: a tool that returns a page of rows must not
+ * be able to push the answer down any more than twenty tools in a row can.
+ */
+function Detail({ step, onClose }: { step: ToolStep; onClose: () => void }) {
+  const failed = step.ok === false;
+  return (
+    <div className="rise mt-2 overflow-hidden rounded-[15px] bg-panel-2">
+      <div className="flex items-center gap-2.5 px-3.5 pt-3">
+        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">
+          {step.label}
+        </span>
+        <span className="micro shrink-0 text-ink-4">{step.tool_key}</span>
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="grid size-6 shrink-0 place-items-center rounded-full text-ink-4 transition hover:bg-panel-3 hover:text-ink"
+        >
+          <X className="size-3" strokeWidth={2.4} />
+        </button>
+      </div>
 
-        {/* A refused call is the one people need to be able to tell apart at a
-            glance, so its status code is on the closed row rather than inside. */}
-        {failed && step.status ? (
-          <span className="tnum shrink-0 text-[11px] font-semibold text-danger">
-            {step.status}
-          </span>
-        ) : step.ms !== undefined ? (
-          <span className="tnum shrink-0 text-[11px] text-ink-4">{step.ms} ms</span>
-        ) : null}
-
-        {detail && (
-          <ChevronRight
-            className={clsx(
-              "size-3 shrink-0 text-ink-4 transition-transform",
-              open && "rotate-90",
-            )}
-            strokeWidth={2.4}
-          />
+      <div className="no-bar max-h-72 space-y-3 overflow-y-auto px-3.5 pb-3 pt-2.5">
+        {hasArguments(step.arguments) && (
+          <div>
+            <p className="micro mb-1 text-ink-4">Asked for</p>
+            <ArgumentList args={step.arguments ?? {}} />
+          </div>
         )}
-      </button>
 
-      {open && detail && (
-        <div className="space-y-2 px-3 pb-2.5">
-          {hasArguments(step.arguments) && (
-            <div>
-              <p className="micro mb-1 text-ink-4">Asked for</p>
-              <ArgumentList args={step.arguments ?? {}} />
-            </div>
-          )}
-          {step.summary && (
-            <div>
-              <p className="micro mb-1 text-ink-4">Came back</p>
-              <pre className="no-bar max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-[9px] bg-panel px-2.5 py-2 text-[11px] leading-relaxed text-ink-3">
-                {step.summary}
-              </pre>
-            </div>
-          )}
-        </div>
-      )}
+        {step.ok === undefined ? (
+          <p className="text-[11.5px] text-ink-4">Still running.</p>
+        ) : (
+          <div>
+            <p className="micro mb-1 text-ink-4">
+              {failed ? `Refused — ${step.status ?? "no status"}` : "Came back"}
+            </p>
+            <ResultPreview step={step} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

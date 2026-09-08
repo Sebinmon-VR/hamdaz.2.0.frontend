@@ -11,6 +11,7 @@ import {
   GaugeCircle,
   KeyRound,
   ListChecks,
+  NotebookPen,
   Pencil,
   Trash2,
   UserPlus,
@@ -77,6 +78,11 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
   const holds = (key: string) =>
     Boolean(access.data?.modules.some((m) => m.module_key === key));
   const doesProposals = holds("proposals");
+  // Same two questions as proposals: does this team hold the module, and does
+  // the viewer run it. Without oversight the team listing narrows to their own
+  // reports, which is a real page but not one worth a link from here — they
+  // reach those from Reports.
+  const doesReports = holds("reports");
   const showDashboard = session.can("dashboard", "team") && holds("dashboard");
 
   return (
@@ -100,6 +106,11 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
             {oversees && doesProposals && (
               <LinkButton href={`/teams/${slug}/proposals`} icon={ListChecks}>
                 Proposals
+              </LinkButton>
+            )}
+            {oversees && doesReports && (
+              <LinkButton href={`/teams/${slug}/reports`} icon={NotebookPen}>
+                Reports
               </LinkButton>
             )}
             {isAdmin && (

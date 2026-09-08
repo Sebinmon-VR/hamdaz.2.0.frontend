@@ -1,16 +1,22 @@
 "use client";
 
 import clsx from "clsx";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Keyboard, Mic, MicOff, Square, X } from "lucide-react";
 import { useStreamLevel } from "@/lib/speech";
-import { useRealtime, type RealtimePhase, type RealtimeStep } from "@/lib/realtime";
+import {
+  useRealtime,
+  type RealtimeLine,
+  type RealtimePhase,
+  type RealtimeStep,
+} from "@/lib/realtime";
 import type { ToolStep } from "@/lib/assistant";
 import { Badge } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/controls";
-import { Orb, type OrbState } from "@/components/assistant/Orb";
+import { Orb, useOrbSize, type OrbState } from "@/components/assistant/Orb";
 import { ArgumentList, ToolTrace } from "@/components/assistant/ToolTrace";
+import { TurnArtifacts } from "@/components/assistant/ResultPreview";
 
 /**
  * A spoken conversation — the assistant with the screen taken away.
@@ -83,40 +89,77 @@ export function RealtimeOverlay({
   const theirs = useStreamLevel(session.remoteStream, open && speaking);
   const level = speaking ? theirs : mine;
 
+  // The trace and the previews read the same steps, in the chat's shape.
+  const steps = session.steps.map(asToolStep);
+
+  // Sized to the window rather than to the state of the call. It shrank once a
+  // conversation had started, which resized the canvas mid-session and — since
+  // the animation is bound to the canvas — restarted it: the orb blinked out
+  // and swelled again on the first sentence transcribed. What it does yield to
+  // is a short window, which is the case where a fixed orb pushed the microphone
+  // and stop buttons off the bottom edge.
+  const orb = useOrbSize();
+
+  // Following the newest thing said, whatever produced it — a line of speech, a
+  // tool being called, a report arriving. Hooks run before the early return
+  // below, so the effect is declared here and does nothing while closed.
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const tail = session.lines[session.lines.length - 1]?.text;
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element) return;
+    element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
+  }, [session.lines.length, tail, session.steps.length, open]);
+
   if (!open || typeof document === "undefined") return null;
 
-  const caption =
+  // What is happening *now*, which the transcript below cannot say: a write
+  // waiting on an answer, or a tool being read. The tool case matters most —
+  // it is the one wait in a spoken conversation with no sound in it, and some
+  // of these read SharePoint or Zoho live and take seconds, so naming it is the
+  // difference between a slow answer and an apparently broken one.
+  const notice =
     phase === "confirming"
       ? session.pending?.label
         ? `Shall I go ahead with: ${session.pending.label}?`
         : "Waiting on your answer."
-      : // A tool is the one wait with no sound in it, and some of them read
-        // SharePoint or Zoho live and take seconds. Naming it is the difference
-        // between a slow answer and an apparently broken one.
-        phase === "working" && session.running
+      : phase === "working" && session.running
         ? session.running
-        : session.transcript || session.heard;
+        : null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex flex-col bg-app/95 backdrop-blur-xl">
-      <div className="flex shrink-0 items-center gap-3 px-5 py-4">
-        <span className="micro text-ink-4">Spoken</span>
+    // `overflow-hidden` is the safety net rather than the mechanism: the sizing
+    // below is what keeps everything inside the window, and this is what stops
+    // anything that still escapes from doing so *silently*, off the bottom edge
+    // where no scrollbar can reach it.
+    <div className="fixed inset-0 z-[70] flex flex-col overflow-hidden bg-app/95 backdrop-blur-xl">
+      <div className="flex shrink-0 items-center gap-2.5 px-4 py-3 sm:gap-3 sm:px-5 sm:py-4">
+        <span className="micro hidden text-ink-4 sm:block">Spoken</span>
         <span className="min-w-0 flex-1 truncate text-[12px] text-ink-4">
           {session.info
             ? `${session.info.model} · ${session.info.voice}`
             : "Opening the conversation"}
         </span>
         {session.info && !session.info.writes_enabled && (
-          <Badge tone="neutral" title="A super admin has not enabled writes in a spoken conversation.">
+          <Badge
+            tone="neutral"
+            className="hidden sm:inline-flex"
+            title="A super admin has not enabled writes in a spoken conversation."
+          >
             Read only
           </Badge>
         )}
+        {/* The label goes before the control does. On a phone this row is a
+            title, a badge and two buttons, and it is the words that have to
+            give — a button that has been squeezed out is a button somebody
+            cannot press. */}
         <button
           onClick={onType}
-          className="flex h-9 items-center gap-2 rounded-[13px] bg-panel px-3.5 text-[12.5px] font-medium text-ink-2 transition hover:text-ink"
+          title="Type instead"
+          className="flex h-9 shrink-0 items-center gap-2 rounded-[13px] bg-panel px-3 text-[12.5px] font-medium text-ink-2 transition hover:text-ink sm:px-3.5"
         >
           <Keyboard className="size-3.5" strokeWidth={2} />
-          Type instead
+          <span className="hidden sm:inline">Type instead</span>
         </button>
         <button
           onClick={onClose}
@@ -127,9 +170,9 @@ export function RealtimeOverlay({
         </button>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-6 pb-4">
-        <div className="relative grid place-items-center">
-          <Orb state={orbFor(phase, session.muted)} level={level} size={260} />
+      <div className="flex min-h-0 flex-1 flex-col items-center gap-3 px-4 pb-4 sm:px-6">
+        <div className="relative grid shrink-0 place-items-center">
+          <Orb state={orbFor(phase, session.muted)} level={level} size={orb} />
           {session.muted && (
             <span className="absolute grid size-14 place-items-center rounded-full bg-panel/80 text-ink-3 backdrop-blur">
               <MicOff className="size-5" strokeWidth={1.8} />
@@ -137,35 +180,58 @@ export function RealtimeOverlay({
           )}
         </div>
 
-        <div className="flex w-full max-w-2xl flex-col items-center gap-3">
-          <p className="micro text-ink-4">{status(phase, session.muted)}</p>
+        <p className="micro shrink-0 text-ink-4">{status(phase, session.muted)}</p>
 
-          <p
-            aria-live="polite"
-            className={clsx(
-              "min-h-[4.5rem] max-w-2xl overflow-y-auto text-center text-[19px] leading-snug",
-              caption ? "text-ink" : "text-ink-4",
+        {/* Everything below the orb scrolls **together**, in one box.
+            Separately-scrolling pieces were the bug: the transcript had its own
+            scroller and the trace, the previews and the confirmation card sat
+            under it as fixed-height blocks, so a turn that called three tools
+            and returned a report pushed the microphone and stop buttons off the
+            bottom of the screen. One region that scrolls cannot do that,
+            whatever it is holding. */}
+        <div
+          ref={scroller}
+          className="no-bar flex w-full min-h-0 max-w-2xl flex-1 flex-col overflow-y-auto"
+        >
+          {/* Bottom-anchored, the way a conversation reads: a short exchange
+              sits just above the controls rather than stranded at the top. */}
+          <div className="mt-auto space-y-3 py-1">
+            <Transcript
+              lines={session.lines}
+              empty={
+                phase === "connecting"
+                  ? "Connecting…"
+                  : "Just talk — it is listening, and you can interrupt it."
+              }
+            />
+
+            {notice && (
+              <p
+                aria-live="polite"
+                className="mx-auto w-fit max-w-full break-words rounded-[13px] bg-panel px-3.5 py-2 text-center text-[13px] text-ink-2"
+              >
+                {notice}
+              </p>
             )}
-          >
-            {caption ||
-              (phase === "connecting"
-                ? "Connecting…"
-                : "Just talk — it is listening, and you can interrupt it.")}
-          </p>
 
-          {session.steps.length > 0 && (
-            <ToolTrace steps={session.steps.map(asToolStep)} className="w-full max-w-md" />
-          )}
+            {session.steps.length > 0 && (
+              <ToolTrace steps={steps} className="w-full" />
+            )}
 
-          {session.error && (
-            <p className="max-w-md text-center text-[12.5px] text-danger">{session.error}</p>
-          )}
+            <TurnArtifacts steps={steps} className="w-full" />
 
-          {session.pending && <Waiting step={session.pending} onDecline={session.decline} />}
+            {session.error && (
+              <p className="text-center text-[12.5px] text-danger">{session.error}</p>
+            )}
+
+            {session.pending && (
+              <Waiting step={session.pending} onDecline={session.decline} />
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center justify-center gap-3 pb-10 pt-2">
+      <div className="flex shrink-0 items-center justify-center gap-3 pb-6 pt-2 sm:pb-10">
         <button
           onClick={() => session.setMuted(!session.muted)}
           aria-pressed={session.muted}
@@ -203,6 +269,64 @@ export function RealtimeOverlay({
 }
 
 /**
+ * The conversation, both sides of it.
+ *
+ * This screen used to show a single centred line — whatever was last said,
+ * whoever said it — and that is unreadable the moment a conversation is longer
+ * than one exchange. The assistant's answer overwrote the question it was
+ * answering, so somebody glancing back after listening for a minute found a
+ * sentence with no idea what it was a reply to, and their own words nowhere at
+ * all. A spoken conversation is exactly the case where you cannot scroll back
+ * through your own memory of it.
+ *
+ * So: a proper thread, oldest at the top, the person's turns on the right the
+ * way they are in the typed chat, and the assistant's as plain text on the
+ * left. The scrolling belongs to the region above rather than to this — the
+ * trace and the previews scroll with the words, and the controls at the foot of
+ * the overlay stay where the hand expects them however long it runs.
+ *
+ * Every line here is OpenAI's transcription — of the person's audio going in,
+ * of the model's coming out — so it is what was *heard*. Close enough to read
+ * back; not a record to quote from.
+ */
+function Transcript({ lines, empty }: { lines: RealtimeLine[]; empty: string }) {
+  if (lines.length === 0) {
+    return (
+      <p className="py-6 text-center text-[18px] leading-snug text-ink-4">{empty}</p>
+    );
+  }
+
+  return (
+    <div aria-live="polite" className="w-full space-y-2.5">
+      {lines.map((line) =>
+        line.who === "you" ? (
+          <div key={line.id} className="flex justify-end">
+            <p
+              className={clsx(
+                "max-w-[80%] break-words rounded-[16px] rounded-br-[6px] bg-panel px-3.5 py-2 text-[14px] leading-relaxed",
+                line.done ? "text-ink-2" : "text-ink-3",
+              )}
+            >
+              {line.text}
+            </p>
+          </div>
+        ) : (
+          <p
+            key={line.id}
+            className="max-w-[92%] break-words text-[17px] leading-snug text-ink"
+          >
+            {line.text}
+            {!line.done && (
+              <span className="ml-0.5 inline-block h-[1.05em] w-[2px] translate-y-[2px] animate-pulse bg-accent align-middle" />
+            )}
+          </p>
+        ),
+      )}
+    </div>
+  );
+}
+
+/**
  * A write the model is asking about.
  *
  * Saying yes is the ordinary way through — the model asked out loud and is
@@ -213,7 +337,7 @@ export function RealtimeOverlay({
  */
 function Waiting({ step, onDecline }: { step: RealtimeStep; onDecline: () => void }) {
   return (
-    <div className="rise w-full max-w-lg overflow-hidden rounded-[20px] bg-panel-2 ring-1 ring-warn/35">
+    <div className="rise mx-auto w-full max-w-lg overflow-hidden rounded-[20px] bg-panel-2 ring-1 ring-warn/35">
       <div className="px-4 pt-4">
         <p className="text-[13.5px] font-semibold text-ink">{step.label}</p>
         <p className="mt-1 text-[12px] leading-relaxed text-ink-3">
@@ -248,6 +372,7 @@ function asToolStep(step: RealtimeStep): ToolStep {
     // rather than claiming an outcome it does not have.
     ok: step.awaiting ? undefined : step.ok,
     status: step.status,
+    summary: step.summary,
   };
 }
 

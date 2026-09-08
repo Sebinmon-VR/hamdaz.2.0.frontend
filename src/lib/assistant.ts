@@ -499,6 +499,7 @@ export function suggestionsFor(status: AssistantStatusOut | undefined): string[]
   if (!status?.admitted) return [];
   const has = new Set(status.modules.map((m) => m.key));
   const out: string[] = [];
+  if (has.has("reports")) out.push("Start my daily report.");
   if (has.has("leave")) out.push("How much leave do I have left this year?");
   if (has.has("meetings")) out.push("What is on my calendar tomorrow?");
   if (has.has("proposals")) out.push("Which proposal tasks are assigned to me?");

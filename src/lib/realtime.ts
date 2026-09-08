@@ -41,6 +41,7 @@ import type {
   RealtimeCallOut,
   RealtimeSessionOut,
   RealtimeToolOut,
+  RealtimeUsageIn,
 } from "@/lib/types";
 
 /**
@@ -54,6 +55,93 @@ const OPENAI_CALLS = "https://api.openai.com/v1/realtime/calls";
 
 /** The channel OpenAI expects for session events. The name is theirs. */
 const EVENT_CHANNEL = "oai-events";
+
+/* ── what the conversation cost ──────────────────────────────────────── */
+
+/**
+ * A spoken conversation is the one thing this app pays for that it cannot see.
+ *
+ * OpenAI runs the realtime loop and bills the session directly; the audio and
+ * the tokens go between the browser and them, and nothing passes through the
+ * API. So the only place the figures exist on our side is here — the
+ * `response.done` events arriving on the data channel, each carrying the usage
+ * for that response. This client adds them up over the session and reports the
+ * totals once, as it closes.
+ *
+ * That makes the number a report rather than a bill, and it is worth being
+ * clear-eyed about what that costs: a conversation whose tab is closed
+ * mid-sentence reports nothing, and its cost is simply missing from the usage
+ * screen. The alternative — guessing from wall-clock seconds — would put a
+ * figure there that looked exact and was not, which is worse. The backend
+ * records these rows as client-reported for the same reason.
+ */
+const NO_USAGE: RealtimeUsageIn = {
+  text_input_tokens: 0,
+  cached_text_input_tokens: 0,
+  audio_input_tokens: 0,
+  cached_audio_input_tokens: 0,
+  text_output_tokens: 0,
+  audio_output_tokens: 0,
+  seconds: 0,
+};
+
+/** The shape OpenAI puts on `response.usage`. Every part of it is optional. */
+interface ReportedUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  input_token_details?: {
+    text_tokens?: number;
+    audio_tokens?: number;
+    cached_tokens?: number;
+    cached_tokens_details?: { text_tokens?: number; audio_tokens?: number };
+  };
+  output_token_details?: { text_tokens?: number; audio_tokens?: number };
+}
+
+const count = (value: unknown): number =>
+  typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+
+/**
+ * Folds one response's usage into the session total.
+ *
+ * Defensive about the shape on purpose. These figures are read straight off
+ * somebody else's event, they are the input to a cost, and a realtime API in
+ * preview is exactly the sort of thing that grows a field or renames one. A
+ * missing detail block therefore falls back to the plain totals — counted as
+ * text, which understates rather than invents — and anything unreadable
+ * contributes nothing at all. A conversation must never fail over a number that
+ * only a cost screen was going to read.
+ */
+function addUsage(total: RealtimeUsageIn, reported: unknown): RealtimeUsageIn {
+  if (!reported || typeof reported !== "object") return total;
+  const usage = reported as ReportedUsage;
+  const input = usage.input_token_details;
+  const output = usage.output_token_details;
+  const cached = input?.cached_tokens_details;
+
+  // Without the breakdown there is no way to tell audio from text, and audio is
+  // the dear one — so the fallback is the cheap reading rather than a guess in
+  // our own favour.
+  const textIn = input ? count(input.text_tokens) : count(usage.input_tokens);
+  const audioIn = count(input?.audio_tokens);
+  // `cached_tokens` is the total; the split is only in the details block. Where
+  // it is missing the whole of it is attributed to text, matching the fallback
+  // above.
+  const cachedTextIn = cached ? count(cached.text_tokens) : count(input?.cached_tokens);
+  const cachedAudioIn = count(cached?.audio_tokens);
+
+  return {
+    text_input_tokens: total.text_input_tokens + textIn,
+    cached_text_input_tokens: total.cached_text_input_tokens + cachedTextIn,
+    audio_input_tokens: total.audio_input_tokens + audioIn,
+    cached_audio_input_tokens: total.cached_audio_input_tokens + cachedAudioIn,
+    text_output_tokens:
+      total.text_output_tokens +
+      (output ? count(output.text_tokens) : count(usage.output_tokens)),
+    audio_output_tokens: total.audio_output_tokens + count(output?.audio_tokens),
+    seconds: total.seconds,
+  };
+}
 
 export type RealtimePhase =
   | "idle"
@@ -87,13 +175,47 @@ export interface RealtimeStep {
   arguments: Record<string, unknown>;
   ok?: boolean;
   status?: number;
+  /**
+   * The start of what came back, so the trace can show it.
+   *
+   * Cut to the same 500 characters the chat's runs keep, and for the same
+   * reason: this is for reading, not for holding a copy of whatever the tool
+   * returned. Nothing is sent anywhere — the model gets the full output over
+   * the data channel, exactly as before.
+   */
+  summary?: string;
   /** Set while the model is asking the person to agree to this. */
   awaiting?: boolean;
   warning?: string | null;
 }
 
+/** One thing somebody said, on either side of the conversation. */
+export interface RealtimeLine {
+  id: string;
+  who: "you" | "assistant";
+  text: string;
+  /** False while it is still being spoken, so the screen can show it arriving. */
+  done: boolean;
+}
+
 export interface RealtimeSession {
   phase: RealtimePhase;
+  /**
+   * The conversation so far, both sides, oldest first.
+   *
+   * Kept because a spoken conversation without one is unreadable the moment it
+   * is longer than a single exchange: the caption underneath the orb can only
+   * show the last thing said, and the last thing said is usually an answer to a
+   * question that has already scrolled out of existence. Somebody glancing back
+   * at the screen after listening for a minute needs to see what they asked,
+   * not only what came back.
+   *
+   * Every line comes from OpenAI's own transcription — of the person's audio on
+   * the way in, of the model's on the way out — so it is what was *heard*, not
+   * what was meant. Close enough to read back, and worth remembering before
+   * treating it as a record.
+   */
+  lines: RealtimeLine[];
   /** What the assistant is saying, as its transcript arrives. */
   transcript: string;
   /** What the person last said, when transcription is available. */
@@ -136,6 +258,7 @@ export function useRealtime({ enabled }: { enabled: boolean }): RealtimeSession 
   const [phase, setPhase] = useState<RealtimePhase>("idle");
   const [transcript, setTranscript] = useState("");
   const [heard, setHeard] = useState("");
+  const [lines, setLines] = useState<RealtimeLine[]>([]);
   const [steps, setSteps] = useState<RealtimeStep[]>([]);
   const [pending, setPending] = useState<RealtimeStep | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -160,6 +283,12 @@ export function useRealtime({ enabled }: { enabled: boolean }): RealtimeSession 
   // Bumped on every stop, so work in flight from a finished conversation
   // cannot write into the one that replaced it.
   const generation = useRef(0);
+  // What OpenAI has reported over this session, and when it began. Refs rather
+  // than state: nothing on screen reads them, they are written on an event that
+  // arrives several times a minute, and re-rendering the conversation for a
+  // figure only the server will see would be a cost paid for nothing.
+  const usage = useRef<RealtimeUsageIn>(NO_USAGE);
+  const openedAt = useRef<number | null>(null);
 
   const teardown = useCallback((next: RealtimePhase) => {
     generation.current += 1;
@@ -190,19 +319,43 @@ export function useRealtime({ enabled }: { enabled: boolean }): RealtimeSession 
     // a teardown and leave the phase reading "ended" before anything had begun.
     if (!peer.current && !runId.current) return;
     const id = runId.current;
+    const spent = usage.current;
+    const began = openedAt.current;
     runId.current = null;
+    usage.current = NO_USAGE;
+    openedAt.current = null;
     teardown("ended");
-    // The run is closed so it stops showing as live to an administrator. Best
-    // effort on purpose: the conversation is already over for the person, and
-    // failing to tidy the record is not something to interrupt them with.
+    // The run is closed so it stops showing as live to an administrator, and
+    // what the session used goes with it — this request is the only chance to
+    // report it, because those figures live nowhere but this browser.
+    //
+    // Best effort on purpose: the conversation is already over for the person,
+    // and neither tidying the record nor costing it is worth interrupting them
+    // for. The backend takes the body once per run, so a retry it never sees
+    // cannot double-bill anybody.
     if (id) {
-      void api.post(`/assistant/realtime/session/${id}/end`).catch(() => undefined);
+      const body: RealtimeUsageIn = {
+        ...spent,
+        // Clamped to the day the backend will accept. A conversation that runs
+        // longer than that is a machine left talking to itself, and refusing
+        // the whole request over it would lose the closing of the run too.
+        seconds: began
+          ? Math.min(86_400, Math.max(0, Math.round((Date.now() - began) / 1000)))
+          : 0,
+      };
+      void api.post(`/assistant/realtime/session/${id}/end`, body).catch(() => undefined);
     }
   }, [teardown]);
 
-  // Leaving the screen must end the call. Without this the microphone stays
-  // open and OpenAI keeps billing a conversation nobody is having.
-  useEffect(() => () => teardown("ended"), [teardown]);
+  // Leaving the screen must end the call — and now also report what it used, so
+  // navigating away is not a way of having a free conversation. Without this the
+  // microphone stays open and OpenAI keeps billing one nobody is having.
+  //
+  // `stop` guards on there being something to end, so the double-mount React
+  // does in development closes nothing.
+  const closing = useRef(stop);
+  closing.current = stop;
+  useEffect(() => () => closing.current(), []);
 
   useEffect(() => {
     if (!enabled && peer.current) stop();
@@ -294,7 +447,13 @@ export function useRealtime({ enabled }: { enabled: boolean }): RealtimeSession 
         setSteps((current) =>
           current.map((s) =>
             s.id === callId
-              ? { ...s, ok: result.ok, status: result.status, awaiting: false }
+              ? {
+                  ...s,
+                  ok: result.ok,
+                  status: result.status,
+                  awaiting: false,
+                  summary: result.output?.slice(0, 500),
+                }
               : s,
           ),
         );
@@ -342,22 +501,44 @@ export function useRealtime({ enabled }: { enabled: boolean }): RealtimeSession 
           break;
 
         // What the person said, when the session is transcribing input.
-        case "conversation.item.input_audio_transcription.completed":
-          setHeard(String(event.transcript ?? "").trim());
+        //
+        // It arrives *after* they have stopped speaking, and often after the
+        // model has already begun answering, because the transcription is a
+        // second model running behind the conversation. `settle` is what keeps
+        // that from landing a line out of order.
+        case "conversation.item.input_audio_transcription.delta":
+          setLines((current) => extend(current, "you", String(event.delta ?? "")));
           break;
+
+        case "conversation.item.input_audio_transcription.completed": {
+          const said = String(event.transcript ?? "").trim();
+          setHeard(said);
+          if (said) setLines((current) => settle(current, "you", said));
+          break;
+        }
 
         case "response.output_audio_transcript.delta":
           setPhase("speaking");
           setTranscript((current) => current + String(event.delta ?? ""));
+          setLines((current) => extend(current, "assistant", String(event.delta ?? "")));
           break;
 
-        case "response.output_audio_transcript.done":
-          setTranscript(String(event.transcript ?? "").trim());
+        case "response.output_audio_transcript.done": {
+          const said = String(event.transcript ?? "").trim();
+          setTranscript(said);
+          if (said) setLines((current) => settle(current, "assistant", said));
           break;
+        }
 
-        case "response.done":
+        case "response.done": {
           setPhase((current) => (current === "confirming" ? current : "live"));
+          // The one place the cost of this conversation is ever visible to us.
+          // Accumulated here and reported when the session closes; see the note
+          // on `addUsage`.
+          const response = event.response as { usage?: unknown } | undefined;
+          usage.current = addUsage(usage.current, response?.usage);
           break;
+        }
 
         // The model wants a tool. This is the only event that reaches back into
         // the API, and it goes through the proxy rather than anywhere near a
@@ -403,9 +584,14 @@ export function useRealtime({ enabled }: { enabled: boolean }): RealtimeSession 
     setError(null);
     setTranscript("");
     setHeard("");
+    setLines([]);
     setSteps([]);
     setPending(null);
     setPhase("connecting");
+    // From zero, and clocked from the attempt rather than from the connection:
+    // a session that OpenAI is minting is one they are already charging for.
+    usage.current = NO_USAGE;
+    openedAt.current = Date.now();
 
     void (async () => {
       const mine = generation.current;
@@ -582,6 +768,7 @@ export function useRealtime({ enabled }: { enabled: boolean }): RealtimeSession 
 
   return {
     phase,
+    lines,
     transcript,
     heard,
     steps,
@@ -600,6 +787,45 @@ export function useRealtime({ enabled }: { enabled: boolean }): RealtimeSession 
 }
 
 /** A live conversation, for anything that has to know without the details. */
+/* ── the transcript ──────────────────────────────────────────────────── */
+
+/**
+ * Appends a fragment to whoever is currently talking.
+ *
+ * A new line is started only when the last one belongs to the other side or has
+ * already been settled. Without that rule every delta would become its own line
+ * and the transcript would read as a column of syllables.
+ */
+function extend(lines: RealtimeLine[], who: RealtimeLine["who"], delta: string): RealtimeLine[] {
+  if (!delta) return lines;
+  const last = lines[lines.length - 1];
+  if (last && last.who === who && !last.done) {
+    return [...lines.slice(0, -1), { ...last, text: last.text + delta }];
+  }
+  return [...lines, { id: `${who}-${lines.length}-${Date.now()}`, who, text: delta, done: false }];
+}
+
+/**
+ * Replaces the open line for one side with the final transcript.
+ *
+ * The finished text is authoritative rather than the deltas joined: the
+ * transcription model revises as it goes, and the input side frequently sends
+ * no deltas at all — only a completed transcript once the person has stopped
+ * talking. So this overwrites an open line where there is one and appends where
+ * there is not, which is also what keeps a session that never sends a partial
+ * from showing nothing at all.
+ */
+function settle(lines: RealtimeLine[], who: RealtimeLine["who"], text: string): RealtimeLine[] {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].who !== who) continue;
+    if (lines[i].done) break;
+    const settled = [...lines];
+    settled[i] = { ...settled[i], text, done: true };
+    return settled;
+  }
+  return [...lines, { id: `${who}-${lines.length}-${Date.now()}`, who, text, done: true }];
+}
+
 export function isLive(phase: RealtimePhase): boolean {
   return (
     phase === "live" ||

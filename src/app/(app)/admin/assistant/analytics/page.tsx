@@ -3,11 +3,15 @@
 import clsx from "clsx";
 import { useState } from "react";
 import useSWR from "swr";
-import { Coins, ShieldAlert } from "lucide-react";
+import { Coins, Mic, ShieldAlert, Volume2 } from "lucide-react";
 import { withQuery } from "@/lib/api";
 import { dateShort, num } from "@/lib/format";
 import { useSession } from "@/lib/session";
-import type { AnalyticsBucket, AssistantAnalyticsOut } from "@/lib/types";
+import type {
+  AnalyticsBucket,
+  AssistantAnalyticsOut,
+  VoiceAnalyticsOut,
+} from "@/lib/types";
 import {
   Meter,
   PageHead,
@@ -35,6 +39,15 @@ import { AssistantAdminNav } from "@/components/assistant/AdminNav";
  * series. These are rankings — which tool, which person, which model — and a
  * ranking is read down a column. A colour per row would also mean a legend, and
  * a legend is a lookup this data does not need: the row is already labelled.
+ *
+ * **The voice is a panel of its own, not a row in the tables.** Its two halves
+ * are not measured the same way and cannot honestly be stacked next to the
+ * chat's. Reading an answer aloud is counted here, exactly, from the text we
+ * sent. A spoken conversation is counted by the *browser*, from what OpenAI
+ * reported to it, and a session that ended in a closed tab reports nothing — so
+ * that figure is a floor. Putting a floor and two exact numbers in one column
+ * under one heading would be the quickest way to have somebody quote the wrong
+ * one in a budget.
  *
  * One thing worth knowing before reading the team rows: a person on two teams
  * counts for both, so the teams add up to more than the total. That is what a
@@ -85,7 +98,7 @@ export default function AssistantAnalyticsPage() {
         eyebrow="Administration"
         title="Assistant usage"
         count={totals ? `${num(totals.runs)} turns` : undefined}
-        lead="Priced from the model list, so a stale price makes every figure here wrong."
+        lead="Priced from the model lists, chat and voice, so a stale price makes every figure here wrong."
         meta={data ? `${dateShort(data.since)} – ${dateShort(data.until)}` : undefined}
       />
 
@@ -115,7 +128,7 @@ export default function AssistantAnalyticsPage() {
         <ErrorState error={error} onRetry={() => mutate()} />
       ) : !data || !totals ? (
         <PanelSkeleton lines={8} />
-      ) : totals.runs === 0 ? (
+      ) : totals.runs === 0 && data.voice.speech.uses === 0 ? (
         <Empty
           icon={Coins}
           title="Nothing in this window"
@@ -127,10 +140,16 @@ export default function AssistantAnalyticsPage() {
               row answer "how much, by whom" faster than any plot of the same
               four values would. */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {/* The figure to quote is chat and voice together — but the two
+                are named in the hint rather than merged silently, because
+                somebody comparing this against last month's screen needs to
+                know the voice was not in that one. */}
             <StatBox
               label="Spent"
-              value={`$${Number(totals.cost_usd).toFixed(2)}`}
-              hint="Every turn in this window, priced from the model list."
+              value={`$${Number(totals.total_cost_usd).toFixed(2)}`}
+              hint={`$${Number(totals.cost_usd).toFixed(2)} on turns and $${Number(
+                totals.voice_cost_usd,
+              ).toFixed(2)} on reading answers aloud.`}
             />
             <StatBox label="Turns" value={num(totals.runs)} />
             <StatBox
@@ -146,6 +165,8 @@ export default function AssistantAnalyticsPage() {
           </div>
 
           <DayChart days={data.by_day} measure={measure} />
+
+          <VoicePanel voice={data.voice} />
 
           {/* How turns ended, and how the confirmations went. Both are counts of
               one whole, so both are one bar rather than four numbers. */}
@@ -289,6 +310,147 @@ function DayChart({ days, measure }: { days: AnalyticsBucket[]; measure: Measure
       </div>
     </Panel>
   );
+}
+
+/* ── the voice ───────────────────────────────────────────────────────── */
+
+/**
+ * What the voice cost, with its two halves kept apart.
+ *
+ * They are not the same kind of number and the panel says so rather than
+ * letting the layout imply otherwise:
+ *
+ * * **Read aloud** is exact. The backend prices it from the text it was about
+ *   to send, before the request leaves, because that is the last moment the
+ *   figure is knowable — the audio streams straight to the browser and a
+ *   listener who closes the tab has still been billed for the whole clip.
+ * * **Spoken** is a floor. OpenAI bills that session directly, so the only
+ *   place its tokens exist on our side is what the browser reported at the end.
+ *   A conversation that ended in a closed tab is missing from this figure
+ *   entirely, and an administrator reading it as a bill would be wrong by
+ *   however many of those there were.
+ *
+ * The spoken cost is also already inside the turns figure above — its run
+ * carries it — which is why the headline adds only the read-aloud half. Said on
+ * the panel, because "why do these three numbers not add up" is otherwise the
+ * first question anybody asks it.
+ */
+function VoicePanel({ voice }: { voice: VoiceAnalyticsOut }) {
+  const { speech, realtime } = voice;
+  if (speech.uses === 0 && realtime.uses === 0) return null;
+
+  return (
+    <Panel className="p-5">
+      <PanelHead
+        title="Voice"
+        count={`$${Number(voice.cost_usd).toFixed(2)}`}
+        hint="Priced from the voice model list, which is separate from the chat models"
+      />
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <Half
+          icon={Volume2}
+          title="Read aloud"
+          cost={speech.cost_usd}
+          rows={[
+            { label: "Clips", value: num(speech.uses) },
+            { label: "Characters", value: num(speech.characters) },
+          ]}
+          note="Counted from the text sent, before it leaves — exact, and billed per character rather than per token."
+        />
+        <Half
+          icon={Mic}
+          title="Spoken conversations"
+          cost={realtime.cost_usd}
+          rows={[
+            { label: "Sessions", value: num(realtime.uses) },
+            { label: "Time", value: minutes(realtime.seconds) },
+            {
+              label: "Audio tokens",
+              value: num(realtime.audio_input_tokens + realtime.audio_output_tokens),
+            },
+          ]}
+          note="Reported by the browser at the end of each session, so a conversation that ended in a closed tab is missing: read it as a floor."
+        />
+      </div>
+
+      {realtime.uses > 0 && (
+        <p className="mt-3 text-[11px] leading-relaxed text-ink-4">
+          A spoken conversation&rsquo;s cost is already on its run, so it is counted in the
+          turns figure above and left out of the read-aloud one. The three do add up — once.
+        </p>
+      )}
+
+      {voice.by_model.length > 1 && (
+        <ul className="mt-4 space-y-2.5">
+          {[...voice.by_model]
+            .sort((a, b) => Number(b.cost_usd) - Number(a.cost_usd))
+            .map((row) => (
+              <li key={row.key}>
+                <div className="flex items-baseline gap-2.5">
+                  <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-ink-2">
+                    {row.label}
+                  </span>
+                  <span className="tnum shrink-0 text-[12.5px] font-semibold text-ink">
+                    ${Number(row.cost_usd).toFixed(2)}
+                  </span>
+                </div>
+                <Meter
+                  value={Number(row.cost_usd)}
+                  max={Math.max(...voice.by_model.map((m) => Number(m.cost_usd)), 0)}
+                  height={6}
+                  className="mt-1.5"
+                />
+              </li>
+            ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+/** One half of the voice bill: a cost, the counts behind it, and its caveat. */
+function Half({
+  icon: Icon,
+  title,
+  cost,
+  rows,
+  note,
+}: {
+  icon: React.ElementType;
+  title: string;
+  cost: string;
+  rows: { label: string; value: string }[];
+  note: string;
+}) {
+  return (
+    <div className="rounded-[13px] bg-panel-2 p-4">
+      <div className="flex items-center gap-2">
+        <Icon className="size-3.5 shrink-0 text-ink-4" strokeWidth={2.1} />
+        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">
+          {title}
+        </span>
+        <span className="fig shrink-0 text-[18px]">${Number(cost).toFixed(2)}</span>
+      </div>
+      <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5">
+        {rows.map((row) => (
+          <div key={row.label}>
+            <dt className="micro text-ink-4">{row.label}</dt>
+            <dd className="tnum mt-0.5 text-[12.5px] font-semibold">{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-3 text-[11px] leading-relaxed text-ink-4">{note}</p>
+    </div>
+  );
+}
+
+/** Seconds as a person would say them. Zero reads as a dash, not "0m". */
+function minutes(seconds: number): string {
+  if (seconds <= 0) return "—";
+  if (seconds < 90) return `${seconds}s`;
+  const total = Math.round(seconds / 60);
+  return total < 60 ? `${total}m` : `${Math.floor(total / 60)}h ${total % 60}m`;
 }
 
 /* ── parts of a whole ────────────────────────────────────────────────── */

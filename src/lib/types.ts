@@ -2468,6 +2468,51 @@ export interface AssistantModelOut {
   active: boolean;
 }
 
+/**
+ * A priced voice model — a speech engine, or a spoken-conversation model.
+ *
+ * Its own list rather than a corner of `AssistantModelOut`, because the two are
+ * not billed in the same unit. The chat model is tokens in, tokens out. Speech
+ * is charged per *character* of the text handed to it, and a spoken
+ * conversation per token with audio dearer than text by an order of magnitude.
+ * One shape with one set of price fields could hold both only by calling a
+ * character a token, and every figure downstream would then be a guess wearing
+ * a decimal point.
+ *
+ * Prices belonging to the other kind are zero and mean nothing — read `kind`
+ * before reading a price.
+ */
+export interface AssistantVoiceModelOut {
+  key: string;
+  name: string;
+  kind: VoiceKind;
+  description: string;
+  /** speech: USD per one million characters of text. */
+  char_price: string;
+  /** realtime: USD per one million tokens, by sort. */
+  text_input_price: string;
+  cached_text_input_price: string;
+  audio_input_price: string;
+  cached_audio_input_price: string;
+  text_output_price: string;
+  audio_output_price: string;
+  enabled: boolean;
+  /** The one the settings point at, for its kind. */
+  active: boolean;
+}
+
+/** PATCH /assistant/admin/voice-models/{key}. Prices of the other kind are ignored. */
+export interface AssistantVoiceModelIn {
+  enabled?: boolean;
+  char_price?: string;
+  text_input_price?: string;
+  cached_text_input_price?: string;
+  audio_input_price?: string;
+  cached_audio_input_price?: string;
+  text_output_price?: string;
+  audio_output_price?: string;
+}
+
 export type Gate = "open" | "access" | "admin";
 
 export interface ToolPolicyOut {
@@ -2555,17 +2600,79 @@ export interface AssistantAnalyticsTotals {
   cached_input_tokens: number;
   output_tokens: number;
   reasoning_tokens: number;
+  /**
+   * What the *runs* cost, and only that.
+   *
+   * Deliberately unchanged in meaning now that the voice is priced too: a
+   * figure that quietly starts including something new is worse than one that
+   * is honestly missing a part. `total_cost_usd` is the one to quote.
+   */
   cost_usd: string;
+  /**
+   * What reading answers aloud cost over the same window.
+   *
+   * Speech only. A spoken conversation is not in here — its cost is already on
+   * its run, and therefore already inside `cost_usd` — so read `voice.realtime`
+   * for that half rather than adding it on.
+   */
+  voice_cost_usd: string;
+  /** `cost_usd` and `voice_cost_usd` added up. What the assistant cost. */
+  total_cost_usd: string;
   confirmations_requested: number;
   confirmations_approved: number;
   confirmations_declined: number;
   refused_by_policy: number;
 }
 
+export type VoiceKind = "speech" | "realtime";
+
+/** One row of the voice bill: a kind, a day, a person or a model. */
+export interface VoiceBucket {
+  key: string;
+  label: string;
+  /** Clips read aloud, or spoken conversations. */
+  uses: number;
+  /** Speech only: characters of text handed to the model, which is what it is billed on. */
+  characters: number;
+  audio_input_tokens: number;
+  audio_output_tokens: number;
+  text_input_tokens: number;
+  text_output_tokens: number;
+  /**
+   * Realtime only, and only when the browser reported it. Not what the session
+   * is billed on — that is the tokens — but the number a person recognises when
+   * they ask why the bill looks like that.
+   */
+  seconds: number;
+  cost_usd: string;
+}
+
+/**
+ * The voice bill, split by kind because the two halves are not alike.
+ *
+ * `speech` is exact: the backend counts it from the text it was about to send,
+ * before the request leaves. `realtime` is what the *browser* reported OpenAI
+ * charging at the end of a session — OpenAI runs that loop and bills it
+ * directly, so the tokens never pass through the API at all. A conversation
+ * that ended in a closed tab is missing from it, which makes the realtime
+ * figure a floor rather than a bill, and the screen has to say so.
+ */
+export interface VoiceAnalyticsOut {
+  speech: VoiceBucket;
+  realtime: VoiceBucket;
+  /** Both halves added up. Not the same as `totals.voice_cost_usd`, which is speech alone. */
+  cost_usd: string;
+  by_day: VoiceBucket[];
+  by_user: VoiceBucket[];
+  by_model: VoiceBucket[];
+}
+
 export interface AssistantAnalyticsOut {
   since: string;
   until: string;
   totals: AssistantAnalyticsTotals;
+  /** What the voice cost over the same window, speech and spoken apart. */
+  voice: VoiceAnalyticsOut;
   by_day: AnalyticsBucket[];
   by_user: AnalyticsBucket[];
   /** A person on two teams counts for both, so team rows out-total the whole. */
@@ -2662,6 +2769,32 @@ export interface RealtimeCallIn {
   confirmed?: boolean;
 }
 
+/**
+ * What the browser heard OpenAI report over one spoken conversation.
+ *
+ * Sent once, as the conversation closes, on the body of
+ * `POST /assistant/realtime/session/{run_id}/end`. This is the *only* way a
+ * spoken conversation gets a cost at all: OpenAI runs the realtime loop and
+ * bills it directly, so the tokens never reach the API — the `response.done`
+ * events this browser receives are the sole place those figures exist on our
+ * side. The client adds them up over the session and sends the totals.
+ *
+ * Which makes it a report, not a measurement, and the backend records it as
+ * one. Nothing is authorised on the strength of it; it only ever adds to a cost
+ * figure. It is also accepted once per run — a retried close, or the same
+ * session left open in a second tab, must not bill the conversation twice.
+ */
+export interface RealtimeUsageIn {
+  text_input_tokens: number;
+  cached_text_input_tokens: number;
+  audio_input_tokens: number;
+  cached_audio_input_tokens: number;
+  text_output_tokens: number;
+  audio_output_tokens: number;
+  /** How long it lasted, for the screen. The backend refuses more than a day. */
+  seconds: number;
+}
+
 export interface RealtimeCallOut {
   ok: boolean;
   status: number;
@@ -2671,4 +2804,442 @@ export interface RealtimeCallOut {
   requires_confirmation: boolean;
   label: string | null;
   warning: string | null;
+}
+
+/* ── reports ─────────────────────────────────────────────────────────── */
+
+/**
+ * What each team files, and what the reports say together.
+ *
+ * The shape is worth understanding before the screens are: **the frame is
+ * fixed, what hangs in it is not.** Six sections — overview, tasks, issues,
+ * remarks, metrics, summary — are code on the backend and the same on every
+ * report, so a manager reading four teams on a Monday finds the issues in the
+ * same place each time, and a CEO asking "what is blocking us" gets an answer
+ * that spans teams. The *questions* inside them are a template a super admin
+ * points each team at, and arrive as `fields`.
+ *
+ * So a screen renders from `sections` (what to draw) plus `fields` (what this
+ * team is additionally asked) and needs to know nothing else. Neither is
+ * hardcoded here.
+ */
+export type ReportCadence = "daily" | "weekly" | "monthly" | "ad_hoc";
+
+/** A draft is its author's alone; submitted is read-only and visible to readers. */
+export type ReportStatus = "draft" | "submitted";
+
+/**
+ * How far along a row is — the author's claim, not SharePoint's.
+ *
+ * Short and closed on purpose: the value of this field is that it means the
+ * same on every report. The Proposals list already has a free-text status, and
+ * counting that is what nobody can do.
+ */
+export type ReportCompletion =
+  | "not_started"
+  | "in_progress"
+  | "blocked"
+  | "done"
+  | "dropped";
+
+export type IssueSeverity = "low" | "medium" | "high" | "blocked";
+
+/** `prose` is one text box, `rows` a list, `figures` the metric grid. */
+export type SectionKind = "prose" | "rows" | "figures";
+
+export interface ReportSectionOut {
+  key: string;
+  name: string;
+  description: string;
+  kind: SectionKind;
+}
+
+/** One extra question this team is asked, inside one of the six sections. */
+export interface ReportFieldOut {
+  key: string;
+  label: string;
+  type: string;
+  section: string;
+  required: boolean;
+  help: string | null;
+  options: string[] | null;
+}
+
+/**
+ * Everything needed to draw the form before a report exists.
+ *
+ * Served ahead of starting a draft so a page can show what is coming — and so
+ * the assistant can tell somebody what it is about to ask them.
+ */
+export interface ReportFormOut {
+  team_id: string;
+  team: string;
+  cadence: ReportCadence;
+  template_id: string;
+  template_name: string;
+  template_version: number;
+  sections: ReportSectionOut[];
+  fields: ReportFieldOut[];
+  completions: string[];
+  period_start: string;
+  period_end: string;
+  period_label: string;
+}
+
+export interface TaskLineOut {
+  id: string;
+  position: number;
+  /** "proposals" for a row pulled from SharePoint, "manual" for a typed one. */
+  source: string;
+  external_id: string | null;
+  title: string;
+  /** What SharePoint said, which is a different claim from `completion`. */
+  status: string | null;
+  completion: string;
+  percent_complete: number | null;
+  priority: string | null;
+  end_user: string | null;
+  quote_no: string | null;
+  deadline: string | null;
+  /** Into SharePoint. Carries no token — opening it uses the reader's access. */
+  link: string | null;
+  attachments_url: string | null;
+  has_attachments: boolean;
+  note: string | null;
+}
+
+/** A row as it is sent back. Everything but the title has a default. */
+export interface TaskLineIn {
+  title: string;
+  completion?: ReportCompletion;
+  source?: "proposals" | "manual";
+  external_id?: string | null;
+  status?: string | null;
+  percent_complete?: number | null;
+  priority?: string | null;
+  end_user?: string | null;
+  quote_no?: string | null;
+  deadline?: string | null;
+  link?: string | null;
+  attachments_url?: string | null;
+  has_attachments?: boolean;
+  note?: string | null;
+}
+
+export interface IssueOut {
+  id: string;
+  position: number;
+  title: string;
+  detail: string | null;
+  severity: string;
+  waiting_on: string | null;
+  resolved: boolean;
+}
+
+export interface IssueIn {
+  title: string;
+  detail?: string | null;
+  severity?: IssueSeverity;
+  waiting_on?: string | null;
+  resolved?: boolean;
+}
+
+/**
+ * A figure, and where it came from.
+ *
+ * `computed` is what the task rows said; `value` is what the author put, if
+ * they put anything; `effective` is the one that counts. `edited` is worth
+ * showing rather than hiding — a corrected number and an agreeing one are
+ * different kinds of evidence.
+ */
+export interface ReportMetricOut {
+  key: string;
+  label: string;
+  unit: string | null;
+  computed: string | null;
+  value: string | null;
+  target: string | null;
+  effective: string | null;
+  edited: boolean;
+}
+
+export interface ReportCommentOut {
+  id: string;
+  author_id: string;
+  author_name: string;
+  body: string;
+  created_at: string;
+}
+
+export interface ReportSummaryOut {
+  id: string;
+  team_id: string;
+  team: string;
+  author_id: string;
+  author_name: string;
+  cadence: string;
+  period_start: string;
+  period_end: string;
+  period_label: string;
+  status: string;
+  submitted_at: string | null;
+  task_count: number;
+  open_issue_count: number;
+  /** Only meaningful for a reader who is not the author. */
+  read_by_me: boolean;
+}
+
+export interface ReportOut extends ReportSummaryOut {
+  template_id: string;
+  template_name: string;
+  template_version: number;
+  overview: string | null;
+  remarks: string | null;
+  summary: string | null;
+  answers: Record<string, unknown>;
+  sections: ReportSectionOut[];
+  fields: ReportFieldOut[];
+  tasks: TaskLineOut[];
+  issues: IssueOut[];
+  metrics: ReportMetricOut[];
+  comments: ReportCommentOut[];
+  /**
+   * What *this* caller may do with it.
+   *
+   * Sent so a screen does not reimplement the rules to decide which buttons to
+   * draw — and so it cannot drift from them. Only the author edits, and only
+   * while it is a draft; not even a super admin, who comments or deletes
+   * instead.
+   */
+  can_edit: boolean;
+  can_submit: boolean;
+  can_comment: boolean;
+  can_delete: boolean;
+}
+
+export interface ReportPage {
+  reports: ReportSummaryOut[];
+  total: number;
+}
+
+/** POST /reports. Everything but the team has a sensible default. */
+export interface ReportStartIn {
+  team_id: string;
+  cadence?: ReportCadence;
+  /** Any day inside the period. Defaults to today. */
+  on?: string | null;
+  period_start?: string | null;
+  period_end?: string | null;
+  /** Pull the caller's own Proposals tasks in as rows. On by default. */
+  prefill_tasks?: boolean;
+  include_closed?: boolean;
+}
+
+/**
+ * PATCH /reports/{id}. Only what is sent changes.
+ *
+ * One asymmetry to keep in mind, and it is the backend's: a **list** sent at
+ * all replaces that section entirely — sending `tasks` means "these are the
+ * tasks", not "add these" — while `answers` and `metrics` are *merged*, so
+ * filling a long form over two saves does not wipe the first.
+ */
+export interface ReportEditIn {
+  overview?: string | null;
+  remarks?: string | null;
+  summary?: string | null;
+  answers?: Record<string, unknown>;
+  tasks?: TaskLineIn[];
+  issues?: IssueIn[];
+  metrics?: Record<string, string | null>;
+}
+
+/* ── what the reports say together ───────────────────────────────────── */
+
+export interface TeamRollupOut {
+  team_id: string;
+  team: string;
+  reports: number;
+  people: number;
+}
+
+export interface AuthorRollupOut {
+  author_id: string;
+  author: string;
+  reports: number;
+  last_period: string | null;
+}
+
+export interface MetricRollupOut {
+  key: string;
+  label: string;
+  unit: string | null;
+  total: number;
+  /** Averaged as well as totalled: a total that grows because more people filed says nothing about the work. */
+  average: number;
+  reports: number;
+}
+
+export interface OpenIssueOut {
+  id: string;
+  report_id: string;
+  title: string;
+  detail: string | null;
+  severity: string;
+  waiting_on: string | null;
+  team: string;
+  raised_by: string;
+  period_start: string;
+}
+
+/**
+ * The view across reports, narrowed to what the caller may read.
+ *
+ * Not an admin screen: an ordinary person asking for this gets their own
+ * reports summarised and nobody else's, rather than a refusal. Which is why
+ * the page behind it is offered to everybody.
+ */
+export interface ReportsOverviewOut {
+  since: string;
+  until: string;
+  reports: number;
+  people: number;
+  by_team: TeamRollupOut[];
+  by_author: AuthorRollupOut[];
+  metrics: MetricRollupOut[];
+  open_issues: OpenIssueOut[];
+}
+
+/* ── setting them up ─────────────────────────────────────────────────── */
+
+export interface ReportScheduleOut {
+  id: string;
+  team_id: string;
+  team: string;
+  cadence: string;
+  template_id: string;
+  template_name: string;
+  enabled: boolean;
+  due_hour: number;
+  due_weekday: number | null;
+  note: string | null;
+  /**
+   * Whether this team's reports of this cadence are mailed.
+   *
+   * Three states, not two, and the null is the important one: it means "follow
+   * the global setting", so turning that setting on later reaches a team that
+   * never expressed a preference and does not reach one that said no. A
+   * boolean could not say the difference between "yes" and "nobody has
+   * decided".
+   */
+  notify: boolean | null;
+  /** Copied on this team's reports. Added to the global list — it narrows nothing. */
+  extra_recipients: string[];
+}
+
+export interface ReportScheduleIn {
+  team_id: string;
+  cadence: ReportCadence;
+  template_id: string;
+  enabled?: boolean;
+  due_hour?: number;
+  due_weekday?: number | null;
+  note?: string | null;
+  notify?: boolean | null;
+  extra_recipients?: string[];
+}
+
+/* ── who a filed report goes to ──────────────────────────────────────── */
+
+/**
+ * The delivery rules.
+ *
+ * **None of this decides who may read a report.** Delivery and visibility are
+ * separate questions and only the first is configurable: an address added here
+ * is mailed a summary, and the link in that mail refuses them exactly as it
+ * would anybody else who may not read that report.
+ */
+export interface ReportSettingsOut {
+  /** The master switch. Off means nothing is mailed at all. */
+  notify_on_submit: boolean;
+  /** Mail the team's own managers and leads — the people it is written for. */
+  notify_team_oversight: boolean;
+  /** Mail everybody holding one of `company_roles`. */
+  notify_company_wide: boolean;
+  /**
+   * Which global roles count as company-wide *for the mail*.
+   *
+   * Defaults to the same three that may read every report, but is its own
+   * list: a CEO who wants to keep the access and lose the daily message
+   * changes this and nothing else.
+   */
+  company_roles: string[];
+  /** Always copied. For people who are not users here — a shared mailbox, a consultant. */
+  extra_recipients: string[];
+  /** Send authors their own report back. Off: nobody needs a copy of what they just wrote. */
+  copy_author: boolean;
+  /** Which cadences are mailed at all. The common ask is weeklies but not dailies. */
+  notify_cadences: string[];
+  /** How much of the report the message carries before it stops being a summary. */
+  max_tasks_in_email: number;
+  include_task_list: boolean;
+  include_issue_list: boolean;
+  /** Advisory: nothing is deleted, it is what the log defaults its range to. */
+  log_retention_days: number;
+  updated_by_id: string | null;
+  updated_at: string;
+}
+
+/** Only the fields sent change. */
+export interface ReportSettingsIn {
+  notify_on_submit?: boolean;
+  notify_team_oversight?: boolean;
+  notify_company_wide?: boolean;
+  /** Every key must exist — one that does not would silently mail nobody. */
+  company_roles?: string[];
+  /** Anything without an "@" is dropped rather than failing the whole save. */
+  extra_recipients?: string[];
+  copy_author?: boolean;
+  notify_cadences?: string[];
+  max_tasks_in_email?: number;
+  include_task_list?: boolean;
+  include_issue_list?: boolean;
+  log_retention_days?: number;
+}
+
+/**
+ * One attempt to mail one report.
+ *
+ * The names are copied off the report rather than joined to it, so a record
+ * still reads after its report has been deleted — which is exactly the record
+ * somebody is trying to look up.
+ */
+export interface ReportDeliveryOut {
+  id: string;
+  report_id: string | null;
+  team_name: string | null;
+  author_name: string | null;
+  cadence: string | null;
+  period_start: string | null;
+  /** "sent", "failed" or "skipped". */
+  status: string;
+  recipients: string[];
+  /** Why nothing was sent, or why it failed. Null on a clean send. */
+  detail: string | null;
+  created_at: string;
+}
+
+export interface ReportDeliveryPage {
+  deliveries: ReportDeliveryOut[];
+  total: number;
+  /** By status, over the same window — so a screen can say "3 failed" without paging. */
+  counts: Record<string, number>;
+}
+
+export interface ReportTemplateChoiceOut {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  version: number;
+  field_count: number;
 }

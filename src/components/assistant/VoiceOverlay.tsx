@@ -6,9 +6,10 @@ import { createPortal } from "react-dom";
 import { Keyboard, Mic, MicOff, Volume2, VolumeX, X } from "lucide-react";
 import { useDictation, useMicLevel, useSpeaker, yesOrNo } from "@/lib/speech";
 import type { Conversation } from "@/lib/assistant";
-import { Orb, type OrbState } from "@/components/assistant/Orb";
+import { Orb, useOrbSize, type OrbState } from "@/components/assistant/Orb";
 import { ConfirmCard } from "@/components/assistant/ConfirmCard";
 import { ToolTrace } from "@/components/assistant/ToolTrace";
+import { TurnArtifacts } from "@/components/assistant/ResultPreview";
 
 /**
  * Voice mode: the assistant with the screen taken away.
@@ -44,12 +45,14 @@ export function VoiceOverlay({
   // Reading answers aloud can be turned off without leaving voice mode — useful
   // in an open office, where being listened to is fine and being talked at is not.
   const [muted, setMuted] = useState(false);
-  const [heard, setHeard] = useState("");
 
   const speaker = useSpeaker();
   const dictation = useDictation({
     onFinal: (text) => {
-      setHeard(text);
+      // What was heard is no longer kept here. It becomes a message on the
+      // conversation the moment it is sent — optimistically, before the server
+      // has it — so the thread already shows it and a second copy would only be
+      // a way for the two to disagree.
       if (turn.phase === "confirming") {
         const answer = yesOrNo(text);
         // Anything that is not clearly one or the other leaves the card up:
@@ -140,7 +143,6 @@ export function VoiceOverlay({
   useEffect(() => {
     if (!open) return;
     setPaused(false);
-    setHeard("");
     spoken.current = "";
     previous.current = turn.phase;
     const id = window.setTimeout(() => dictation.start(), 260);
@@ -182,31 +184,62 @@ export function VoiceOverlay({
     });
   }
 
+  // Sized to the window, not to the state of the conversation — the same
+  // reasoning as the spoken screen: resizing the canvas restarts the animation,
+  // and a fixed orb on a short window pushes the controls off the bottom.
+  const orb = useOrbSize();
+
+  // Follows whatever arrived last — a message, the answer as it is spoken, the
+  // words being dictated right now. Declared before the early return below so
+  // the hook order never changes; it does nothing while the overlay is closed.
+  const scroller = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element) return;
+    element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
+  }, [
+    open,
+    conversation.messages.length,
+    turn.answer,
+    turn.steps.length,
+    dictation.transcript,
+  ]);
+
   if (!open || typeof document === "undefined") return null;
 
-  const caption =
+  // What is happening now, which the thread below cannot say. Everything else
+  // that used to live on this line — the answer, and what was just heard — is in
+  // the thread, where it stays put instead of being overwritten by the reply
+  // to it.
+  const notice =
     turn.phase === "confirming"
       ? "Say yes to go ahead, or no to leave it."
-      : speaker.speaking || (busy && turn.answer)
-        ? turn.answer || spoken.current
-        : listening
-          ? dictation.transcript
-          : heard;
+      : !dictation.supported
+        ? "This browser cannot listen. Chrome, Edge and Safari can; Firefox cannot yet."
+        : null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex flex-col bg-app/95 backdrop-blur-xl">
+    // `overflow-hidden` is a safety net, not the mechanism: the sizing below is
+    // what keeps this inside the window. It is here so that anything which does
+    // still escape is clipped rather than pushed off the bottom edge, where no
+    // scrollbar can reach it.
+    <div className="fixed inset-0 z-[70] flex flex-col overflow-hidden bg-app/95 backdrop-blur-xl">
       {/* ── the bar ─────────────────────────────────────────────────── */}
-      <div className="flex shrink-0 items-center gap-3 px-5 py-4">
-        <span className="micro text-ink-4">Voice</span>
+      <div className="flex shrink-0 items-center gap-2.5 px-4 py-3 sm:gap-3 sm:px-5 sm:py-4">
+        <span className="micro hidden text-ink-4 sm:block">Voice</span>
         <span className="min-w-0 flex-1 truncate text-[12px] text-ink-4">
           {conversation.detail?.title ?? "New conversation"}
         </span>
+        {/* The label gives way before the control does: on a phone this row is
+            a title and two buttons, and a button squeezed out of the row is a
+            button nobody can press. */}
         <button
           onClick={onClose}
-          className="flex h-9 items-center gap-2 rounded-[13px] bg-panel px-3.5 text-[12.5px] font-medium text-ink-2 transition hover:text-ink"
+          title="Type instead"
+          className="flex h-9 shrink-0 items-center gap-2 rounded-[13px] bg-panel px-3 text-[12.5px] font-medium text-ink-2 transition hover:text-ink sm:px-3.5"
         >
           <Keyboard className="size-3.5" strokeWidth={2} />
-          Type instead
+          <span className="hidden sm:inline">Type instead</span>
         </button>
         <button
           onClick={onClose}
@@ -218,9 +251,9 @@ export function VoiceOverlay({
       </div>
 
       {/* ── the orb and what is being said ──────────────────────────── */}
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-6 pb-4">
-        <div className="relative grid place-items-center">
-          <Orb state={paused ? "idle" : state} level={level} size={260} />
+      <div className="flex min-h-0 flex-1 flex-col items-center gap-3 px-4 pb-4 sm:px-6">
+        <div className="relative grid shrink-0 place-items-center">
+          <Orb state={paused ? "idle" : state} level={level} size={orb} />
           {paused && (
             <span className="absolute grid size-14 place-items-center rounded-full bg-panel/80 text-ink-3 backdrop-blur">
               <MicOff className="size-5" strokeWidth={1.8} />
@@ -228,46 +261,58 @@ export function VoiceOverlay({
           )}
         </div>
 
-        <div className="flex w-full max-w-2xl flex-col items-center gap-3">
-          <p className="micro text-ink-4">{status(state, paused, dictation.supported)}</p>
+        <p className="micro shrink-0 text-ink-4">
+          {status(state, paused, dictation.supported)}
+        </p>
 
-          {/* One caption line, whoever is talking. Two columns of transcript —
-              theirs and its — is a chat window, and this is not one; the chat
-              is a keystroke away and has the whole conversation in it. */}
-          <p
-            aria-live="polite"
-            className={clsx(
-              "min-h-[4.5rem] max-w-2xl overflow-y-auto text-center text-[19px] leading-snug",
-              caption ? "text-ink" : "text-ink-4",
+        {/* One scrolling region for the thread, the trace, the previews and the
+            confirmation card together. They were separate fixed-height blocks
+            under a thread that scrolled on its own, so a turn with a few tools
+            and a report in it pushed the controls off the bottom of the
+            screen. */}
+        <div
+          ref={scroller}
+          className="no-bar flex w-full min-h-0 max-w-2xl flex-1 flex-col overflow-y-auto"
+        >
+          <div className="mt-auto space-y-3 py-1">
+            <VoiceThread
+              conversation={conversation}
+              partial={listening ? dictation.transcript : ""}
+              speaking={speaker.speaking}
+            />
+
+            {notice && (
+              <p
+                aria-live="polite"
+                className="mx-auto w-fit max-w-full break-words rounded-[13px] bg-panel px-3.5 py-2 text-center text-[13px] text-ink-2"
+              >
+                {notice}
+              </p>
             )}
-          >
-            {caption ||
-              (dictation.supported
-                ? "Ask me anything about your work here."
-                : "This browser cannot listen. Chrome, Edge and Safari can; Firefox cannot yet.")}
-          </p>
 
-          {turn.steps.length > 0 && (
-            <ToolTrace steps={turn.steps} className="w-full max-w-md" />
-          )}
+            {turn.steps.length > 0 && <ToolTrace steps={turn.steps} className="w-full" />}
 
-          {dictation.error && (
-            <p className="max-w-md text-center text-[12.5px] text-danger">{dictation.error}</p>
-          )}
-          {turn.error && (
-            <p className="max-w-md text-center text-[12.5px] text-danger">{turn.error}</p>
-          )}
+            <TurnArtifacts steps={turn.steps} className="w-full" />
 
-          {turn.phase === "confirming" && turn.pending && (
-            <div className="w-full max-w-lg">
-              <ConfirmCard actions={turn.pending.actions} onRespond={(ok) => void respond(ok)} />
-            </div>
-          )}
+            {dictation.error && (
+              <p className="text-center text-[12.5px] text-danger">{dictation.error}</p>
+            )}
+            {turn.error && (
+              <p className="text-center text-[12.5px] text-danger">{turn.error}</p>
+            )}
+
+            {turn.phase === "confirming" && turn.pending && (
+              <ConfirmCard
+                actions={turn.pending.actions}
+                onRespond={(ok) => void respond(ok)}
+              />
+            )}
+          </div>
         </div>
       </div>
 
       {/* ── the controls ────────────────────────────────────────────── */}
-      <div className="flex shrink-0 items-center justify-center gap-3 pb-10 pt-2">
+      <div className="flex shrink-0 items-center justify-center gap-3 pb-6 pt-2 sm:pb-10">
         <button
           onClick={() => {
             setMuted((was) => {
@@ -309,6 +354,115 @@ export function VoiceOverlay({
       </div>
     </div>,
     document.body,
+  );
+}
+
+/**
+ * The conversation, while it is being spoken.
+ *
+ * This screen used to carry one centred caption — whatever was last said,
+ * whoever said it — on the reasoning that two columns of transcript is a chat
+ * window and this is not one. That was wrong in practice for a specific reason:
+ * the assistant's answer *overwrote the question it was answering*, so the one
+ * thing a person needed in order to make sense of what they were hearing was
+ * the one thing the screen had just thrown away. Their own words were never
+ * shown back at all.
+ *
+ * And unlike the spoken-conversation screen, this one has the real thread
+ * already — voice mode is the same conversation, the same run and the same
+ * saved messages as the chat behind it — so showing it costs nothing and needs
+ * no second copy of anything.
+ *
+ * The last few turns, not all of them: this is a glance, and somebody who wants
+ * the whole conversation is one keystroke from the chat, which has it.
+ */
+function VoiceThread({
+  conversation,
+  partial,
+  speaking,
+}: {
+  conversation: Conversation;
+  /** What the microphone is hearing right now, before it is sent. */
+  partial: string;
+  speaking: boolean;
+}) {
+  const { messages, turn } = conversation;
+  const recent = messages.slice(-6);
+  const last = recent[recent.length - 1];
+
+  /*
+   * The answer is held until the server's copy of it lands.
+   *
+   * A turn ends by clearing what was streamed and then re-fetching the
+   * conversation, which is a round trip — and for the whole of that round trip
+   * the answer belonged to neither half: the live turn had dropped it and the
+   * saved messages did not have it yet. On this screen that gap is at its worst,
+   * because the answer is still being read aloud while the words disappear off
+   * the screen.
+   *
+   * So the last answer is kept and shown while the newest saved message is
+   * still the question it answers. The moment the real one arrives the held
+   * copy is dropped and the saved message takes over — never both.
+   */
+  const held = useRef("");
+  if (turn.answer) held.current = turn.answer;
+  else if (last?.role !== "user") held.current = "";
+  const answer = turn.answer || (last?.role === "user" ? held.current : "");
+
+  const nothingYet = recent.length === 0 && !partial && !answer;
+  if (nothingYet) {
+    return (
+      <p className="py-6 text-center text-[18px] leading-snug text-ink-4">
+        Ask me anything about your work here.
+      </p>
+    );
+  }
+
+  return (
+    <div aria-live="polite" className="w-full space-y-2.5">
+      {recent.map((message) =>
+        message.role === "user" ? (
+          <Said key={`${message.id}-${message.seq}`} text={message.content} />
+        ) : (
+          <Answered key={`${message.id}-${message.seq}`} text={message.content} />
+        ),
+      )}
+
+      {/* The turn in flight. Shown as it arrives rather than when it finishes,
+          because it is being read aloud at the same time and the two running
+          together is the whole point of the loop. */}
+      {answer && <Answered text={answer} live={speaking && Boolean(turn.answer)} />}
+
+      {partial && <Said text={partial} pending />}
+    </div>
+  );
+}
+
+/** Something the person said. Right-hand side, as in the typed chat. */
+function Said({ text, pending }: { text: string; pending?: boolean }) {
+  return (
+    <div className="flex justify-end">
+      <p
+        className={clsx(
+          "max-w-[80%] break-words rounded-[16px] rounded-br-[6px] bg-panel px-3.5 py-2 text-[14px] leading-relaxed",
+          pending ? "text-ink-3" : "text-ink-2",
+        )}
+      >
+        {text}
+      </p>
+    </div>
+  );
+}
+
+/** Something the assistant said. Plain text, and the larger of the two. */
+function Answered({ text, live }: { text: string; live?: boolean }) {
+  return (
+    <p className="max-w-[92%] break-words text-[17px] leading-snug text-ink">
+      {text}
+      {live && (
+        <span className="ml-0.5 inline-block h-[1.05em] w-[2px] translate-y-[2px] animate-pulse bg-accent align-middle" />
+      )}
+    </p>
   );
 }
 

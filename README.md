@@ -43,16 +43,19 @@ src/
     (app)/
       layout.tsx          the shell — frame, doodles, top bar, tabs, session
       dashboard/          overview
-      teams/              list, detail, members, team dashboard, team proposal work
+      teams/              list, detail, members, team dashboard, team proposal work,
+                          team reports
       directory/          Entra, list and person
       leave/              mine, request, calendar, HR queue, rules
       proposals/my-tasks/ SharePoint tasks assigned to the viewer
+      reports/            what each team files — mine, new, one report, the overview
       quotes/             Zoho Books, list and detail
       comparisons/        list, new (upload → check → compare), saved detail
       assignment/         labels, the policy, who would get what, and the ranking
       assistant/          the chat agent, and hands-free voice mode
       admin/              roles, assignments, team access, user administration
       admin/assistant/    its switches, permissions, audience, runs and cost
+      admin/reports/      who filed reports are mailed to, what each team files, what was sent
       settings/           accent palette and light/dark, per browser
   components/
     ui/                   primitives, controls, feedback — the design system
