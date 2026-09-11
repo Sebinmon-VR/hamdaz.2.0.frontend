@@ -1,0 +1,247 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap">
+  <style>
+    body { margin: 0; font-family: Archivo, ui-sans-serif, system-ui, sans-serif; }
+    a { color: #4fd8ff; text-decoration: none; } a:hover { color: #7ae4ff; }
+    .micro { font-size: 9px; font-weight: 700; letter-spacing: 0.19em; text-transform: uppercase; }
+    .fig { font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+    .tnum { font-variant-numeric: tabular-nums; }
+    .row { display: grid; grid-template-columns: 208px minmax(0, 1fr) 46px 16px 96px; align-items: center; gap: 12px; padding: 0 14px; }
+    .months { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); }
+    .mcell { border-left: 1px solid #22222a; }
+    .mlabel { font-size: 8.5px; font-weight: 700; letter-spacing: 0.06em; color: #54545e; text-align: center; text-transform: uppercase; }
+    .ghost { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 13px; border: 1px solid #26262e; color: #a6a6b0; font-size: 12px; font-weight: 500; }
+    .fld { display: flex; flex-direction: column; gap: 6px; }
+    .fld input { all: unset; height: 30px; border-radius: 11px; background: #15151a; border: 1px solid #35353f; padding: 0 10px; font-size: 12px; color: #ffffff; font-family: inherit; }
+  </style>
+</helmet>
+
+<div style="width: 1240px; min-height: 852px; box-sizing: border-box; background: #08080b; color: #ffffff; padding: 18px 20px 24px; display: flex; flex-direction: column; gap: 13px;">
+
+  <div style="display: flex; align-items: flex-end; gap: 16px;">
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <span class="micro" style="color: #54545e;">Hamdaz ERP rollout</span>
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.03em; line-height: 1;">Plan</h1>
+        <span class="tnum" style="font-size: 12px; color: #54545e;">6 milestones</span>
+      </div>
+    </div>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+      <span class="ghost">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+        The project
+      </span>
+      <span style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 13px; border-radius: 13px; background: #4fd8ff; color: #022733; font-size: 12px; font-weight: 600;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+        Add a milestone
+      </span>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px;">
+    <div style="background: #15151a; border-radius: 15px; padding: 13px 14px; display: flex; flex-direction: column; gap: 10px;">
+      <span class="micro" style="color: #54545e;">Delivered</span>
+      <span class="fig" style="font-size: 26px;">3 <span style="font-size: 13px; font-weight: 500; color: #6d6d78;">of 6</span></span>
+    </div>
+    <div style="background: #15151a; border-radius: 15px; padding: 13px 14px; display: flex; flex-direction: column; gap: 10px;">
+      <span class="micro" style="color: #54545e;">Past their date</span>
+      <span class="fig" style="font-size: 26px; color: #f2694f;">1</span>
+    </div>
+    <div style="background: #15151a; border-radius: 15px; padding: 13px 14px; display: flex; flex-direction: column; gap: 10px;">
+      <span class="micro" style="color: #54545e;">Next due</span>
+      <span style="font-size: 14px; font-weight: 600;">Projects and reporting</span>
+    </div>
+    <div style="background: #15151a; border-radius: 15px; padding: 13px 14px; display: flex; flex-direction: column; gap: 10px;">
+      <span class="micro" style="color: #54545e;">Plan runs</span>
+      <span class="tnum" style="font-size: 14px; font-weight: 600;">Jan 26 — Feb 27</span>
+    </div>
+  </div>
+
+  <!-- the plan itself, given the whole page -->
+  <div style="background: #15151a; border-radius: 20px; padding: 16px 4px 14px; display: flex; flex-direction: column; gap: 10px;">
+
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 14px;">
+      <h2 style="margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em;">Milestones</h2>
+      <p style="margin: 0; font-size: 12px; color: #54545e;">Click a row to edit it in place. The bar fills with completion, not with the calendar.</p>
+    </div>
+
+    <!-- year band -->
+    <div class="row" style="align-items: end;">
+      <span></span>
+      <div class="months">
+        <div style="grid-column: 1 / 13; border-bottom: 1px solid #26262e; padding-bottom: 4px;"><span class="micro" style="color: #6d6d78;">2026</span></div>
+        <div style="grid-column: 13 / 15; border-bottom: 1px solid #26262e; padding-bottom: 4px; padding-left: 5px;"><span class="micro" style="color: #6d6d78;">2027</span></div>
+      </div>
+      <span></span><span></span><span></span>
+    </div>
+
+    <div class="row" style="padding-bottom: 7px; border-bottom: 1px solid #26262e;">
+      <span class="micro" style="color: #54545e;">Milestone</span>
+      <div class="months">
+        <span class="mlabel">Jan</span><span class="mlabel">Feb</span><span class="mlabel">Mar</span><span class="mlabel">Apr</span>
+        <span class="mlabel">May</span><span class="mlabel">Jun</span><span class="mlabel">Jul</span><span class="mlabel">Aug</span>
+        <span class="mlabel">Sep</span><span class="mlabel">Oct</span><span class="mlabel">Nov</span><span class="mlabel">Dec</span>
+        <span class="mlabel">Jan</span><span class="mlabel">Feb</span>
+      </div>
+      <span class="micro" style="color: #54545e; text-align: right;">PoC</span>
+      <span></span>
+      <span class="micro" style="color: #54545e;">Owner</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 1px;">
+
+      <div class="row" style="height: 34px;">
+        <span style="font-size: 12.5px; font-weight: 500;">Core platform and auth</span>
+        <div style="position: relative; height: 34px;">
+          <div class="months" style="position: absolute; inset: 0;">
+            <span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span>
+          </div>
+          <span style="position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: #26262e;"></span>
+          <span style="position: absolute; left: 64.3%; top: 0; bottom: 0; width: 1px; background: #6d6d78;"></span>
+          <div class="months" style="position: relative; height: 100%; align-items: center;">
+            <div style="grid-column: 1 / 5; height: 15px; border-radius: 999px; background: rgba(52,201,138,0.24); overflow: hidden;"><span style="display: block; width: 100%; height: 100%; background: #34c98a; border-radius: 999px;"></span></div>
+          </div>
+        </div>
+        <span class="tnum" style="font-size: 11px; color: #a6a6b0; text-align: right;">100%</span>
+        <span style="width: 9px; height: 9px; border-radius: 999px; background: #34c98a; justify-self: center;"></span>
+        <span style="font-size: 11px; color: #6d6d78;">Sebin M.</span>
+      </div>
+
+      <div class="row" style="height: 34px;">
+        <span style="font-size: 12.5px; font-weight: 500;">Quotes and proposals</span>
+        <div style="position: relative; height: 34px;">
+          <div class="months" style="position: absolute; inset: 0;">
+            <span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span>
+          </div>
+          <span style="position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: #26262e;"></span>
+          <span style="position: absolute; left: 64.3%; top: 0; bottom: 0; width: 1px; background: #6d6d78;"></span>
+          <div class="months" style="position: relative; height: 100%; align-items: center;">
+            <div style="grid-column: 3 / 7; height: 15px; border-radius: 999px; background: rgba(52,201,138,0.24); overflow: hidden;"><span style="display: block; width: 100%; height: 100%; background: #34c98a; border-radius: 999px;"></span></div>
+          </div>
+        </div>
+        <span class="tnum" style="font-size: 11px; color: #a6a6b0; text-align: right;">100%</span>
+        <span style="width: 9px; height: 9px; border-radius: 999px; background: #34c98a; justify-self: center;"></span>
+        <span style="font-size: 11px; color: #6d6d78;">Anand R.</span>
+      </div>
+
+      <div class="row" style="height: 34px;">
+        <span style="font-size: 12.5px; font-weight: 500;">HR, leave, directory</span>
+        <div style="position: relative; height: 34px;">
+          <div class="months" style="position: absolute; inset: 0;">
+            <span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span>
+          </div>
+          <span style="position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: #26262e;"></span>
+          <span style="position: absolute; left: 64.3%; top: 0; bottom: 0; width: 1px; background: #6d6d78;"></span>
+          <div class="months" style="position: relative; height: 100%; align-items: center;">
+            <div style="grid-column: 5 / 8; height: 15px; border-radius: 999px; background: rgba(52,201,138,0.24); overflow: hidden;"><span style="display: block; width: 100%; height: 100%; background: #34c98a; border-radius: 999px;"></span></div>
+          </div>
+        </div>
+        <span class="tnum" style="font-size: 11px; color: #a6a6b0; text-align: right;">100%</span>
+        <span style="width: 9px; height: 9px; border-radius: 999px; background: #34c98a; justify-self: center;"></span>
+        <span style="font-size: 11px; color: #6d6d78;">Fathima K.</span>
+      </div>
+
+      <!-- the one being edited -->
+      <div style="background: #1b1b21; border-radius: 13px; padding: 2px 0 0;">
+        <div class="row" style="height: 34px;">
+          <span style="font-size: 12.5px; font-weight: 600;">Projects and reporting</span>
+          <div style="position: relative; height: 34px;">
+            <div class="months" style="position: absolute; inset: 0;">
+              <span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span>
+            </div>
+            <span style="position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: #26262e;"></span>
+            <span style="position: absolute; left: 64.3%; top: 0; bottom: 0; width: 1px; background: #6d6d78;"></span>
+            <div class="months" style="position: relative; height: 100%; align-items: center;">
+              <div style="grid-column: 8 / 11; height: 15px; border-radius: 999px; background: rgba(226,166,63,0.24); overflow: hidden;"><span style="display: block; width: 60%; height: 100%; background: #e2a63f; border-radius: 999px;"></span></div>
+            </div>
+            <span style="position: absolute; left: 71.4%; top: 50%; width: 10px; height: 10px; background: #ffffff; transform: translate(-50%, -50%) rotate(45deg); border-radius: 2px;"></span>
+            <span style="position: absolute; left: 64.3%; top: 50%; width: 10px; height: 10px; border: 2px dashed #54545e; box-sizing: border-box; transform: translate(-50%, -50%); border-radius: 999px;"></span>
+          </div>
+          <span class="tnum" style="font-size: 11px; color: #ffffff; text-align: right;">60%</span>
+          <span style="width: 9px; height: 9px; border-radius: 999px; background: #e2a63f; justify-self: center;"></span>
+          <span style="font-size: 11px; color: #a6a6b0;">Sebin M.</span>
+        </div>
+
+        <!-- inline editor, where the old page had a second panel -->
+        <div style="padding: 6px 14px 14px 14px; display: flex; flex-direction: column; gap: 11px;">
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; gap: 9px;">
+            <div class="fld"><span class="micro" style="color: #54545e;">Name</span><input value="Projects and reporting" /></div>
+            <div class="fld"><span class="micro" style="color: #54545e;">Starts</span><input value="2026-08-01" /></div>
+            <div class="fld"><span class="micro" style="color: #54545e;">Due</span><input value="2026-10-31" /></div>
+            <div class="fld"><span class="micro" style="color: #54545e;">Owner</span><input value="Sebin M." /></div>
+            <div class="fld"><span class="micro" style="color: #54545e;">Complete</span><input value="60" /></div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <span style="display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; color: #a6a6b0;">
+              <span style="width: 26px; height: 15px; border-radius: 999px; background: #4fd8ff; position: relative;"><span style="position: absolute; right: 2px; top: 2px; width: 11px; height: 11px; border-radius: 999px; background: #022733;"></span></span>
+              A key milestone
+            </span>
+            <span style="font-size: 11px; color: #e2a63f;">Moved from 31 Aug — 61 days later than the plan first said.</span>
+            <div style="margin-left: auto; display: flex; gap: 7px;">
+              <span style="display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 11px; border: 1px solid #35353f; color: #a6a6b0; font-size: 12px;">Cancel</span>
+              <span style="display: inline-flex; align-items: center; height: 28px; padding: 0 13px; border-radius: 11px; background: #4fd8ff; color: #022733; font-size: 12px; font-weight: 600;">Save</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row" style="height: 34px;">
+        <span style="font-size: 12.5px; font-weight: 500;">Finance module</span>
+        <div style="position: relative; height: 34px;">
+          <div class="months" style="position: absolute; inset: 0;">
+            <span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span>
+          </div>
+          <span style="position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: #26262e;"></span>
+          <span style="position: absolute; left: 64.3%; top: 0; bottom: 0; width: 1px; background: #6d6d78;"></span>
+          <div class="months" style="position: relative; height: 100%; align-items: center;">
+            <div style="grid-column: 10 / 13; height: 15px; border-radius: 999px; background: rgba(79,216,255,0.18); border: 1px dashed #54545e; box-sizing: border-box;"></div>
+          </div>
+        </div>
+        <span class="tnum" style="font-size: 11px; color: #54545e; text-align: right;">0%</span>
+        <span style="width: 9px; height: 9px; border-radius: 999px; background: #2c2c36; border: 1.5px solid #54545e; box-sizing: border-box; justify-self: center;"></span>
+        <span style="font-size: 11px; color: #54545e;">Unassigned</span>
+      </div>
+
+      <div class="row" style="height: 34px;">
+        <span style="font-size: 12.5px; font-weight: 500;">Handover and training</span>
+        <div style="position: relative; height: 34px;">
+          <div class="months" style="position: absolute; inset: 0;">
+            <span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span><span class="mcell"></span>
+          </div>
+          <span style="position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: #26262e;"></span>
+          <span style="position: absolute; left: 64.3%; top: 0; bottom: 0; width: 1px; background: #6d6d78;"></span>
+          <div class="months" style="position: relative; height: 100%; align-items: center;">
+            <div style="grid-column: 13 / 15; height: 15px; border-radius: 999px; background: rgba(79,216,255,0.18); border: 1px dashed #54545e; box-sizing: border-box;"></div>
+          </div>
+          <span style="position: absolute; left: 96%; top: 50%; width: 10px; height: 10px; background: #4fd8ff; transform: translate(-50%, -50%) rotate(45deg); border-radius: 2px;"></span>
+        </div>
+        <span class="tnum" style="font-size: 11px; color: #54545e; text-align: right;">0%</span>
+        <span style="width: 9px; height: 9px; border-radius: 999px; background: #2c2c36; border: 1.5px solid #54545e; box-sizing: border-box; justify-self: center;"></span>
+        <span style="font-size: 11px; color: #6d6d78;">Priya N.</span>
+      </div>
+
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 16px; padding: 11px 14px 0; border-top: 1px solid #26262e; margin-top: 5px;">
+      <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 18px; height: 8px; border-radius: 999px; background: #34c98a;"></span><span class="micro" style="color: #6d6d78;">Done</span></div>
+      <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 18px; height: 8px; border-radius: 999px; background: #e2a63f;"></span><span class="micro" style="color: #6d6d78;">In progress</span></div>
+      <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 18px; height: 8px; border-radius: 999px; background: rgba(79,216,255,0.18); border: 1px dashed #54545e; box-sizing: border-box;"></span><span class="micro" style="color: #6d6d78;">Planned</span></div>
+      <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 9px; height: 9px; background: #ffffff; transform: rotate(45deg); border-radius: 2px;"></span><span class="micro" style="color: #6d6d78;">Key milestone</span></div>
+      <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 9px; height: 9px; border: 2px dashed #54545e; box-sizing: border-box; border-radius: 999px;"></span><span class="micro" style="color: #6d6d78;">Where the plan first put it</span></div>
+      <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 1px; height: 11px; background: #6d6d78;"></span><span class="micro" style="color: #6d6d78;">Today</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -14,6 +14,7 @@ import {
 import { signOutAndReturnToLogin } from "@/lib/api";
 import { buildNav, isActive, type NavGroup } from "@/lib/nav";
 import { useSession } from "@/lib/session";
+import { useUnread } from "@/lib/notifications";
 import { Avatar } from "@/components/ui/primitives";
 
 /**
@@ -153,7 +154,7 @@ function RailLink({
       title={item.label}
       aria-current={on ? "page" : undefined}
       className={clsx(
-        "flex h-10 shrink-0 items-center gap-3 rounded-[13px] pl-[9px] pr-2.5 transition",
+        "relative flex h-10 shrink-0 items-center gap-3 rounded-[13px] pl-[9px] pr-2.5 transition",
         on ? "bg-accent text-accent-ink" : "text-ink-3 hover:bg-panel-2 hover:text-ink",
       )}
     >
@@ -167,17 +168,62 @@ function RailLink({
       >
         {item.label}
       </span>
-      {item.badge && (
-        <span
-          className={clsx(
-            "micro shrink-0 opacity-0 transition-opacity group-hover/rail:opacity-100 group-focus-within/rail:opacity-100 group-data-[pinned]/rail:opacity-100",
-            on ? "text-accent-ink/70" : "text-ink-4",
-          )}
-        >
-          {item.badge}
-        </span>
+      {item.badge === "unread" ? (
+        <UnreadCount on={on} />
+      ) : (
+        item.badge && (
+          <span
+            className={clsx(
+              "micro shrink-0 opacity-0 transition-opacity group-hover/rail:opacity-100 group-focus-within/rail:opacity-100 group-data-[pinned]/rail:opacity-100",
+              on ? "text-accent-ink/70" : "text-ink-4",
+            )}
+          >
+            {item.badge}
+          </span>
+        )
       )}
     </Link>
+  );
+}
+
+/**
+ * The number on the bell.
+ *
+ * The one thing in this rail that changes without anybody navigating, so it is
+ * the one thing here that fetches. It stays visible at the collapsed width —
+ * unlike the static badges, which fade with the labels — because a count nobody
+ * can see until they hover is not a notification, it is a surprise. At 62px it
+ * shrinks to a dot on the icon; expanded it becomes a number.
+ *
+ * Zero renders nothing at all rather than a "0": an empty bell should look like
+ * an empty bell.
+ */
+function UnreadCount({ on }: { on: boolean }) {
+  const { unread } = useUnread();
+  if (unread === 0) return null;
+
+  return (
+    <>
+      {/* Collapsed: a dot over the icon's corner, absolutely placed so it does
+          not widen the row. */}
+      <span
+        aria-hidden
+        className={clsx(
+          "absolute left-[26px] top-[9px] size-2 rounded-full ring-2 ring-panel transition-opacity",
+          "group-hover/rail:opacity-0 group-focus-within/rail:opacity-0 group-data-[pinned]/rail:opacity-0",
+          on ? "bg-accent-ink" : "bg-accent",
+        )}
+      />
+      <span
+        className={clsx(
+          "tnum shrink-0 rounded-full px-1.5 text-[10.5px] font-bold leading-[18px] opacity-0 transition-opacity",
+          "group-hover/rail:opacity-100 group-focus-within/rail:opacity-100 group-data-[pinned]/rail:opacity-100",
+          on ? "bg-accent-ink/20 text-accent-ink" : "bg-accent text-accent-ink",
+        )}
+      >
+        {unread > 99 ? "99+" : unread}
+      </span>
+    </>
   );
 }
 

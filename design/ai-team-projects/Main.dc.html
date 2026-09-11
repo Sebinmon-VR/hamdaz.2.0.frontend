@@ -1,0 +1,273 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap">
+  <style>
+    body { margin: 0; font-family: Archivo, ui-sans-serif, system-ui, sans-serif; }
+    a { color: #4fd8ff; text-decoration: none; } a:hover { color: #7ae4ff; }
+    .micro { font-size: 9px; font-weight: 700; letter-spacing: 0.19em; text-transform: uppercase; }
+    .fig { font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+    .tnum { font-variant-numeric: tabular-nums; }
+    .rag { width: 30px; height: 14px; border-radius: 4px; display: inline-block; }
+    .rag-none { background: #2c2c36; border: 1.5px solid #54545e; box-sizing: border-box; }
+    .trow { display: grid; grid-template-columns: 292px 84px 52px 52px 52px 52px 128px 92px 104px; align-items: center; gap: 10px; height: 46px; padding: 0 14px; border-radius: 13px; }
+    .bar { flex-grow: 1; height: 6px; border-radius: 999px; background: #2c2c36; overflow: hidden; }
+    .pct { font-size: 11px; color: #a6a6b0; width: 28px; text-align: right; font-variant-numeric: tabular-nums; }
+    .pname { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ghost { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 13px; border: 1px solid #26262e; color: #a6a6b0; font-size: 12px; font-weight: 500; }
+  </style>
+</helmet>
+
+<div style="width: 1240px; min-height: 884px; box-sizing: border-box; background: #08080b; color: #ffffff; padding: 18px 20px 24px; display: flex; flex-direction: column; gap: 14px;">
+
+  <div style="display: flex; align-items: flex-end; gap: 16px;">
+    <div style="display: flex; flex-direction: column; gap: 6px; min-width: 0;">
+      <span class="micro" style="color: #54545e;">AI team</span>
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.03em; line-height: 1;">Projects</h1>
+        <span class="tnum" style="font-size: 12px; color: #54545e;">7</span>
+      </div>
+    </div>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+      <span class="tnum" style="font-size: 11px; color: #54545e; margin-right: 4px;">7 running · 2 at risk</span>
+      <a href="#" class="ghost">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>
+        Team
+      </a>
+      <a href="#" class="ghost">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15"/><path d="M15 6v15"/></svg>
+        Portfolio
+      </a>
+      <a href="#" style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 13px; border-radius: 13px; background: #4fd8ff; color: #022733; font-size: 12px; font-weight: 600;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+        New project
+      </a>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px;">
+    <div style="background: #15151a; border-radius: 15px; padding: 13px 14px; display: flex; flex-direction: column; gap: 10px;">
+      <span class="micro" style="color: #54545e;">Running</span>
+      <span class="fig" style="font-size: 28px;">7</span>
+    </div>
+    <div style="background: #15151a; border-radius: 15px; padding: 13px 14px; display: flex; flex-direction: column; gap: 10px;">
+      <span class="micro" style="color: #54545e;">Complete</span>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <span class="fig" style="font-size: 28px;">61%</span>
+        <div style="height: 4px; border-radius: 999px; background: #2c2c36; overflow: hidden;"><div style="width: 61%; height: 100%; border-radius: 999px; background: #4fd8ff;"></div></div>
+      </div>
+    </div>
+    <div style="background: #15151a; border-radius: 15px; padding: 13px 14px; display: flex; flex-direction: column; gap: 10px;">
+      <span class="micro" style="color: #54545e;">Overdue tasks</span>
+      <span class="fig" style="font-size: 28px; color: #f2694f;">15</span>
+    </div>
+    <div style="background: #15151a; border-radius: 15px; padding: 13px 14px; display: flex; flex-direction: column; gap: 10px;">
+      <span class="micro" style="color: #54545e;">Milestones late</span>
+      <span class="fig" style="font-size: 28px; color: #e2a63f;">3</span>
+    </div>
+    <div style="background: #15151a; border-radius: 15px; padding: 13px 14px; display: flex; flex-direction: column; gap: 10px;">
+      <span class="micro" style="color: #54545e;">Issues open</span>
+      <span class="fig" style="font-size: 28px;">4</span>
+    </div>
+    <div style="background: #15151a; border-radius: 15px; padding: 13px 14px; display: flex; flex-direction: column; gap: 10px;">
+      <span class="micro" style="color: #54545e;">Not assessed</span>
+      <span class="fig" style="font-size: 28px; color: #6d6d78;">1</span>
+    </div>
+  </div>
+
+  <div style="background: #15151a; border-radius: 20px; padding: 16px 4px 12px; display: flex; flex-direction: column; gap: 10px;">
+
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 14px;">
+      <h2 style="margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em;">Health by project</h2>
+      <span class="tnum" style="font-size: 12px; color: #54545e;">7</span>
+      <p style="margin: 0; font-size: 12px; color: #54545e;">Worst first. A dial is a judgement, not arithmetic.</p>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 7px;">
+        <span class="micro" style="color: #54545e;">Assessed</span>
+        <span class="tnum" style="font-size: 11px; color: #a6a6b0;">this week</span>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 292px 84px 52px 52px 52px 52px 128px 92px 104px; align-items: center; gap: 10px; padding: 0 14px 8px; border-bottom: 1px solid #26262e;">
+      <span class="micro" style="color: #54545e;">Project</span>
+      <span class="micro" style="color: #54545e;">Overall</span>
+      <span class="micro" style="color: #54545e;">Scope</span>
+      <span class="micro" style="color: #54545e;">Costs</span>
+      <span class="micro" style="color: #54545e;">Sched</span>
+      <span class="micro" style="color: #54545e;">Benef</span>
+      <span class="micro" style="color: #54545e;">Complete</span>
+      <span class="micro" style="color: #54545e;">Target</span>
+      <span class="micro" style="color: #54545e;">Lead</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 2px;">
+
+      <div class="trow" style="background: #1b1b21;">
+        <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+          <span class="pname">Warehouse automation, phase 2</span>
+          <span class="micro" style="color: #6d6d78;">WH-2 · 41 tasks · 6 late</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="rag" style="background: #f2694f;"></span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f2694f" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m7 7 10 10"/><path d="M17 7v10"/></svg>
+        </div>
+        <span class="rag" style="background: #e2a63f;"></span>
+        <span class="rag" style="background: #34c98a;"></span>
+        <span class="rag" style="background: #f2694f;"></span>
+        <span class="rag" style="background: #e2a63f;"></span>
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <div class="bar"><div style="width: 34%; height: 100%; border-radius: 999px; background: #f2694f;"></div></div>
+          <span class="pct">34%</span>
+        </div>
+        <span class="tnum" style="font-size: 11px; color: #f2694f;">14 Nov 26</span>
+        <span style="font-size: 11px; color: #a6a6b0;">Priya N.</span>
+      </div>
+
+      <div class="trow">
+        <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+          <span class="pname">Hamdaz ERP rollout</span>
+          <span class="micro" style="color: #6d6d78;">ERP-1 · 211 tasks · 15 late</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="rag" style="background: #e2a63f;"></span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34c98a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+        </div>
+        <span class="rag" style="background: #e2a63f;"></span>
+        <span class="rag" style="background: #34c98a;"></span>
+        <span class="rag" style="background: #e2a63f;"></span>
+        <span class="rag" style="background: #34c98a;"></span>
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <div class="bar"><div style="width: 88%; height: 100%; border-radius: 999px; background: #e2a63f;"></div></div>
+          <span class="pct">88%</span>
+        </div>
+        <span class="tnum" style="font-size: 11px; color: #a6a6b0;">31 Dec 26</span>
+        <span style="font-size: 11px; color: #a6a6b0;">Sebin M.</span>
+      </div>
+
+      <div class="trow">
+        <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+          <span class="pname">Supplier portal</span>
+          <span class="micro" style="color: #6d6d78;">SUP-1 · 64 tasks · 1 late</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="rag" style="background: #e2a63f;"></span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#54545e" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>
+        </div>
+        <span class="rag" style="background: #34c98a;"></span>
+        <span class="rag" style="background: #e2a63f;"></span>
+        <span class="rag" style="background: #34c98a;"></span>
+        <span class="rag" style="background: #34c98a;"></span>
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <div class="bar"><div style="width: 72%; height: 100%; border-radius: 999px; background: #e2a63f;"></div></div>
+          <span class="pct">72%</span>
+        </div>
+        <span class="tnum" style="font-size: 11px; color: #a6a6b0;">28 Feb 27</span>
+        <span style="font-size: 11px; color: #a6a6b0;">Anand R.</span>
+      </div>
+
+      <div class="trow">
+        <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+          <span class="pname">Quote engine rewrite</span>
+          <span class="micro" style="color: #6d6d78;">QE-3 · 88 tasks</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="rag" style="background: #34c98a;"></span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34c98a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+        </div>
+        <span class="rag" style="background: #34c98a;"></span>
+        <span class="rag" style="background: #34c98a;"></span>
+        <span class="rag" style="background: #34c98a;"></span>
+        <span class="rag" style="background: #34c98a;"></span>
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <div class="bar"><div style="width: 54%; height: 100%; border-radius: 999px; background: #34c98a;"></div></div>
+          <span class="pct">54%</span>
+        </div>
+        <span class="tnum" style="font-size: 11px; color: #a6a6b0;">30 Jun 27</span>
+        <span style="font-size: 11px; color: #a6a6b0;">Sebin M.</span>
+      </div>
+
+      <div class="trow">
+        <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+          <span class="pname">Assistant voice channel</span>
+          <span class="micro" style="color: #6d6d78;">AS-4 · 37 tasks</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="rag" style="background: #34c98a;"></span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#54545e" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>
+        </div>
+        <span class="rag" style="background: #34c98a;"></span>
+        <span class="rag" style="background: #e2a63f;"></span>
+        <span class="rag" style="background: #34c98a;"></span>
+        <span class="rag" style="background: #34c98a;"></span>
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <div class="bar"><div style="width: 46%; height: 100%; border-radius: 999px; background: #34c98a;"></div></div>
+          <span class="pct">46%</span>
+        </div>
+        <span class="tnum" style="font-size: 11px; color: #a6a6b0;">15 Mar 27</span>
+        <span style="font-size: 11px; color: #a6a6b0;">Fathima K.</span>
+      </div>
+
+      <div class="trow">
+        <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+          <span class="pname">Leave and attendance</span>
+          <span class="micro" style="color: #6d6d78;">HR-2 · 29 tasks</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="rag" style="background: #34c98a;"></span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#54545e" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>
+        </div>
+        <span class="rag" style="background: #34c98a;"></span>
+        <span class="rag" style="background: #34c98a;"></span>
+        <span class="rag" style="background: #34c98a;"></span>
+        <span class="rag" style="background: #34c98a;"></span>
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <div class="bar"><div style="width: 96%; height: 100%; border-radius: 999px; background: #34c98a;"></div></div>
+          <span class="pct">96%</span>
+        </div>
+        <span class="tnum" style="font-size: 11px; color: #a6a6b0;">30 Sep 26</span>
+        <span style="font-size: 11px; color: #a6a6b0;">Priya N.</span>
+      </div>
+
+      <div class="trow">
+        <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+          <span class="pname" style="color: #a6a6b0;">Finance module</span>
+          <span class="micro" style="color: #6d6d78;">FIN-1 · planned</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="rag rag-none"></span>
+        </div>
+        <span class="rag rag-none"></span>
+        <span class="rag rag-none"></span>
+        <span class="rag rag-none"></span>
+        <span class="rag rag-none"></span>
+        <span style="font-size: 11px; color: #54545e;">Not started</span>
+        <span class="tnum" style="font-size: 11px; color: #54545e;">—</span>
+        <span style="font-size: 11px; color: #54545e;">Unassigned</span>
+      </div>
+
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 18px; padding: 11px 14px 0; border-top: 1px solid #26262e; margin-top: 4px;">
+      <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 16px; height: 9px; border-radius: 3px; background: #34c98a;"></span><span class="micro" style="color: #6d6d78;">On track</span></div>
+      <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 16px; height: 9px; border-radius: 3px; background: #e2a63f;"></span><span class="micro" style="color: #6d6d78;">At risk</span></div>
+      <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 16px; height: 9px; border-radius: 3px; background: #f2694f;"></span><span class="micro" style="color: #6d6d78;">Off track</span></div>
+      <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 16px; height: 9px; border-radius: 3px; background: #2c2c36; border: 1.5px solid #54545e; box-sizing: border-box;"></span><span class="micro" style="color: #6d6d78;">Not assessed</span></div>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 14px;">
+        <div style="display: flex; align-items: center; gap: 5px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34c98a" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg><span class="micro" style="color: #6d6d78;">Improving</span></div>
+        <div style="display: flex; align-items: center; gap: 5px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#54545e" stroke-width="2.6" stroke-linecap="round"><path d="M5 12h14"/></svg><span class="micro" style="color: #6d6d78;">Steady</span></div>
+        <div style="display: flex; align-items: center; gap: 5px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f2694f" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m7 7 10 10"/><path d="M17 7v10"/></svg><span class="micro" style="color: #6d6d78;">Declining</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

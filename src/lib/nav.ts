@@ -12,18 +12,23 @@
  */
 
 import {
+  Activity,
+  Bell,
   Briefcase,
   Building2,
   CalendarDays,
   CalendarRange,
   ClipboardList,
   FilePen,
+  FolderKanban,
   FolderLock,
   GaugeCircle,
   IdCard,
   KeyRound,
   LayoutList,
+  Inbox,
   ListChecks,
+  Map as MapIcon,
   NotebookPen,
   ReceiptText,
   Scale,
@@ -48,7 +53,12 @@ export interface NavItem {
   icon: LucideIcon;
   /** Matched as a prefix so child routes keep the parent selected. */
   match?: string;
-  badge?: "hr" | "admin";
+  /**
+   * `hr` and `admin` are static words. `unread` is a live count the rail fills
+   * in — the one place navigation shows a number that changes without anybody
+   * navigating, which is the whole point of a bell.
+   */
+  badge?: "hr" | "admin" | "unread";
 }
 
 export interface NavGroup {
@@ -102,6 +112,23 @@ export function buildNav(session: Session): Nav {
   if (can("teams")) {
     primary.push({ label: "Teams", href: "/teams", icon: Users, match: "/teams" });
   }
+  // Projects earns a pill for the same reason Reports does: moving your own
+  // work along is a daily act for everybody on a project, not an occasional
+  // errand, and a daily act two clicks deep is one people stop doing.
+  //
+  // It lands on the board rather than the list, because the question somebody
+  // arrives with is "what is mine" far more often than "what exists" — and
+  // the module gate is the only one asked here, since who may see *which*
+  // project is decided per project by the backend and cannot be answered from
+  // a session.
+  if (can("projects")) {
+    primary.push({
+      label: "Projects",
+      href: "/projects/board",
+      icon: FolderKanban,
+      match: "/projects",
+    });
+  }
   // Reports earns a pill rather than a menu entry because filing one is a daily
   // act for everybody who has the module, not an occasional errand — and a
   // daily act two clicks deep is one people stop doing. The reading side of it
@@ -131,6 +158,18 @@ export function buildNav(session: Session): Nav {
 
   const more: NavGroup[] = [];
 
+  // The reading side of projects. The board is the pill above; these are the
+  // three views nobody needs every day — everything the team runs, the
+  // portfolio in figures, and what actually moved.
+  if (can("projects")) {
+    const projects: NavItem[] = [
+      { label: "All projects", href: "/projects", icon: FolderKanban, match: "/projects" },
+      { label: "Portfolio", href: "/projects/portfolio", icon: MapIcon, match: "/projects/portfolio" },
+      { label: "What moved", href: "/projects/activity", icon: Activity, match: "/projects/activity" },
+    ];
+    more.push({ label: "Projects", items: projects });
+  }
+
   const assignment: NavItem[] = [];
   if (can("assignment", "labels")) {
     assignment.push({ label: "Labels", href: "/assignment/labels", icon: Tag });
@@ -159,6 +198,16 @@ export function buildNav(session: Session): Nav {
   // reason — and worth a catalogue entry on the backend so this file does not
   // have to be the one place that knows.
   const people: NavItem[] = [
+    // Everybody's, and gated on nothing: the API scopes notifications to the
+    // caller in the query itself and has no route that takes a user id, so
+    // there is no permission here to check.
+    {
+      label: "Notifications",
+      href: "/notifications",
+      icon: Bell,
+      match: "/notifications",
+      badge: "unread",
+    },
     {
       label: "Meetings",
       href: "/meetings",
@@ -296,6 +345,33 @@ export function buildNav(session: Session): Nav {
       match: "/admin/reports",
       badge: "admin",
     });
+    // The parts that run without anybody asking — a watched mailbox, a mirrored
+    // list, a live ranking. They have no natural place in the app because
+    // nobody navigates to them, so this is where they become visible.
+    admin.push({
+      label: "System",
+      href: "/admin/console",
+      icon: Activity,
+      match: "/admin/console",
+      badge: "admin",
+    });
+    admin.push({
+      label: "Mail intake",
+      href: "/admin/intake",
+      icon: Inbox,
+      match: "/admin/intake",
+      badge: "admin",
+    });
+    // Deliberately not `match`ed on "/admin/permissions" alone as a prefix of
+    // anything else: the assistant has its own permissions screen and the two
+    // would light up together.
+    admin.push({
+      label: "Who may do what",
+      href: "/admin/permissions",
+      icon: KeyRound,
+      match: "/admin/permissions",
+      badge: "admin",
+    });
     // The assistant's own administration. Two entries rather than the
     // catalogue's five: the other three are one click away through the strip
     // those screens share, and five near-identical rows would crowd out every
@@ -351,6 +427,10 @@ const STATIC_LABELS: Record<string, string> = {
   "/leave/request": "Request leave",
   "/leave/calendar": "Who is off",
   "/meetings": "Meetings",
+  "/projects": "All projects",
+  "/projects/board": "My project work",
+  "/projects/portfolio": "Portfolio",
+  "/projects/activity": "What moved",
   "/reports": "Reports",
   "/reports/new": "New report",
   "/reports/overview": "Reporting overview",
@@ -363,6 +443,10 @@ const STATIC_LABELS: Record<string, string> = {
   "/quote-requests/queue": "Ready for Zoho",
   "/admin/templates": "Form templates",
   "/admin/reports": "Report settings",
+  "/admin/console": "System",
+  "/admin/intake": "Mail intake",
+  "/admin/permissions": "Who may do what",
+  "/notifications": "Notifications",
   "/comparisons": "Comparisons",
   "/comparisons/new": "New comparison",
   "/admin/roles": "Roles",
@@ -401,6 +485,12 @@ export function labelFor(pathname: string): string {
   // replaces this the moment it knows better.
   if (parts[0] === "quotes") return `Quote ${short(parts[1])}`;
   if (parts[0] === "reports") return `Report ${short(parts[1])}`;
+  // A project's own tabs read as "Project 4f2a… · plan", the same convention
+  // the team routes use — two open projects have to be tellable apart.
+  if (parts[0] === "projects" && parts.length >= 2) {
+    const tail = parts[2];
+    return tail ? `Project ${short(parts[1])} · ${tail}` : `Project ${short(parts[1])}`;
+  }
   if (parts[0] === "comparisons") return `Comparison ${short(parts[1])}`;
   if (parts[0] === "directory") return `Person ${short(parts[1])}`;
   if (parts[0] === "admin" && parts[1] === "users") return `User ${short(parts[2])}`;

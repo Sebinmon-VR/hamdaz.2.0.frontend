@@ -48,6 +48,8 @@ src/
       directory/          Entra, list and person
       leave/              mine, request, calendar, HR queue, rules
       proposals/my-tasks/ SharePoint tasks assigned to the viewer
+      projects/           my work, every project, one project, its plan,
+                          the portfolio, and what moved over a period
       reports/            what each team files — mine, new, one report, the overview
       quotes/             Zoho Books, list and detail
       comparisons/        list, new (upload → check → compare), saved detail
@@ -56,12 +58,17 @@ src/
       admin/              roles, assignments, team access, user administration
       admin/assistant/    its switches, permissions, audience, runs and cost
       admin/reports/      who filed reports are mailed to, what each team files, what was sent
+      admin/console/      the parts that run on their own, and what each currently says
+      admin/intake/       mail in, work assigned — the pipeline, the mirror, the ranking
+      admin/permissions/  who may do what in those parts, and who holds each role today
+      notifications/      what you have been told
       settings/           accent palette and light/dark, per browser
   components/
     ui/                   primitives, controls, feedback — the design system
     shell/                top bar, tab strip, doodles, wordmark, theme switch
     widgets/              one renderer per backend dashboard widget
     assistant/            the orb, the two voice screens, the tool trace, the confirm card
+    projects/             the RAG dials, the milestone timeline, the vocabulary
     comparison/ leave/ proposals/ quotes/   module-specific pieces
   lib/
     api.ts     the only place that talks to the backend
@@ -336,6 +343,86 @@ twice: the policy screens set numbers, the ranking says who *should* get the
 next task and why, and handing it over stays a person's action. Nothing is ever
 written back to SharePoint.
 
+## Projects
+
+Internal work with a plan, kept deliberately apart from proposals: a proposal
+is a bid the presales team works in SharePoint, a project is work this system
+owns end to end. Six screens, and three ideas from the backend shape all of
+them.
+
+**Assignment is the visibility model.** Being on a project is what makes it
+yours to see; holding a task inside it is what makes that task yours to move.
+Assigning somebody a task adds them to the project, so there is one answer to
+"who can see this" rather than two that can disagree — and no screen here asks
+the question a second time. The listing narrows itself: the projects you are
+on, all of your team's if you run it, everyone's if you run the company. A
+project you may not read answers **404, not 403**, because a 403 on an id
+confirms the id names a real project of some team.
+
+**Three powers, kept apart.** Running the plan (`can_manage`), administering
+the record (`can_administer` — archive, restore, delete) and filing a status
+report on it (`can_report`) are separate, and moving one task is a fourth,
+answered per task by `can_update`. All four arrive on the payload and the
+screens read them rather than re-deriving them: an engineer records progress
+on what they hold without being able to reschedule anything, which is the
+distinction between a plan and a shared document. The backend refuses the
+difference explicitly, so a control offered to the wrong person would fail
+loudly — which is why none of them are offered.
+
+**Health is judged, not computed.** The five dials are the lead's assessment
+and are stored as such; what the module computes is a *suggestion*, sent
+alongside. [`Dials`](src/components/projects/ProjectBits.tsx) draws both and
+never merges them, and shows the suggestion only where it disagrees —
+agreement is not news, and a tile arguing with its own lead on every project
+would teach people to ignore the line. `health_stale` is surfaced everywhere
+the colours are, because a green project nobody has looked at for a fortnight
+is not evidence of a green project.
+
+Two consequences worth knowing when reading the screens:
+
+- **The milestone timeline draws the baseline as well as the current date.**
+  The gap between them is the slip, and a chart that redrew itself around each
+  reschedule would erase the only evidence that anything moved. The bar fills
+  with *completion*, not elapsed time — filling it with the calendar would
+  show every overdue milestone as finished.
+- **`/projects/activity` is day, week, month, quarter and year in one screen**,
+  because on the backend they are one query with different bounds. Nothing
+  here computes a window: a grain goes up and the dates actually used come
+  back, so the heading prints the period that was covered rather than the one
+  somebody meant.
+
+Writes revalidate the whole module — `/projects` is the second prefix in
+`REVALIDATE_AFTER_WRITE` in [api.ts](src/lib/api.ts) — because moving one task
+changes the task, its milestone's percentage, the project's roll-up, the
+board, the portfolio and the log at once, and enumerating that at every call
+site is how one gets missed. It is affordable here where it would not be for
+proposals or quotes: projects is Postgres end to end and sweeps nothing.
+
+## Project status reports
+
+The reports module grew a second frame rather than nine sections everybody
+has. A template declares which sections it carries, `scope` is **inferred from
+those sections** rather than stored, and the report form endpoint answers with
+it — so a team pointed at a project template is asked which project before
+anything else, and gets health dials and a milestone timeline in place of some
+of the standard six.
+
+That needed no new mechanism: which template a team files has always been a
+schedule row per cadence. `Switch a team to project reports` on
+[admin/reports](src/app/(app)/admin/reports/page.tsx) writes the rows an
+administrator would write by hand, reusing the existing ones so recipients and
+notes survive the change. Two cadences arrived with it — **quarterly** and
+**yearly** — and there is deliberately no daily project report.
+
+The three new section kinds (`dials`, `timeline`, `projects`) are drawn from
+the report's own `project_lines`, which is a **snapshot taken when the draft
+was opened and then frozen**. The author owns exactly three boxes per project
+— key activities, the management action required, and a note — and the
+backend refuses everything else, so the editor offers nothing else: a report
+whose figures could be retyped would be a record of what somebody wished the
+project said. Following `project_id` is how a reader reaches the version that
+has moved on since, and that link is the only live thing on a filed report.
+
 ## The assistant
 
 A chat agent over the ERP's own modules, run **as the person asking**. That
@@ -595,6 +682,7 @@ redundant here and deliberately left alone:
 
 | Endpoint / field | Why not |
 | --- | --- |
+| `GET /projects/my-tasks` | The viewer's own project tasks. `/projects/board` returns the same list plus the projects they belong to and the portfolio figures, as one call — three round trips to draw one screen is how a dashboard earns a reputation for being slow. |
 | `GET /widgets` | The unscoped widget catalogue. The layout dialog uses `available` from `/teams/{ref}/dashboard/layout`, which is the same list already narrowed to that team's modules. |
 | `DELETE /teams/{ref}/access/{module_key}` | Revokes one module. The access screen sends the whole set with `PUT`, where a module left out *is* the revocation. |
 | `POST /teams/{ref}/access` → `page_keys` | Grants one module limited to some pages. The `PUT` above carries the same per-module page lists for every module at once. |
@@ -606,6 +694,13 @@ better handle for (`created_by_id`, `decided_by_id`, `policy_id`,
 `sharepoint_lookup_id`, `sharepoint_user_id`, `team_slug`) and server telemetry
 (`widget_ms`, `section_ms`, `fetch_ms`, `SectionInfo.heavy`, which the
 progressive loader acts on rather than displays).
+
+**The finance module has no screens at all.** Seven endpoints — the profit and
+loss, its comparison and trend, account postings, the Zoho passthrough and its
+diagnostics — are unbuilt here rather than deliberately skipped, and are the
+one real gap in this table. The two `careers` routes and `/apply/{token}` are
+also absent by design: they are public, unauthenticated pages for candidates
+and belong outside this app shell.
 
 Every other endpoint, **every query parameter and every request field** is sent
 by some screen. To re-check after a backend change, dump the spec (below) and

@@ -1,0 +1,35 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "Status report" },
+    { "id": "page-2", "name": "Length & roadmap" }
+  ],
+  "artboards": [
+    { "file": "Main.dc.html", "title": "AI team — Projects", "page": "page-1", "x": 0, "y": 0, "w": 1240, "h": 884 },
+    { "file": "Project.dc.html", "title": "One project — monthly strategic", "page": "page-1", "x": 1360, "y": 0, "w": 1240, "h": 1044 },
+    { "file": "Exec.dc.html", "title": "Executive status — weekly tactical", "page": "page-1", "x": 0, "y": 1200, "w": 1240, "h": 836 },
+    { "file": "Dials.dc.html", "title": "The dial — now, at rest, changing", "page": "page-1", "x": 1360, "y": 1200, "w": 1240, "h": 604 },
+
+    { "file": "Work.dc.html", "title": "Work — 211 rows become 6", "page": "page-2", "x": 0, "y": 0, "w": 1240, "h": 848 },
+    { "file": "Plan.dc.html", "title": "Project plan — the Gantt gets the page", "page": "page-2", "x": 1360, "y": 0, "w": 1240, "h": 852 },
+    { "file": "Roadmap.dc.html", "title": "Roadmap — every project on one axis", "page": "page-2", "x": 0, "y": 1000, "w": 1240, "h": 908 }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "page": "page-1",
+      "x": 0,
+      "y": -132,
+      "w": 520,
+      "text": "AI team, projects module. Reference status-report layout in the app's own tokens — Archivo, electric palette, 20px panels, the .micro/.fig ramp. Dark shown; light inverts through the same tokens.\n\nBuilt: the dials, the milestone Gantt, the plain-word labels."
+    },
+    {
+      "id": "round-two",
+      "page": "page-2",
+      "x": 0,
+      "y": -140,
+      "w": 560,
+      "text": "Three fixes: the project page was too long, the plan page was thin, and managers had nowhere to see every project at once.\n\nThe roadmap is one row per project — not tasks — and the same block goes on a portfolio status report."
+    }
+  ],
+  "launch": { "view": "canvas", "page": "page-2" }
+}

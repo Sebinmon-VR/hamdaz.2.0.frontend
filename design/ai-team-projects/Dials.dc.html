@@ -1,0 +1,158 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap">
+  <style>
+    body { margin: 0; font-family: Archivo, ui-sans-serif, system-ui, sans-serif; }
+    a { color: #4fd8ff; text-decoration: none; } a:hover { color: #7ae4ff; }
+    .micro { font-size: 9px; font-weight: 700; letter-spacing: 0.19em; text-transform: uppercase; }
+    .fig { font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+    .col { display: flex; flex-direction: column; gap: 14px; }
+    .colhead { display: flex; flex-direction: column; gap: 6px; }
+    .colhead h3 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+    .colhead p { margin: 0; font-size: 11.5px; line-height: 1.45; color: #6d6d78; }
+    .stage { background: #15151a; border-radius: 20px; padding: 22px; display: flex; align-items: flex-start; justify-content: center; flex-grow: 1; }
+  </style>
+</helmet>
+
+<div style="width: 1240px; min-height: 604px; box-sizing: border-box; background: #08080b; color: #ffffff; padding: 20px 20px 24px; display: flex; flex-direction: column; gap: 16px;">
+
+  <div style="display: flex; align-items: flex-end; gap: 16px;">
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <span class="micro" style="color: #54545e;">AI team · Projects</span>
+      <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.03em; line-height: 1;">The dial</h1>
+    </div>
+    <p style="margin: 0 0 2px auto; font-size: 12px; color: #54545e; max-width: 460px; text-align: right;">Read at a glance, changed on purpose. Twenty buttons across a strip is a control panel; a report is five colours and five arrows.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr 1.15fr; gap: 14px; align-items: stretch;">
+
+    <!-- now -->
+    <div class="col">
+      <div class="colhead">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="micro" style="color: #f2694f;">Now</span>
+          <span style="height: 1px; flex-grow: 1; background: #26262e;"></span>
+        </div>
+        <h3 style="color: #a6a6b0;">Seven buttons per dial</h3>
+        <p>Thirty-five controls across the strip, every one of them at full contrast, so nothing reads first. The colours are only legible as a set if you already know the order.</p>
+      </div>
+      <div class="stage" style="opacity: 0.75;">
+        <div style="width: 186px; background: #1b1b21; border-radius: 15px; padding: 13px; display: flex; flex-direction: column; gap: 11px;">
+          <div style="display: flex; align-items: center;">
+            <span class="micro" style="color: #6d6d78;">Schedule</span>
+            <svg style="margin-left: auto;" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#54545e" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+            <span style="height: 24px; border-radius: 7px; background: #34c98a; opacity: 0.45;"></span>
+            <span style="height: 24px; border-radius: 7px; background: #e2a63f;"></span>
+            <span style="height: 24px; border-radius: 7px; background: #f2694f; opacity: 0.45;"></span>
+            <span style="height: 24px; border-radius: 7px; background: #6d6d78; opacity: 0.45;"></span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
+            <span style="height: 22px; border-radius: 7px; background: #22222a; display: grid; place-items: center; font-size: 10px; color: #6d6d78;">Impr</span>
+            <span style="height: 22px; border-radius: 7px; background: #4fd8ff; display: grid; place-items: center; font-size: 10px; font-weight: 600; color: #022733;">Stea</span>
+            <span style="height: 22px; border-radius: 7px; background: #22222a; display: grid; place-items: center; font-size: 10px; color: #6d6d78;">Decl</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- at rest -->
+    <div class="col">
+      <div class="colhead">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="micro" style="color: #34c98a;">At rest</span>
+          <span style="height: 1px; flex-grow: 1; background: #26262e;"></span>
+        </div>
+        <h3>One colour, one arrow</h3>
+        <p>The verdict is the block and the trend is the chevron — the reference template, in the app palette. Where the dates disagree with the dial, it is said underneath rather than written to the dial.</p>
+      </div>
+      <div class="stage">
+        <div style="display: flex; flex-direction: column; gap: 10px; width: 186px;">
+          <div style="background: #1b1b21; border-radius: 15px; padding: 12px 13px 13px; display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center;">
+              <span class="micro" style="color: #6d6d78;">Schedule</span>
+              <svg style="margin-left: auto;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#54545e" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14"/></svg>
+            </div>
+            <div style="height: 30px; border-radius: 9px; background: #e2a63f; display: flex; align-items: center; padding: 0 11px;">
+              <span style="font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #241a06; text-transform: uppercase;">At risk</span>
+            </div>
+            <span style="font-size: 10.5px; line-height: 1.35; color: #6d6d78;">3 milestones past their date.</span>
+          </div>
+          <div style="background: #1b1b21; border-radius: 15px; padding: 12px 13px 13px; display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center;">
+              <span class="micro" style="color: #6d6d78;">Benefits</span>
+              <svg style="margin-left: auto;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34c98a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+            </div>
+            <div style="height: 30px; border-radius: 9px; background: #34c98a; display: flex; align-items: center; padding: 0 11px;">
+              <span style="font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #04291b; text-transform: uppercase;">On track</span>
+            </div>
+            <span style="font-size: 10.5px; line-height: 1.35; color: #6d6d78;">19 modules already in use.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- changing it -->
+    <div class="col">
+      <div class="colhead">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="micro" style="color: #4fd8ff;">Changing it</span>
+          <span style="height: 1px; flex-grow: 1; background: #26262e;"></span>
+        </div>
+        <h3>Click the block</h3>
+        <p>The controls appear only when someone is actually assessing, and the reason travels with the change — which is what the log and the report both read back.</p>
+      </div>
+      <div class="stage" style="padding-bottom: 34px;">
+        <div style="position: relative; width: 268px;">
+          <div style="width: 186px; background: #1b1b21; border-radius: 15px; padding: 12px 13px 13px; display: flex; flex-direction: column; gap: 10px; outline: 2px solid #4fd8ff; outline-offset: 2px;">
+            <div style="display: flex; align-items: center;">
+              <span class="micro" style="color: #6d6d78;">Schedule</span>
+              <svg style="margin-left: auto;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#54545e" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14"/></svg>
+            </div>
+            <div style="height: 30px; border-radius: 9px; background: #e2a63f; display: flex; align-items: center; padding: 0 11px;">
+              <span style="font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #241a06; text-transform: uppercase;">At risk</span>
+            </div>
+            <span style="font-size: 10.5px; line-height: 1.35; color: #6d6d78;">3 milestones past their date.</span>
+          </div>
+
+          <div style="position: absolute; left: 40px; top: 96px; width: 228px; background: #22222a; border: 1px solid #35353f; border-radius: 15px; padding: 13px; display: flex; flex-direction: column; gap: 11px; box-shadow: 0 24px 64px -16px rgb(0 0 0 / 0.9);">
+            <span class="micro" style="color: #6d6d78;">Set schedule to</span>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px;">
+              <span style="height: 30px; border-radius: 9px; background: #34c98a;"></span>
+              <span style="height: 30px; border-radius: 9px; background: #e2a63f; outline: 2px solid #ffffff; outline-offset: 2px;"></span>
+              <span style="height: 30px; border-radius: 9px; background: #f2694f;"></span>
+              <span style="height: 30px; border-radius: 9px; background: #2c2c36; border: 1.5px solid #54545e; box-sizing: border-box;"></span>
+            </div>
+            <span class="micro" style="color: #6d6d78; margin-top: 2px;">Moving</span>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px;">
+              <span style="height: 28px; border-radius: 9px; background: #1b1b21; display: grid; place-items: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34c98a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg></span>
+              <span style="height: 28px; border-radius: 9px; background: #ffffff; display: grid; place-items: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0a0a0e" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14"/></svg></span>
+              <span style="height: 28px; border-radius: 9px; background: #1b1b21; display: grid; place-items: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f2694f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m7 7 10 10"/><path d="M17 7v10"/></svg></span>
+            </div>
+            <div style="height: 32px; border-radius: 11px; background: #15151a; border: 1px solid #35353f; display: flex; align-items: center; padding: 0 11px; margin-top: 2px;">
+              <span style="font-size: 11.5px; color: #54545e;">Why — supplier confirmed the date</span>
+            </div>
+            <div style="display: flex; gap: 7px; margin-top: 1px;">
+              <span style="flex-grow: 1; height: 30px; border-radius: 11px; background: #4fd8ff; color: #022733; font-size: 12px; font-weight: 600; display: grid; place-items: center;">Save assessment</span>
+              <span style="width: 64px; height: 30px; border-radius: 11px; border: 1px solid #35353f; color: #a6a6b0; font-size: 12px; display: grid; place-items: center;">Cancel</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -116,12 +116,18 @@ export function apiUrl(path: string, query?: Query): string {
  * the opening and the list. Enumerating that at fourteen call sites is how one
  * gets missed, so a write invalidates its module instead.
  *
- * **Only HR is listed**, on purpose. The same staleness exists elsewhere, but
- * widening this would start re-sweeping SharePoint and Zoho on every write in
- * those modules — a real cost, and a change nobody has asked for. Add a prefix
- * here when a module wants the same behaviour.
+ * **Only HR and Projects are listed**, on purpose. The same staleness exists
+ * elsewhere, but widening this would start re-sweeping SharePoint and Zoho on
+ * every write in those modules — a real cost, and a change nobody has asked
+ * for. Add a prefix here when a module wants the same behaviour.
  */
-const REVALIDATE_AFTER_WRITE = ["/hr"];
+//
+// Projects is the second. It is Postgres end to end — nothing in it sweeps
+// SharePoint or Entra — and it is the most write-heavy module here: moving a
+// task changes the task, its milestone's percentage, the project's roll-up,
+// the board, the portfolio and the activity log at once. Enumerating that at
+// every call site is how one gets missed.
+const REVALIDATE_AFTER_WRITE = ["/hr", "/projects"];
 
 /** Revalidate — never clear. Screens keep the last answer while the next loads. */
 function invalidateModule(path: string): void {

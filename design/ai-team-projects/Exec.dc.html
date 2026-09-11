@@ -1,0 +1,223 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap">
+  <style>
+    body { margin: 0; font-family: Archivo, ui-sans-serif, system-ui, sans-serif; }
+    a { color: #4fd8ff; text-decoration: none; } a:hover { color: #7ae4ff; }
+    .micro { font-size: 9px; font-weight: 700; letter-spacing: 0.19em; text-transform: uppercase; }
+    .fig { font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+    .tnum { font-variant-numeric: tabular-nums; }
+    .tl { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); }
+    .callout { background: #1b1b21; border: 1px solid #26262e; border-radius: 11px; padding: 9px 11px; display: flex; flex-direction: column; gap: 5px; }
+    .callout p { margin: 0; font-size: 11px; line-height: 1.4; color: #a6a6b0; }
+    .stem { width: 1px; background: #35353f; }
+    .irow { display: grid; grid-template-columns: 1fr 104px 84px 108px; align-items: center; gap: 10px; height: 36px; padding: 0 12px; border-radius: 11px; }
+    .pill { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 3px 9px; font-size: 10.5px; font-weight: 500; line-height: 1; }
+  </style>
+</helmet>
+
+<div style="width: 1240px; min-height: 836px; box-sizing: border-box; background: #08080b; color: #ffffff; padding: 18px 20px 24px; display: flex; flex-direction: column; gap: 13px;">
+
+  <div style="display: flex; align-items: flex-end; gap: 16px;">
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <span class="micro" style="color: #54545e;">AI team · Projects</span>
+      <h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.03em; line-height: 1;">Executive status</h1>
+    </div>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+      <span class="micro" style="color: #4fd8ff;">Weekly tactical</span>
+      <span style="width: 3px; height: 3px; border-radius: 999px; background: #35353f;"></span>
+      <span class="tnum" style="font-size: 11px; color: #54545e;">Week 37 · filed 11 Sep 2026</span>
+    </div>
+  </div>
+
+  <!-- the field strip -->
+  <div style="display: grid; grid-template-columns: 1fr 260px 260px; gap: 10px;">
+    <div style="background: #15151a; border-radius: 15px; padding: 12px 15px; display: flex; flex-direction: column; gap: 8px;">
+      <span class="micro" style="color: #54545e;">Project</span>
+      <span style="font-size: 16px; font-weight: 600; letter-spacing: -0.015em;">Hamdaz ERP rollout</span>
+    </div>
+    <div style="background: #15151a; border-radius: 15px; padding: 12px 15px; display: flex; flex-direction: column; gap: 8px;">
+      <span class="micro" style="color: #54545e;">Lead</span>
+      <span style="font-size: 16px; font-weight: 600; letter-spacing: -0.015em;">Sebin M.</span>
+    </div>
+    <div style="background: #15151a; border-radius: 15px; padding: 12px 15px; display: flex; align-items: center; gap: 12px;">
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <span class="micro" style="color: #54545e;">Status</span>
+        <span style="font-size: 16px; font-weight: 600; letter-spacing: -0.015em; color: #e2a63f;">At risk</span>
+      </div>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 9px;">
+        <span style="width: 40px; height: 26px; border-radius: 8px; background: #e2a63f;"></span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34c98a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- timeline -->
+  <div style="background: #15151a; border-radius: 20px; padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 14px;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <h2 style="margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em;">Milestones</h2>
+      <p style="margin: 0; font-size: 12px; color: #54545e;">Delivery beats, this year.</p>
+      <span class="tnum" style="margin-left: auto; font-size: 11px; color: #54545e;">Feb — Dec 2026</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column;">
+
+      <!-- above the line -->
+      <div class="tl" style="align-items: end; min-height: 116px;">
+        <div style="grid-column: 2 / 5; display: flex; flex-direction: column; align-items: flex-start; height: 100%; justify-content: flex-end;">
+          <div class="callout" style="width: 100%;">
+            <span class="micro" style="color: #34c98a;">Mar · done</span>
+            <p>Core platform, auth, teams and the directory live.</p>
+          </div>
+          <div class="stem" style="height: 22px; margin-left: 18px;"></div>
+        </div>
+        <div style="grid-column: 5 / 8; display: flex; flex-direction: column; align-items: flex-start; height: 100%; justify-content: flex-end;">
+          <div class="callout" style="width: 100%;">
+            <span class="micro" style="color: #34c98a;">Jun · done</span>
+            <p>Quotes, proposals, quote requests and comparisons shipped.</p>
+          </div>
+          <div class="stem" style="height: 22px; margin-left: 18px;"></div>
+        </div>
+        <div style="grid-column: 9 / 12; display: flex; flex-direction: column; align-items: flex-start; height: 100%; justify-content: flex-end;">
+          <div class="callout" style="width: 100%; border-color: #5a4718;">
+            <span class="micro" style="color: #e2a63f;">Oct · at risk</span>
+            <p>Projects and reporting in production for every team.</p>
+          </div>
+          <div class="stem" style="height: 22px; margin-left: 18px; background: #e2a63f;"></div>
+        </div>
+      </div>
+
+      <!-- the axis -->
+      <div style="position: relative; height: 34px;">
+        <div style="position: absolute; left: 0; right: 0; top: 16px; height: 2px; background: #26262e; border-radius: 999px;"></div>
+        <div style="position: absolute; left: 0; width: 66%; top: 16px; height: 2px; background: #4fd8ff; border-radius: 999px;"></div>
+        <div class="tl" style="position: relative; height: 100%;">
+          <span style="grid-column: 2; justify-self: start; margin-left: 12px; margin-top: 10px; width: 13px; height: 13px; border-radius: 999px; background: #34c98a; box-shadow: 0 0 0 4px #15151a;"></span>
+          <span style="grid-column: 3; justify-self: start; margin-left: 12px; margin-top: 10px; width: 13px; height: 13px; border-radius: 999px; background: #34c98a; box-shadow: 0 0 0 4px #15151a;"></span>
+          <span style="grid-column: 5; justify-self: start; margin-left: 12px; margin-top: 10px; width: 13px; height: 13px; border-radius: 999px; background: #34c98a; box-shadow: 0 0 0 4px #15151a;"></span>
+          <span style="grid-column: 7; justify-self: start; margin-left: 12px; margin-top: 10px; width: 13px; height: 13px; border-radius: 999px; background: #34c98a; box-shadow: 0 0 0 4px #15151a;"></span>
+          <span style="grid-column: 9; justify-self: start; margin-left: 12px; margin-top: 10px; width: 13px; height: 13px; border-radius: 999px; background: #e2a63f; box-shadow: 0 0 0 4px #15151a;"></span>
+          <span style="grid-column: 11; justify-self: start; margin-left: 12px; margin-top: 10px; width: 13px; height: 13px; border-radius: 999px; background: #2c2c36; border: 2px solid #54545e; box-sizing: border-box; box-shadow: 0 0 0 4px #15151a;"></span>
+        </div>
+      </div>
+
+      <!-- month labels -->
+      <div class="tl" style="padding-top: 4px;">
+        <span class="micro" style="color: #54545e;">Feb</span>
+        <span class="micro" style="color: #54545e;">Mar</span>
+        <span class="micro" style="color: #54545e;">Apr</span>
+        <span class="micro" style="color: #54545e;">May</span>
+        <span class="micro" style="color: #54545e;">Jun</span>
+        <span class="micro" style="color: #54545e;">Jul</span>
+        <span class="micro" style="color: #54545e;">Aug</span>
+        <span class="micro" style="color: #54545e;">Sep</span>
+        <span class="micro" style="color: #ffffff;">Oct</span>
+        <span class="micro" style="color: #54545e;">Nov</span>
+        <span class="micro" style="color: #54545e;">Dec</span>
+      </div>
+
+      <!-- below the line -->
+      <div class="tl" style="align-items: start; min-height: 112px; padding-top: 6px;">
+        <div style="grid-column: 3 / 6; display: flex; flex-direction: column; align-items: flex-start;">
+          <div class="stem" style="height: 20px; margin-left: 18px;"></div>
+          <div class="callout" style="width: 100%;">
+            <span class="micro" style="color: #34c98a;">Apr · done</span>
+            <p>HR, leave, meetings and people records live.</p>
+          </div>
+        </div>
+        <div style="grid-column: 7 / 10; display: flex; flex-direction: column; align-items: flex-start;">
+          <div class="stem" style="height: 20px; margin-left: 18px;"></div>
+          <div class="callout" style="width: 100%;">
+            <span class="micro" style="color: #34c98a;">Aug · done</span>
+            <p>Assistant, notifications and the admin console shipped.</p>
+          </div>
+        </div>
+        <div style="grid-column: 11 / 12; display: flex; flex-direction: column; align-items: flex-start;">
+          <div class="stem" style="height: 20px; margin-left: 18px;"></div>
+          <div class="callout" style="width: 232px;">
+            <span class="micro" style="color: #6d6d78;">Dec · planned</span>
+            <p>Finance module, handover and training.</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- issues and support -->
+  <div style="display: grid; grid-template-columns: 1fr 400px; gap: 10px;">
+
+    <div style="background: #15151a; border-radius: 20px; padding: 16px 4px 12px; display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 0 14px;">
+        <h2 style="margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em;">Key issues</h2>
+        <span class="tnum" style="font-size: 12px; color: #54545e;">4</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 104px 84px 108px; align-items: center; gap: 10px; padding: 0 12px 7px; border-bottom: 1px solid #26262e;">
+        <span class="micro" style="color: #54545e;">Issue</span>
+        <span class="micro" style="color: #54545e;">Status</span>
+        <span class="micro" style="color: #54545e;">Priority</span>
+        <span class="micro" style="color: #54545e;">Owner</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <div class="irow" style="background: #1b1b21;">
+          <span style="font-size: 12.5px;">Scope grew twice without a date move</span>
+          <span><span class="pill" style="background: #331512; color: #f2694f;">Open</span></span>
+          <span><span class="pill" style="background: #331512; color: #f2694f;">High</span></span>
+          <span style="font-size: 11px; color: #a6a6b0;">Sebin M.</span>
+        </div>
+        <div class="irow">
+          <span style="font-size: 12.5px;">One frontend engineer across five modules</span>
+          <span><span class="pill" style="background: #331512; color: #f2694f;">Open</span></span>
+          <span><span class="pill" style="background: #331512; color: #f2694f;">High</span></span>
+          <span style="font-size: 11px; color: #a6a6b0;">Sebin M.</span>
+        </div>
+        <div class="irow">
+          <span style="font-size: 12.5px;">Finance module has no sign-off yet</span>
+          <span><span class="pill" style="background: #1b1b3a; color: #8b8af0;">In progress</span></span>
+          <span><span class="pill" style="background: #2b2211; color: #e2a63f;">Medium</span></span>
+          <span style="font-size: 11px; color: #a6a6b0;">Priya N.</span>
+        </div>
+        <div class="irow">
+          <span style="font-size: 12.5px;">Teams channel delivery still flaky</span>
+          <span><span class="pill" style="background: #0d2a1f; color: #34c98a;">Resolved</span></span>
+          <span><span class="pill" style="background: #22222a; color: #a6a6b0;">Low</span></span>
+          <span style="font-size: 11px; color: #a6a6b0;">Anand R.</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="background: #15151a; border-radius: 20px; padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <h2 style="margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em;">Support needed</h2>
+        <span class="tnum" style="font-size: 12px; color: #54545e;">3</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; gap: 10px; align-items: flex-start;">
+          <span style="width: 5px; height: 5px; border-radius: 1.5px; background: #ff4fa3; margin-top: 6px; flex-shrink: 0;"></span>
+          <p style="margin: 0; font-size: 12px; line-height: 1.45; color: #a6a6b0;">A decision on the December date, given the scope added in August.</p>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: flex-start;">
+          <span style="width: 5px; height: 5px; border-radius: 1.5px; background: #ff4fa3; margin-top: 6px; flex-shrink: 0;"></span>
+          <p style="margin: 0; font-size: 12px; line-height: 1.45; color: #a6a6b0;">A second frontend engineer for the reporting screens, from October.</p>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: flex-start;">
+          <span style="width: 5px; height: 5px; border-radius: 1.5px; background: #ff4fa3; margin-top: 6px; flex-shrink: 0;"></span>
+          <p style="margin: 0; font-size: 12px; line-height: 1.45; color: #a6a6b0;">Finance to confirm the chart of accounts before that module is planned.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

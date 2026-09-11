@@ -8,6 +8,7 @@ import {
   Archive,
   ArchiveRestore,
   Crown,
+  FolderKanban,
   GaugeCircle,
   KeyRound,
   ListChecks,
@@ -83,6 +84,11 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
   // reports, which is a real page but not one worth a link from here — they
   // reach those from Reports.
   const doesReports = holds("reports");
+  // Projects differs from the two above: it is offered to anybody on the team
+  // rather than only to whoever runs it. The listing narrows itself to the
+  // projects the viewer is on, so an ordinary member reaches a real page —
+  // their own work on this team — rather than an empty one.
+  const doesProjects = holds("projects");
   const showDashboard = session.can("dashboard", "team") && holds("dashboard");
 
   return (
@@ -106,6 +112,11 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
             {oversees && doesProposals && (
               <LinkButton href={`/teams/${slug}/proposals`} icon={ListChecks}>
                 Proposals
+              </LinkButton>
+            )}
+            {doesProjects && (
+              <LinkButton href={`/teams/${slug}/projects`} icon={FolderKanban}>
+                Projects
               </LinkButton>
             )}
             {oversees && doesReports && (

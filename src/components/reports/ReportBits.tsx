@@ -84,11 +84,53 @@ export const CADENCE_LABELS: Record<string, string> = {
   daily: "Daily",
   weekly: "Weekly",
   monthly: "Monthly",
+  // Both arrived with project reporting. A project does not change enough in
+  // a day to be worth a set of dials, and it changes far too much in a year
+  // to be reported on weekly — so the scale had to grow at both ends.
+  quarterly: "Quarterly",
+  yearly: "Yearly",
   ad_hoc: "Ad hoc",
 };
 
+/** The cadences offered as filters and pickers, in calendar order. */
+export const CADENCE_OPTIONS: { value: string; label: string }[] = Object.entries(
+  CADENCE_LABELS,
+).map(([value, label]) => ({ value, label }));
+
 export function CadenceBadge({ value }: { value: string }) {
   return <Badge tone="neutral">{CADENCE_LABELS[value] ?? value}</Badge>;
+}
+
+/* ── what a report is about ──────────────────────────────────────────── */
+
+/**
+ * Scope, in a word.
+ *
+ * Not the same question as who filed it. `team` is somebody's account of
+ * their own period — what every report was before projects existed — and the
+ * other two are about work rather than about a person, which is why they read
+ * differently on a list where all three appear together.
+ */
+export const SCOPE_LABELS: Record<string, string> = {
+  team: "Own work",
+  project: "Project",
+  portfolio: "Portfolio",
+};
+
+/**
+ * Drawn for everything except a team report.
+ *
+ * `team` is the overwhelming majority and the original meaning of "a report",
+ * so badging it would put a label on almost every row to distinguish the two
+ * that are not it — which is the wrong way round.
+ */
+export function ScopeBadge({ value }: { value: string }) {
+  if (!value || value === "team") return null;
+  return (
+    <Badge tone={value === "portfolio" ? "second" : "accent"}>
+      {SCOPE_LABELS[value] ?? value}
+    </Badge>
+  );
 }
 
 /**

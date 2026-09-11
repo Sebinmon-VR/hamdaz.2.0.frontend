@@ -350,6 +350,107 @@ export type LeaveQueueData =
       }[];
     };
 
+/**
+ * The projects module's cards.
+ *
+ * Every one is narrowed to what the *viewer* may read, not to what the team
+ * owns: a team dashboard is rendered for a person, and a card showing the
+ * whole team's projects to somebody who may see one of them would be a
+ * quieter version of the leak the API refuses.
+ */
+export type ProjectHealthData = {
+  projects: number;
+  by_status: Record<string, number>;
+  by_rag: Record<string, number>;
+  average_percent: number;
+  /** Sets of dials nobody has confirmed lately — read before believing the colours. */
+  stale_health: number;
+};
+
+export type ProjectAttentionData = {
+  milestones_overdue: number;
+  tasks_overdue: number;
+  tasks_blocked_or_open: number;
+  issues_open: number;
+  issues_needing_support: number;
+};
+
+export type ProjectBoardData = {
+  total: number;
+  showing: number;
+  projects: {
+    id: string;
+    name: string;
+    code: string | null;
+    status: string;
+    rag_overall: string;
+    trend_overall: string;
+    percent_complete: number;
+    lead: string | null;
+    target_end_on: string | null;
+    tasks_open: number;
+    tasks_overdue: number;
+    milestones_overdue: number;
+    issues_open: number;
+    health_stale: boolean;
+    /** What the dates would say — sent only where they disagree with the lead. */
+    schedule_hint: string | null;
+  }[];
+};
+
+export type MyProjectWorkData = {
+  total: number;
+  overdue: number;
+  due_this_week: number;
+  tasks: {
+    id: string;
+    project_id: string;
+    project: string;
+    title: string;
+    status: string;
+    priority: string;
+    percent_complete: number;
+    due_on: string | null;
+    overdue: boolean;
+  }[];
+};
+
+export type MilestonesAheadData = {
+  within_days: number;
+  total: number;
+  overdue: number;
+  milestones: {
+    id: string;
+    project_id: string;
+    project: string;
+    name: string;
+    owner: string | null;
+    due_on: string | null;
+    percent_complete: number;
+    state: string;
+    plan: string;
+    is_key: boolean;
+    slip_days: number | null;
+  }[];
+};
+
+export type ProjectActivityData = {
+  days: number;
+  total: number;
+  counts: Record<string, number>;
+  updates: {
+    id: string;
+    project_id: string;
+    kind: string;
+    subject: string | null;
+    author: string | null;
+    percent_delta: number | null;
+    status_after: string | null;
+    body: string | null;
+    at: string;
+  }[];
+};
+
 // ── proposals ──────────────────────────────────────────────────────────
 
 export interface TaskOut {
@@ -2543,10 +2644,19 @@ export interface ToolPolicyOut {
   enabled: boolean;
   confirm_override: boolean | null;
   allowed_roles: string[] | null;
+  /** Narrows — or widens — the module's write restriction for this one tool. */
+  write_roles: string[] | null;
   /** After the module policy and the global default are folded in. */
   effective_enabled: boolean;
   effective_confirm: boolean;
   effective_roles: string[] | null;
+  /**
+   * Who may actually have the assistant run this write.
+   *
+   * Null on a read, always — a write restriction never holds a read back, and
+   * showing one against a read would suggest it did.
+   */
+  effective_write_roles: string[] | null;
 }
 
 export interface ModulePolicyOut {
@@ -2557,7 +2667,22 @@ export interface ModulePolicyOut {
   read_enabled: boolean;
   write_enabled: boolean;
   confirm_writes: boolean | null;
+  /** Who may use this module through the assistant at all. */
   allowed_roles: string[] | null;
+  /**
+   * Who may have it *write* here, where `allowed_roles` governs seeing it.
+   *
+   * Two questions with different answers for the same person, which is why
+   * they are two columns: an ordinary employee should read the team list and
+   * should not be able to say "delete the Kuwait team" — and if the only lever
+   * were `allowed_roles`, buying the second would cost the first. Null means no
+   * extra restriction beyond the route's own.
+   */
+  write_roles: string[] | null;
+  /** What the module ships with, so the screen can show an edit has moved away from it. */
+  default_write_roles: string[] | null;
+  /** False means the restriction is set for the day a write arrives, and changes nothing today. */
+  has_writes: boolean;
   effective_confirm: boolean;
   tools: ToolPolicyOut[];
 }
@@ -2823,7 +2948,30 @@ export interface RealtimeCallOut {
  * team is additionally asked) and needs to know nothing else. Neither is
  * hardcoded here.
  */
-export type ReportCadence = "daily" | "weekly" | "monthly" | "ad_hoc";
+export type ReportCadence =
+  | "daily"
+  | "weekly"
+  | "monthly"
+  /**
+   * Both arrived with project reporting. A status report on a piece of work
+   * that runs for a year is meaningless weekly and unreadable daily, and a
+   * quarter is the unit a programme review already uses.
+   */
+  | "quarterly"
+  | "yearly"
+  | "ad_hoc";
+
+/**
+ * What a report is *about*, which is a different question from who filed it.
+ *
+ * `team` is one person's account of their own period — what every report was
+ * before projects existed, and still what presales and purchasing file.
+ * `project` is the status of one project over a period; `portfolio` is every
+ * project a team runs, one row each. The backend infers it from the sections
+ * a template declares rather than storing it, so there is never a scope that
+ * contradicts the sections underneath it.
+ */
+export type ReportScope = "team" | "project" | "portfolio";
 
 /** A draft is its author's alone; submitted is read-only and visible to readers. */
 export type ReportStatus = "draft" | "submitted";
@@ -2844,8 +2992,16 @@ export type ReportCompletion =
 
 export type IssueSeverity = "low" | "medium" | "high" | "blocked";
 
-/** `prose` is one text box, `rows` a list, `figures` the metric grid. */
-export type SectionKind = "prose" | "rows" | "figures";
+/**
+ * `prose` is one text box, `rows` a list, `figures` the metric grid.
+ *
+ * The other three arrived with project reporting and draw from the report's
+ * `project_lines` rather than from anything typed into it: `dials` is the five
+ * health dials, `timeline` the milestones, `projects` the portfolio table.
+ * Which of them a report carries is its template's decision — a presales daily
+ * has none, and asking it for milestones would be noise.
+ */
+export type SectionKind = "prose" | "rows" | "figures" | "dials" | "projects" | "timeline";
 
 export interface ReportSectionOut {
   key: string;
@@ -2878,12 +3034,122 @@ export interface ReportFormOut {
   template_id: string;
   template_name: string;
   template_version: number;
+  /**
+   * Whether to ask which project this report is about before anything else.
+   * Worked out from the sections this team's template declares.
+   */
+  scope: ReportScope;
+  /**
+   * Only on a project-scoped form: the projects this person may file on for
+   * this team — the ones they *run*, not merely the ones they can read.
+   */
+  projects: ReportProjectChoiceOut[];
   sections: ReportSectionOut[];
   fields: ReportFieldOut[];
   completions: string[];
   period_start: string;
   period_end: string;
   period_label: string;
+}
+
+/** A project somebody may file a status report on, for the picker. */
+export interface ReportProjectChoiceOut {
+  id: string;
+  name: string;
+  code: string | null;
+  label: string;
+  status: string;
+  rag_overall: string;
+  percent_complete: number;
+  /** Already filed on for this period — greyed out rather than refused at the end. */
+  already_reported: boolean;
+}
+
+/**
+ * One milestone on a filed report — a bar on the timeline.
+ *
+ * Carries the original date beside the current one, because the gap between
+ * them is the most useful thing on a project timeline and it disappears the
+ * moment only one is kept. `state` is how it stood when the report was filed,
+ * stored rather than recomputed, so a report written in March still describes
+ * March when it is read in June.
+ */
+export interface ReportMilestoneLineOut {
+  id: string;
+  position: number;
+  milestone_id: string | null;
+  name: string;
+  owner_name: string | null;
+  start_on: string | null;
+  due_on: string | null;
+  done_on: string | null;
+  baseline_due_on: string | null;
+  percent_complete: number;
+  plan: string | null;
+  state: string | null;
+  is_key: boolean;
+  note: string | null;
+}
+
+/**
+ * One project as it stood when the report was filed.
+ *
+ * Every figure here is a snapshot. The project has almost certainly moved
+ * since, and `project_id` is how a reader reaches the live version — these
+ * numbers are deliberately frozen, because a report that changed after it was
+ * filed would not be a report. Only the three prose fields at the bottom are
+ * the author's to type.
+ */
+export interface ReportProjectLineOut {
+  id: string;
+  position: number;
+  /** Null once the project itself has been deleted. Everything else still reads. */
+  project_id: string | null;
+  name: string;
+  code: string | null;
+  lead_name: string | null;
+  status: string | null;
+  start_on: string | null;
+  target_end_on: string | null;
+  rag_overall: string | null;
+  rag_scope: string | null;
+  rag_cost: string | null;
+  rag_schedule: string | null;
+  rag_benefits: string | null;
+  trend_overall: string | null;
+  trend_scope: string | null;
+  trend_cost: string | null;
+  trend_schedule: string | null;
+  trend_benefits: string | null;
+  percent_complete: number;
+  tasks_total: number;
+  tasks_done: number;
+  tasks_open: number;
+  tasks_blocked: number;
+  tasks_overdue: number;
+  milestones_total: number;
+  milestones_done: number;
+  milestones_overdue: number;
+  issues_open: number;
+  /** Movement inside the window this report covers, not the running total. */
+  updates_in_period: number;
+  tasks_completed_in_period: number;
+  budget_amount: string | null;
+  spend_amount: string | null;
+  currency: string | null;
+  /** The "key activities" of a status report. The author's own words. */
+  activities: string | null;
+  /** The "management action required" box. */
+  action_required: string | null;
+  note: string | null;
+  milestones: ReportMilestoneLineOut[];
+}
+
+/** The narrative on one project line. The figures beside it are not editable. */
+export interface ReportProjectNoteIn {
+  activities?: string | null;
+  action_required?: string | null;
+  note?: string | null;
 }
 
 export interface TaskLineOut {
@@ -2981,6 +3247,14 @@ export interface ReportSummaryOut {
   period_start: string;
   period_end: string;
   period_label: string;
+  scope: string;
+  /**
+   * The project a project-scoped report is about. Null for the other two — and
+   * also null once that project has been deleted, which is why `project_name`
+   * is read off the report's own snapshot and survives either way.
+   */
+  project_id: string | null;
+  project_name: string | null;
   status: string;
   submitted_at: string | null;
   task_count: number;
@@ -3002,6 +3276,12 @@ export interface ReportOut extends ReportSummaryOut {
   tasks: TaskLineOut[];
   issues: IssueOut[];
   metrics: ReportMetricOut[];
+  /**
+   * One row for a project status report, one per project for a portfolio
+   * report, and empty for a team report. The same shape either way — the two
+   * layouts are the same figures arranged differently.
+   */
+  project_lines: ReportProjectLineOut[];
   comments: ReportCommentOut[];
   /**
    * What *this* caller may do with it.
@@ -3030,9 +3310,21 @@ export interface ReportStartIn {
   on?: string | null;
   period_start?: string | null;
   period_end?: string | null;
-  /** Pull the caller's own Proposals tasks in as rows. On by default. */
+  /**
+   * Pull tasks in as rows. On by default. On a team report those are the
+   * caller's own Proposals tasks; on a project report, that project's open
+   * work. A portfolio report has no task section at all.
+   */
   prefill_tasks?: boolean;
   include_closed?: boolean;
+  /**
+   * Required when the team's template for this cadence is a project status
+   * report, and refused otherwise. A portfolio report covers every project
+   * its author may see on the team, and so names none.
+   */
+  project_id?: string | null;
+  /** Pull the project's milestones on as a timeline. On by default. */
+  prefill_milestones?: boolean;
 }
 
 /**
@@ -3051,6 +3343,12 @@ export interface ReportEditIn {
   tasks?: TaskLineIn[];
   issues?: IssueIn[];
   metrics?: Record<string, string | null>;
+  /**
+   * The narrative on each project line, keyed by that line's id. Merged, not
+   * replaced — a portfolio report is written a project at a time, and saving
+   * one row's notes must not clear the five above it.
+   */
+  project_notes?: Record<string, ReportProjectNoteIn>;
 }
 
 /* ── what the reports say together ───────────────────────────────────── */
@@ -3242,4 +3540,766 @@ export interface ReportTemplateChoiceOut {
   description: string | null;
   version: number;
   field_count: number;
+}
+
+/* ── the administration console ──────────────────────────────────────── */
+
+/**
+ * One call that says what every new back-end surface is currently doing.
+ *
+ * Served whole rather than assembled from eleven requests, and that shapes the
+ * screen: `status` is free-formed per section — what is worth showing about a
+ * watched mailbox is not what is worth showing about a ranking — but every one
+ * of them carries `needs_attention`, so a tile can badge itself without knowing
+ * which module it is drawing.
+ */
+export interface ConsoleEndpointOut {
+  method: string;
+  path: string;
+  /** What it does, written for somebody building a screen rather than calling it. */
+  what: string;
+  /** True for anything that changes data. */
+  writes: boolean;
+}
+
+export interface ConsoleSectionOut {
+  key: string;
+  name: string;
+  audience: "super_admin" | "admin" | "everyone";
+  description: string;
+  /** The risk worth naming before somebody opens it, where there is one. */
+  caution: string | null;
+  endpoints: ConsoleEndpointOut[];
+  /** Live figures. Shape differs per section; `needs_attention` is always there. */
+  status: Record<string, unknown>;
+}
+
+export interface ConsoleOut {
+  sections: ConsoleSectionOut[];
+  /** The sum across sections. Zero means nothing here wants looking at. */
+  needs_attention: number;
+  generated_at: string;
+}
+
+export interface RoleHolderOut {
+  user_id: string;
+  display_name: string;
+  email: string | null;
+}
+
+/**
+ * One rule about who may do what, in words.
+ *
+ * The rules live in backend code and cannot be derived from any endpoint, so
+ * they are restated by the API — an admin screen that cannot explain *why*
+ * somebody was refused generates support questions instead of answering them.
+ * `who` is empty where the answer is not a role at all ("its author", "anyone
+ * on a team with the module"), and `note` says so instead.
+ */
+export interface PermissionRuleOut {
+  area: string;
+  what: string;
+  who: string[];
+  note: string | null;
+  /** Who holds those global roles today — "who can actually do this", not "which role can". */
+  holders: RoleHolderOut[];
+}
+
+/* ── mail intake: one email in, one decision out ─────────────────────── */
+
+/**
+ * Where a message got to.
+ *
+ * `simulated` is the one to understand: the decision was made in full and the
+ * exact SharePoint payload recorded, but writing is switched off so nothing was
+ * posted. That is not a test mode — it is how the pipeline runs until its
+ * judgement has been watched for a while.
+ */
+export type IntakeStatus =
+  | "received"
+  | "classified"
+  | "actioned"
+  | "ignored"
+  | "simulated"
+  | "failed";
+
+/** What a message is about — the branch the pipeline takes. */
+export type MailCategory =
+  | "tender"
+  | "proposal"
+  | "negotiation"
+  | "order"
+  | "general"
+  | "unknown";
+
+/** What was done about it. */
+export type IntakeAction =
+  | "none"
+  | "created_task"
+  | "reopened_notice"
+  | "negotiation_notice"
+  /**
+   * The matched task's `Negotiation` column was set.
+   *
+   * A stronger outcome than the notice above, and worth its own name: something
+   * outside this system now knows. A Power Automate flow watching the list
+   * triggers on that column, which is the whole reason the write exists.
+   */
+  | "marked_negotiation"
+  | "order_notice"
+  | "duplicate";
+
+export interface IntakeSettingsOut {
+  /** The master switch. Off means the loops do not run at all. */
+  enabled: boolean;
+  mailbox: string;
+  /**
+   * Empty admits **nobody** — the opposite of the usual convention here, and
+   * the point of it: an unconfigured intake must not read everything.
+   */
+  allowed_senders: string[];
+  allowed_domains: string[];
+  /**
+   * The live-write switch.
+   *
+   * On, a new tender becomes a real row in the Proposals list assigned to a
+   * real person. Off — how it ships — the row that would be created is recorded
+   * and nothing is posted. It is the only setting here that changes something
+   * outside this system, and the only one that cannot be undone.
+   */
+  create_in_sharepoint: boolean;
+  /**
+   * The second write, and its own switch.
+   *
+   * When a negotiation email matches a task, set that task's `Negotiation`
+   * column — which is what a flow watching the list triggers on. A negotiation
+   * never creates anything, so without this nothing changes in SharePoint and a
+   * flow listening for "created or modified" has nothing to react to.
+   *
+   * Separate from `create_in_sharepoint` deliberately: marking a column on a
+   * row that already exists is a much smaller act than creating a row and
+   * assigning it to somebody, and an administrator may reasonably want one
+   * without the other.
+   */
+  update_negotiation: boolean;
+  /** What to write there. A setting rather than a constant — a list's choices are the list's business. */
+  negotiation_value: string;
+  assign_team_id: string | null;
+  /** 0–1. Below it, a match is not trusted and the message is treated as new work. */
+  match_threshold: number;
+  /** 0–1. Below it, the category is not trusted and nothing is done. */
+  classify_threshold: number;
+  teams_webhook_url: string | null;
+  notify_in_app: boolean;
+  notify_teams: boolean;
+  poll_seconds: number;
+  watch_from: string | null;
+  subscription_id: string | null;
+  subscription_expires_at: string | null;
+  last_poll_at: string | null;
+  last_error: string | null;
+  updated_at: string;
+}
+
+/** Only the fields sent change. */
+export interface IntakeSettingsIn {
+  enabled?: boolean;
+  /** Changing it starts from now rather than replaying a year of mail. */
+  mailbox?: string;
+  allowed_senders?: string[];
+  allowed_domains?: string[];
+  create_in_sharepoint?: boolean;
+  update_negotiation?: boolean;
+  negotiation_value?: string;
+  assign_team_id?: string | null;
+  match_threshold?: number;
+  classify_threshold?: number;
+  teams_webhook_url?: string | null;
+  notify_in_app?: boolean;
+  notify_teams?: boolean;
+  poll_seconds?: number;
+}
+
+/** One email and everything decided about it. */
+export interface IntakeMessageOut {
+  id: string;
+  received_at: string | null;
+  sender_email: string | null;
+  sender_name: string | null;
+  subject: string | null;
+  web_link: string | null;
+
+  status: string;
+  category: string | null;
+  is_reopened: boolean;
+  confidence: number | null;
+  /** The model's own words. The first thing to read when a decision looks wrong. */
+  reasoning: string | null;
+  extracted: Record<string, unknown>;
+
+  matched_item_id: string | null;
+  match_confidence: number | null;
+  match_reason: string | null;
+  /** The shortlist it chose from, scored — a close call or a wild guess. */
+  candidates: unknown[];
+
+  action: string;
+  assigned_user_id: string | null;
+  assigned_name: string | null;
+  assigned_reason: string | null;
+  created_item_id: string | null;
+  /** Exactly what would be posted. With writing off, this is the whole output. */
+  would_create: Record<string, unknown> | null;
+  /**
+   * The change that would be made to an existing task — the counterpart of
+   * `would_create`. Recorded whether or not it was sent, so the switched-off
+   * mode stays inspectable rather than silent.
+   */
+  would_update: Record<string, unknown> | null;
+  notified_user_ids: string[];
+  notified_teams: boolean;
+
+  error: string | null;
+  processed_at: string | null;
+  cost_usd: number | null;
+}
+
+export interface IntakePage {
+  messages: IntakeMessageOut[];
+  total: number;
+  /** By status, so a screen can say "3 failed" without paging. */
+  counts: Record<string, number>;
+}
+
+/**
+ * Whether the local copy of the Proposals list is current.
+ *
+ * Every question about that list — matching an email to a task, counting
+ * somebody's workload — is answered from the mirror rather than from
+ * SharePoint, which is what keeps both fast however large the list grows. It
+ * reads SharePoint on a timer and writes nothing to it, ever.
+ */
+export interface MirrorStatusOut {
+  rows: number;
+  /** Fewer than `rows` means matching is running without its middle stage. */
+  embedded: number;
+  last_sync_at: string | null;
+  rows_read: number;
+  rows_changed: number;
+  /** If this stays near the row count on every sync, the text hash is not working. */
+  rows_embedded: number;
+  duration_ms: number;
+  last_error: string | null;
+}
+
+/**
+ * One person's place in the queue for the next task.
+ *
+ * A stored ranking rather than a computation, which is what lets the intake
+ * decide who an incoming tender goes to while the email is still being read.
+ * Rank 1 is next; rank 0 means they are not in the queue at all.
+ */
+export interface StandingOut {
+  user_id: string;
+  display_name: string;
+  email: string | null;
+  rank: number;
+  eligible: boolean;
+  excluded_reason: string | null;
+  open_tasks: number;
+  active_tasks: number;
+  overdue_tasks: number;
+  total_tasks: number;
+  days_since_assigned: number | null;
+  /** The breakdown behind the position — a number nobody can decompose is one nobody trusts. */
+  factors: Record<string, unknown>;
+  computed_at: string;
+  reason: string | null;
+}
+
+/* ── notifications ───────────────────────────────────────────────────── */
+
+/**
+ * Something a person has been told.
+ *
+ * Scoped to the caller in the query itself: there is no route that takes a user
+ * id, deliberately, so there is no way for one person to read another's.
+ */
+export interface NotificationOut {
+  id: string;
+  kind: string;
+  title: string;
+  body: string | null;
+  /** A path within the app rather than an absolute URL, so it survives a move. */
+  link: string | null;
+  source: string | null;
+  source_id: string | null;
+  payload: Record<string, unknown>;
+  read_at: string | null;
+  sent_to_teams: boolean;
+  created_at: string;
+}
+
+export interface NotificationPage {
+  notifications: NotificationOut[];
+  total: number;
+  unread: number;
+}
+
+/* ── projects ────────────────────────────────────────────────────────── */
+
+/**
+ * Projects, the work inside them, and how far along any of it is.
+ *
+ * Three ideas shape every screen here, and all three are the backend's:
+ *
+ * **Assignment is the visibility model.** Being on a project is what makes it
+ * yours to see; holding a task inside it is what makes that task yours to
+ * move. Assigning somebody a task adds them to the project, so "who can see
+ * this" has one answer rather than two that can disagree.
+ *
+ * **Health is judged, not computed.** The five dials are a lead's assessment
+ * and are stored as such. What the module computes is a *suggestion*, sent
+ * beside the stored value — so a screen shows both and never merges them: one
+ * that showed only the arithmetic would be overruling the person running the
+ * project, and one that showed only the judgement would let a dial go stale
+ * unchallenged.
+ *
+ * **Progress is a log, not a field.** Every movement is a row — who, when,
+ * from what to what, and why — which is what makes "what moved this week" one
+ * query with different bounds rather than four features.
+ */
+export type ProjectStatus = "planned" | "active" | "on_hold" | "done" | "cancelled";
+
+/**
+ * One health dial.
+ *
+ * `grey` is not a fourth severity: it means nobody has assessed this yet, and
+ * it is the default. A project that has never been judged showing green is the
+ * single most misleading thing a portfolio page can do, because the whole
+ * point of the board is glancing at it.
+ */
+export type Rag = "green" | "amber" | "red" | "grey";
+
+/** Which way a dial is moving. Amber-improving and amber-declining are different projects. */
+export type RagTrend = "improving" | "steady" | "declining";
+
+/** What somebody is on one project. Distinct from their role in the team. */
+export type ProjectRole = "lead" | "member" | "viewer";
+
+/** Deliberately identical to `ReportCompletion`, so a task lands on a report unchanged. */
+export type ProjectTaskStatus = "not_started" | "in_progress" | "blocked" | "done" | "dropped";
+
+export type ProjectPriority = "low" | "medium" | "high" | "critical";
+
+/**
+ * Whether a milestone is still where the plan put it, and what it cost.
+ *
+ * The distinction that matters is the last two: a milestone that has slipped
+ * without consequence is information, and one that has slipped and pushed
+ * something else is a decision somebody has to make.
+ */
+export type MilestonePlan = "on_plan" | "off_plan_no_impact" | "off_plan_impact";
+
+/** Worked out from the dates at read time, so a plan stays truthful without a nightly job. */
+export type MilestoneState = "done" | "due" | "overdue" | "upcoming" | "undated";
+
+export type ProjectIssueStatus = "open" | "in_progress" | "resolved" | "closed";
+
+/** What sort of movement an entry in the progress log records. */
+export type ProjectUpdateKind = "task" | "health" | "milestone" | "issue" | "note";
+
+/** A reporting window. `custom` takes two dates; every other grain resolves to them. */
+export type WindowGrain = "day" | "week" | "month" | "quarter" | "year" | "custom";
+
+/**
+ * Somebody named on a project, in the least that identifies them.
+ *
+ * Deliberately not the full directory record: a project page should not be a
+ * way to read everybody's phone number, and a card only ever needs a name.
+ */
+export interface ProjectPersonOut {
+  id: string;
+  name: string;
+  email: string | null;
+}
+
+export interface ProjectMemberIn {
+  user_id: string;
+  role?: ProjectRole;
+  responsibility?: string | null;
+}
+
+export interface ProjectMemberOut {
+  user_id: string;
+  name: string;
+  email: string | null;
+  role: string;
+  responsibility: string | null;
+  /** How much of the project's open work sits with them. */
+  open_tasks: number;
+}
+
+export interface MilestoneIn {
+  name: string;
+  detail?: string | null;
+  owner_id?: string | null;
+  start_on?: string | null;
+  due_on?: string | null;
+  is_key?: boolean;
+}
+
+/**
+ * Change a milestone. A field left out is untouched; a field sent as `null` is
+ * cleared. Those are different intentions — "I did not mention the date" and
+ * "there is no date any more" — and this is how they stay told apart.
+ */
+export interface MilestoneEditIn {
+  name?: string;
+  detail?: string | null;
+  owner_id?: string | null;
+  start_on?: string | null;
+  due_on?: string | null;
+  done_on?: string | null;
+  percent_complete?: number | null;
+  plan?: MilestonePlan;
+  is_key?: boolean;
+  position?: number;
+}
+
+export interface MilestoneOut {
+  id: string;
+  position: number;
+  name: string;
+  detail: string | null;
+  owner: ProjectPersonOut | null;
+  start_on: string | null;
+  due_on: string | null;
+  done_on: string | null;
+  /** Where the plan first put it. A timeline draws the slip from the gap. */
+  baseline_due_on: string | null;
+  /** From its own tasks where it has any, so it cannot disagree with the work underneath. */
+  percent_complete: number;
+  plan: string;
+  is_key: boolean;
+  state: string;
+  /** Days moved from the baseline. Null when it never has — not the same as zero. */
+  slip_days: number | null;
+  task_count: number;
+}
+
+export interface ProjectTaskIn {
+  title: string;
+  detail?: string | null;
+  milestone_id?: string | null;
+  assignee_id?: string | null;
+  status?: ProjectTaskStatus;
+  priority?: ProjectPriority;
+  start_on?: string | null;
+  due_on?: string | null;
+  estimate_hours?: string | number | null;
+}
+
+/**
+ * Change a task. Anything left out stays as it is.
+ *
+ * `note` and `hours` are not columns being set — they are what gets written
+ * into the progress log alongside the change, which is why a note with no
+ * other field is a valid request: "nothing moved this week, here is why" is
+ * one of the more useful things a report can carry. `hours` is *added* to the
+ * time already spent rather than replacing it, because people report "three
+ * hours today", not "eleven in total".
+ */
+export interface ProjectTaskEditIn {
+  title?: string;
+  detail?: string | null;
+  milestone_id?: string | null;
+  assignee_id?: string | null;
+  status?: ProjectTaskStatus;
+  priority?: ProjectPriority;
+  percent_complete?: number;
+  start_on?: string | null;
+  due_on?: string | null;
+  estimate_hours?: string | number | null;
+  blocked_reason?: string | null;
+  position?: number;
+  note?: string | null;
+  hours?: string | number | null;
+}
+
+export interface ProjectTaskOut {
+  id: string;
+  project_id: string;
+  milestone_id: string | null;
+  position: number;
+  title: string;
+  detail: string | null;
+  assignee: ProjectPersonOut | null;
+  status: string;
+  priority: string;
+  percent_complete: number;
+  start_on: string | null;
+  due_on: string | null;
+  done_at: string | null;
+  estimate_hours: string | null;
+  spent_hours: string | null;
+  blocked_reason: string | null;
+  /** Not done and past its date. Decided by the backend so no screen defines "late". */
+  overdue: boolean;
+  /** Whether this caller may move it: its assignee, or anybody managing the project. */
+  can_update: boolean;
+}
+
+/** A task on somebody's own list, carrying enough project to make sense. */
+export interface MyProjectTaskOut extends ProjectTaskOut {
+  project_name: string;
+  project_code: string | null;
+}
+
+export interface ProjectIssueIn {
+  title: string;
+  detail?: string | null;
+  priority?: ProjectPriority;
+  owner_id?: string | null;
+  due_on?: string | null;
+  /** Raises this into the "support needed" box on the next status report. */
+  needs_support?: boolean;
+  support_note?: string | null;
+}
+
+export interface ProjectIssueEditIn {
+  title?: string;
+  detail?: string | null;
+  status?: ProjectIssueStatus;
+  priority?: ProjectPriority;
+  owner_id?: string | null;
+  due_on?: string | null;
+  needs_support?: boolean;
+  support_note?: string | null;
+  position?: number;
+}
+
+export interface ProjectIssueOut {
+  id: string;
+  position: number;
+  title: string;
+  detail: string | null;
+  status: string;
+  priority: string;
+  owner: ProjectPersonOut | null;
+  raised_on: string;
+  due_on: string | null;
+  resolved_on: string | null;
+  needs_support: boolean;
+  support_note: string | null;
+  /** How long it has been open — what turns a list of issues into a list somebody sat on. */
+  age_days: number;
+}
+
+/**
+ * Record the lead's assessment. Every dial is optional; the review is not.
+ *
+ * Sending this at all stamps the project as reviewed now, even with no dial
+ * changed — confirming that a project is still amber is a real act, and the
+ * board shows it as recently assessed because of it.
+ */
+export interface HealthIn {
+  rag_overall?: Rag;
+  rag_scope?: Rag;
+  rag_cost?: Rag;
+  rag_schedule?: Rag;
+  rag_benefits?: Rag;
+  trend_overall?: RagTrend;
+  trend_scope?: RagTrend;
+  trend_cost?: RagTrend;
+  trend_schedule?: RagTrend;
+  trend_benefits?: RagTrend;
+  note?: string | null;
+}
+
+/** One dial: what the lead said, and what the rows suggest. Never merged. */
+export interface DialOut {
+  key: string;
+  label: string;
+  rag: string;
+  trend: string;
+  /** Null for the dials nothing can compute — scope and benefits are judgement throughout. */
+  suggested: string | null;
+  suggested_reason: string | null;
+  /** The two disagree, which is the only case worth drawing attention to. */
+  differs: boolean;
+}
+
+export interface HealthOut {
+  dials: DialOut[];
+  reviewed_at: string | null;
+  reviewed_note: string | null;
+  /** Nobody has looked at these for a fortnight, or ever. */
+  stale: boolean;
+}
+
+export interface ProjectIn {
+  team_id: string;
+  name: string;
+  code?: string | null;
+  description?: string | null;
+  objective?: string | null;
+  status?: ProjectStatus;
+  lead_id?: string | null;
+  start_on?: string | null;
+  target_end_on?: string | null;
+  budget_amount?: string | number | null;
+  currency?: string;
+}
+
+export interface ProjectEditIn {
+  name?: string;
+  code?: string | null;
+  description?: string | null;
+  objective?: string | null;
+  status?: ProjectStatus;
+  lead_id?: string | null;
+  start_on?: string | null;
+  target_end_on?: string | null;
+  actual_end_on?: string | null;
+  budget_amount?: string | number | null;
+  spend_amount?: string | number | null;
+  currency?: string;
+  /** The lead's own completion figure. Null hands the number back to the tasks. */
+  percent_complete?: number | null;
+}
+
+export interface RollupOut {
+  tasks_total: number;
+  tasks_done: number;
+  tasks_open: number;
+  tasks_blocked: number;
+  tasks_overdue: number;
+  milestones_total: number;
+  milestones_done: number;
+  milestones_overdue: number;
+  issues_open: number;
+  issues_needing_support: number;
+  percent_complete: number;
+}
+
+/** A project in a list or on a board card. */
+export interface ProjectSummaryOut {
+  id: string;
+  team_id: string;
+  team: string;
+  code: string | null;
+  name: string;
+  label: string;
+  objective: string | null;
+  status: string;
+  lead: ProjectPersonOut | null;
+  start_on: string | null;
+  target_end_on: string | null;
+  actual_end_on: string | null;
+  rag_overall: string;
+  trend_overall: string;
+  percent_complete: number;
+  currency: string;
+  budget_amount: string | null;
+  spend_amount: string | null;
+  archived: boolean;
+  /** A green project nobody has looked at is not evidence of a green project. */
+  health_stale: boolean;
+  rollup: RollupOut;
+}
+
+export interface ProjectOut extends ProjectSummaryOut {
+  description: string | null;
+  health: HealthOut;
+  members: ProjectMemberOut[];
+  milestones: MilestoneOut[];
+  tasks: ProjectTaskOut[];
+  issues: ProjectIssueOut[];
+  /**
+   * What this caller may do, so a screen does not reimplement the rules to
+   * decide which buttons to draw. Three powers, deliberately kept apart:
+   * running the plan, administering the record (archive, restore, delete),
+   * and filing a status report on it. Moving one task is a fourth and is
+   * answered per task — see `can_update` on each.
+   */
+  can_manage: boolean;
+  can_administer: boolean;
+  can_report: boolean;
+}
+
+export interface ProjectPage {
+  projects: ProjectSummaryOut[];
+  total: number;
+}
+
+export interface ProjectNoteIn {
+  body: string;
+}
+
+/** One entry in the progress log. */
+export interface ProjectUpdateOut {
+  id: string;
+  project_id: string;
+  project_name: string;
+  task_id: string | null;
+  milestone_id: string | null;
+  issue_id: string | null;
+  author: ProjectPersonOut | null;
+  kind: string;
+  subject: string | null;
+  percent_before: number | null;
+  percent_after: number | null;
+  percent_delta: number | null;
+  status_before: string | null;
+  status_after: string | null;
+  hours: string | null;
+  body: string | null;
+  created_at: string;
+}
+
+/**
+ * What happened over a window — the whole of day/week/month/year reporting
+ * expressed once. The window is echoed back rather than assumed, so a screen
+ * prints the period it actually covered rather than the one somebody meant.
+ */
+export interface ProjectActivityOut {
+  since: string;
+  until: string;
+  grain: string;
+  label: string;
+  projects: number;
+  updates: ProjectUpdateOut[];
+  /** Counts by kind, so a heading says "12 task updates, 2 milestones" without tallying. */
+  counts: Record<string, number>;
+}
+
+/**
+ * Every readable project rolled into one set of figures.
+ *
+ * Narrowed to what the caller may read, exactly as the listing is: an ordinary
+ * member asking gets a portfolio of their own projects rather than a refusal.
+ */
+export interface PortfolioOut {
+  projects: number;
+  by_status: Record<string, number>;
+  by_rag: Record<string, number>;
+  tasks_open: number;
+  tasks_overdue: number;
+  issues_open: number;
+  issues_needing_support: number;
+  milestones_overdue: number;
+  average_percent: number;
+  /** How many sets of dials nobody has confirmed lately. */
+  stale_health: number;
+}
+
+/** One person's landing page: their work, and the projects it belongs to. */
+export interface BoardOut {
+  my_open_tasks: number;
+  my_overdue_tasks: number;
+  my_due_this_week: number;
+  tasks: MyProjectTaskOut[];
+  projects: ProjectSummaryOut[];
+  portfolio: PortfolioOut;
 }

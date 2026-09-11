@@ -195,6 +195,11 @@
   --danger: #f2694f;   --danger-soft: #331512;
   --info: #8b8af0;     --info-soft: #1b1b3a;
 
+  /* The ink on a RAG dial drawn as a filled block rather than a dot. The three
+     status colours are pale here and dark in light mode, so the one thing that
+     cannot be a fixed value is the word sitting on top of them. */
+  --on-rag: #0a0a0c;
+
   /* Derived so a new palette needs no extra entries here. */
   --accent-soft: color-mix(in oklab, var(--accent) 17%, var(--app));
   --accent-text: var(--accent);
@@ -240,6 +245,9 @@
   --warn: #9c6208;     --warn-soft: #fbeed6;
   --danger: #cf3418;   --danger-soft: #fbe4de;
   --info: #4a49c4;     --info-soft: #e7e7fb;
+
+  /* Dark fills here, so the word on them is white — see the dark block. */
+  --on-rag: #ffffff;
 
   --accent-soft: color-mix(in oklab, var(--accent) 24%, #ffffff);
   --accent-text: color-mix(in oklab, var(--accent) 62%, #000000);

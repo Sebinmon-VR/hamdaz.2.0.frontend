@@ -12,7 +12,12 @@ import type { ReportPage as ReportPageOut, TeamOut } from "@/lib/types";
 import { Avatar, PageHead, Panel, Row, RowHead, StatBox } from "@/components/ui/primitives";
 import { LinkButton, PillRail } from "@/components/ui/controls";
 import { Empty, ErrorState, RowsSkeleton } from "@/components/ui/feedback";
-import { CadenceBadge, ReportStatusBadge } from "@/components/reports/ReportBits";
+import {
+  CADENCE_OPTIONS,
+  CadenceBadge,
+  ReportStatusBadge,
+  ScopeBadge,
+} from "@/components/reports/ReportBits";
 
 /**
  * One team's reports.
@@ -93,13 +98,7 @@ export default function TeamReportsPage() {
       <PillRail
         value={cadence}
         onChange={setCadence}
-        options={[
-          { value: "all", label: "Any cadence" },
-          { value: "daily", label: "Daily" },
-          { value: "weekly", label: "Weekly" },
-          { value: "monthly", label: "Monthly" },
-          { value: "ad_hoc", label: "Ad hoc" },
-        ]}
+        options={[{ value: "all", label: "Any cadence" }, ...CADENCE_OPTIONS]}
         className="w-fit"
       />
 
@@ -132,7 +131,7 @@ export default function TeamReportsPage() {
             <span className="micro hidden w-20 shrink-0 text-ink-4 md:block">Tasks</span>
             <span className="micro hidden w-20 shrink-0 text-ink-4 md:block">Issues</span>
             <span className="micro w-24 shrink-0 text-ink-4">Filed</span>
-            <span className="w-[4.5rem] shrink-0" />
+            <span className="w-[7rem] shrink-0" />
           </RowHead>
 
           {rows.map((report) => (
@@ -141,6 +140,11 @@ export default function TeamReportsPage() {
                 <Avatar name={report.author_name} seed={report.author_id} size="xs" />
                 <span className="min-w-0 flex-1 truncate text-[13px] text-ink">
                   {report.period_label}
+                  {report.project_name && (
+                    <span className="ml-2 text-[11.5px] text-ink-4">
+                      {report.project_name}
+                    </span>
+                  )}
                 </span>
                 <span className="hidden w-40 shrink-0 truncate text-[12px] text-ink-3 sm:block">
                   {report.author_name}
@@ -162,7 +166,8 @@ export default function TeamReportsPage() {
                     ? relative(report.submitted_at)
                     : dateShort(report.period_end)}
                 </span>
-                <span className="flex w-[4.5rem] shrink-0 justify-end gap-1.5">
+                <span className="flex w-[7rem] shrink-0 justify-end gap-1.5">
+                  <ScopeBadge value={report.scope} />
                   <CadenceBadge value={report.cadence} />
                   <ReportStatusBadge value={report.status} />
                 </span>

@@ -4,8 +4,10 @@ import { useState } from "react";
 import useSWR from "swr";
 import {
   Check,
+  FolderKanban,
   Mail,
   MailX,
+  Map as MapIcon,
   Save,
   Send,
   ShieldAlert,
@@ -412,9 +414,17 @@ function Schedules() {
             count={schedules.data?.length}
             hint="The sections never change; the questions inside them come from the template"
             action={
-              <Button size="sm" variant="accent" onClick={() => setEditing("new")}>
-                Point a team at one
-              </Button>
+              <>
+                <AdoptProjectReporting onDone={() => void schedules.mutate()} />
+                <AdoptPortfolioReporting
+                  templates={templates.data ?? []}
+                  teams={(teams.data ?? []).filter((team) => !team.archived_at)}
+                  onDone={() => void schedules.mutate()}
+                />
+                <Button size="sm" variant="accent" onClick={() => setEditing("new")}>
+                  Point a team at one
+                </Button>
+              </>
             }
           />
         </div>
@@ -493,6 +503,265 @@ function Schedules() {
         templates={templates.data ?? []}
         teams={(teams.data ?? []).filter((team) => !team.archived_at)}
       />
+    </>
+  );
+}
+
+/**
+ * Giving a team the report that covers every project at once.
+ *
+ * The button beside this one cannot: the backend's cadence-to-template map
+ * has entries for the two *per-project* templates and none for the portfolio
+ * one, so a team pointed at project reporting can only ever file on one
+ * project at a time. That is the right default — a project report is about a
+ * project — but it left "report on all of them" with no way in at all, and
+ * people went looking for it in the project picker, where it will never be.
+ *
+ * So this writes the row by hand through the ordinary schedule endpoint. No
+ * new power and no new mechanism: the same PUT the editor beside it makes,
+ * with the portfolio template already chosen.
+ *
+ * It asks for its own cadence because one team files one template per
+ * cadence. A portfolio report on the cadence already carrying the per-project
+ * one would replace it, and a team usually wants both — the projects weekly,
+ * the portfolio monthly.
+ */
+function AdoptPortfolioReporting({
+  templates,
+  teams,
+  onDone,
+}: {
+  templates: ReportTemplateChoiceOut[];
+  teams: TeamOut[];
+  onDone: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [team, setTeam] = useState("");
+  const [cadence, setCadence] = useState<ReportScheduleIn["cadence"]>("monthly");
+
+  const portfolio = templates.find((entry) => entry.key === "report_portfolio_status");
+
+  const run = useAction(async () => {
+    if (!portfolio) return;
+    await api.put<ReportScheduleOut>("/reports/admin/schedules", {
+      team_id: team,
+      cadence,
+      template_id: portfolio.id,
+      enabled: true,
+      due_hour: 18,
+      due_weekday: 4,
+      notify: null,
+      extra_recipients: [],
+    });
+    setOpen(false);
+    onDone();
+  });
+
+  return (
+    <>
+      <Button size="sm" icon={MapIcon} onClick={() => setOpen(true)}>
+        Give a team a portfolio report
+      </Button>
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="One report, every project"
+        description="Points one of a team's cadences at the portfolio template. Somebody filing it is not asked which project — it carries a row for every project the team runs, with the health dials and the dates on one chart."
+        footer={
+          <>
+            <Button onClick={() => setOpen(false)}>Cancel</Button>
+            <Button
+              variant="accent"
+              loading={run.pending}
+              disabled={!team || !portfolio}
+              onClick={() => void run.run()}
+            >
+              Set it up
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4 pb-4">
+          {run.error && <InlineNotice tone="danger">{run.error}</InlineNotice>}
+          {!portfolio && (
+            <InlineNotice tone="warn">
+              The portfolio template is not on this instance, so there is nothing to point
+              a team at. It ships with the backend as{" "}
+              <code>report_portfolio_status</code>.
+            </InlineNotice>
+          )}
+
+          <InlineNotice tone="info">
+            A portfolio report deliberately carries no task list. It answers which projects
+            are running and how they are doing; the per-project reports are where the work
+            itself is written down.
+          </InlineNotice>
+
+          <Field label="Which team" required>
+            <Select value={team} onChange={(event) => setTeam(event.target.value)}>
+              <option value="">Choose a team…</option>
+              {teams.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field
+            label="On which cadence"
+            hint="Whatever this replaces stops being asked, so pick one the per-project reports are not already using."
+          >
+            <Select
+              value={cadence}
+              onChange={(event) =>
+                setCadence(event.target.value as ReportScheduleIn["cadence"])
+              }
+            >
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="yearly">Yearly</option>
+            </Select>
+          </Field>
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+/**
+ * Switching a team over to project status reporting.
+ *
+ * A convenience over the editor beside it rather than a new power: it writes
+ * the same schedule rows an administrator would write by hand, without them
+ * having to know which of the shipped templates goes with which cadence. The
+ * existing rows are reused, so who is copied and the hour it is due survive
+ * the change — what a team is asked changes, not who reads the answers.
+ *
+ * There is deliberately no daily option. A project does not change enough in
+ * a day to be worth a set of dials, and offering one would get it asked for.
+ *
+ * It is not automatic, and that is the backend's position as well: a team can
+ * perfectly well run projects and still file personal weeklies, and silently
+ * rewriting what everybody is asked at the end of the week is not a thing to
+ * do on an inference. Somebody decides, and this is the button they press.
+ */
+function AdoptProjectReporting({ onDone }: { onDone: () => void }) {
+  const teams = useSWR<TeamOut[]>("/teams", { revalidateOnFocus: false });
+  const [open, setOpen] = useState(false);
+  const [team, setTeam] = useState("");
+  const [cadences, setCadences] = useState<string[]>(["weekly", "monthly"]);
+
+  const adopt = useAction(async () =>
+    api.post<ReportScheduleOut[]>(
+      withQuery("/reports/admin/schedules/project-reporting", { team }),
+      undefined,
+      // Repeated rather than comma-joined: FastAPI reads a list query
+      // parameter as one key per value, and a single "weekly,monthly" would
+      // be refused as an unknown cadence.
+      undefined,
+    ),
+  );
+
+  // `withQuery` cannot express a repeated key, so the URL is built here. The
+  // same shape the backend documents: ?team=…&cadences=weekly&cadences=monthly
+  const url = () => {
+    const params = new URLSearchParams({ team });
+    for (const cadence of cadences) params.append("cadences", cadence);
+    return `/reports/admin/schedules/project-reporting?${params.toString()}`;
+  };
+
+  const run = useAction(async () => {
+    await api.post<ReportScheduleOut[]>(url());
+    setOpen(false);
+    onDone();
+  });
+
+  return (
+    <>
+      <Button size="sm" icon={FolderKanban} onClick={() => setOpen(true)}>
+        Switch a team to project reports
+      </Button>
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Project status reporting"
+        description="Points a team's cadences at the shipped project templates. After this, somebody on that team filing one of these is asked which project, and gets health dials and a milestone timeline instead of the six standard sections."
+        footer={
+          <>
+            <Button onClick={() => setOpen(false)}>Cancel</Button>
+            <Button
+              variant="accent"
+              loading={run.pending}
+              disabled={!team || cadences.length === 0}
+              onClick={() => void run.run()}
+            >
+              Switch it over
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4 pb-4">
+          {run.error && <InlineNotice tone="danger">{run.error}</InlineNotice>}
+
+          {/* Every cadence this button can write files on ONE project. A team
+              that wants a single report covering all of them wants the
+              portfolio template, and the backend's cadence map has no entry
+              for it — so the way to get one is named here rather than left to
+              be discovered by not finding it. */}
+          <InlineNotice tone="info">
+            Each of these is filed on one project at a time. For a single report covering
+            every project a team runs, point a cadence at{" "}
+            <strong>Portfolio status report</strong> in <em>What each team files</em> — it
+            gives one row per project and deliberately carries no task list.
+          </InlineNotice>
+
+          <Field label="Which team" required>
+            <Select value={team} onChange={(event) => setTeam(event.target.value)}>
+              <option value="">Choose a team…</option>
+              {(teams.data ?? [])
+                .filter((entry) => !entry.archived_at)
+                .map((entry) => (
+                  <option key={entry.id} value={entry.slug}>
+                    {entry.name}
+                  </option>
+                ))}
+            </Select>
+          </Field>
+
+          <div>
+            <p className="mb-2 text-[12px] text-ink-3">Which cadences</p>
+            <ChipPicker
+              options={[
+                { value: "weekly", label: "Weekly — the four-question version" },
+                { value: "monthly", label: "Monthly — the full status report" },
+                { value: "quarterly", label: "Quarterly — the full status report" },
+              ]}
+              selected={cadences}
+              onToggle={(value) =>
+                setCadences((current) =>
+                  current.includes(value)
+                    ? current.filter((entry) => entry !== value)
+                    : [...current, value],
+                )
+              }
+            />
+            <p className="mt-2 text-[11.5px] leading-relaxed text-ink-4">
+              A team already reporting weekly on something else has that schedule pointed
+              at the project template — the row is reused, so its recipients and its note
+              survive. Running it twice changes nothing the second time.
+            </p>
+          </div>
+
+          <InlineNotice tone="info">
+            There is no daily project report on purpose: a project does not change enough
+            in a day to be worth a set of dials.
+          </InlineNotice>
+        </div>
+      </Modal>
     </>
   );
 }

@@ -24,11 +24,14 @@ export function RecipientList({
   onChange,
   placeholder = "someone@hamdaz.com",
   max = 50,
+  requireAt = true,
 }: {
   addresses: string[];
   onChange: (next: string[]) => void;
   placeholder?: string;
   max?: number;
+  /** Off for lists of domains rather than addresses — same control, no @. */
+  requireAt?: boolean;
 }) {
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +39,7 @@ export function RecipientList({
   function add() {
     const entry = draft.trim().toLowerCase();
     if (!entry) return;
-    if (!entry.includes("@")) {
+    if (requireAt && !entry.includes("@")) {
       setError("That is not an address — it needs an @.");
       return;
     }

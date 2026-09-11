@@ -169,7 +169,15 @@ function Module({
           <span className="flex flex-wrap items-center gap-2">
             <span className="text-[14px] font-semibold text-ink">{module.name}</span>
             <GateBadge gate={module.gate} />
-            {module.write_enabled && <Badge tone="warn">Writes on</Badge>}
+            {!module.write_enabled && <Badge tone="neutral">Read only</Badge>}
+            {module.has_writes && module.write_roles && module.write_roles.length > 0 && (
+              <Badge
+                tone="warn"
+                title={`Only ${module.write_roles.map((role) => humanise(role)).join(", ")} may have the assistant write here.`}
+              >
+                Writes limited
+              </Badge>
+            )}
             {module.allowed_roles && module.allowed_roles.length > 0 && (
               <Badge tone="info">{module.allowed_roles.length} roles only</Badge>
             )}
@@ -196,7 +204,7 @@ function Module({
               checked={module.write_enabled}
               onChange={(value) => void onChange(base, { write_enabled: value })}
               label="May write"
-              hint="Anything that changes something. Off is the default for every module."
+              hint="Anything that changes something. On for every module — what holds the sharp ones is who may write, below, and the confirmation pause."
             />
           </div>
 
@@ -243,6 +251,50 @@ function Module({
               </p>
             </div>
           </div>
+
+          {/* Seeing a module and changing it are two questions with different
+              answers for the same person, so they are two controls. Everybody
+              reads the team list; managers delete a team. If the only lever
+              were the one above, buying the second would cost the first. */}
+          {module.has_writes ? (
+            <div>
+              <p className="mb-2 text-[12px] text-ink-3">Who may write here</p>
+              <ChipPicker
+                options={roles}
+                selected={module.write_roles ?? []}
+                onToggle={(key) => {
+                  const held = module.write_roles ?? [];
+                  const next = held.includes(key)
+                    ? held.filter((role) => role !== key)
+                    : [...held, key];
+                  // Empty means "whoever the route already allows" — this is an
+                  // extra gate, never a grant, so an empty list must not read
+                  // as "nobody".
+                  void onChange(base, { write_roles: next.length ? next : null });
+                }}
+              />
+              <p className="mt-1.5 text-[11px] leading-relaxed text-ink-4">
+                {module.write_roles?.length
+                  ? "Anybody else can still ask; the write is refused and the reason is said out loud."
+                  : "Nobody extra is held back — whoever the route already allows may write."}
+                {movedFromDefault(module) && (
+                  <>
+                    {" "}
+                    This has been changed from what the module ships with
+                    {module.default_write_roles?.length
+                      ? ` (${module.default_write_roles.map((role) => humanise(role)).join(", ")})`
+                      : " (no restriction)"}
+                    .
+                  </>
+                )}
+              </p>
+            </div>
+          ) : (
+            <p className="text-[11px] leading-relaxed text-ink-4">
+              This module has no live write, so a write restriction would change nothing
+              today. One can still be set on a tool below for the day one arrives.
+            </p>
+          )}
 
           {reads.length > 0 && (
             <ToolTable title="Reads" icon={Eye} tools={reads} roles={roles} onChange={onChange} />
@@ -430,6 +482,37 @@ function ToolTable({
                       </p>
                     )}
                   </div>
+
+                  {/* The lever for a module where most writes are everyday work
+                      and one is not: leave is anyone's to request and its rules
+                      are not anyone's to rewrite. That is one column here, not
+                      a new module. */}
+                  {tool.kind === "write" && tool.status === "live" && (
+                    <div>
+                      <p className="mb-2 text-[12px] text-ink-3">Who may run this write</p>
+                      <ChipPicker
+                        options={roles}
+                        selected={tool.write_roles ?? []}
+                        onToggle={(key) => {
+                          const held = tool.write_roles ?? [];
+                          const next = held.includes(key)
+                            ? held.filter((role) => role !== key)
+                            : [...held, key];
+                          void onChange(base, { write_roles: next.length ? next : null });
+                        }}
+                      />
+                      <p className="mt-1.5 text-[11px] text-ink-4">
+                        {tool.effective_write_roles && tool.effective_write_roles.length > 0
+                          ? `In effect: ${tool.effective_write_roles
+                              .map((role) => humanise(role))
+                              .join(", ")}`
+                          : "In effect: whoever the route already allows."}
+                        {tool.write_roles?.length
+                          ? " Set here, so it overrides the module's."
+                          : " Following the module's."}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </li>
@@ -438,6 +521,20 @@ function ToolTable({
       </ul>
     </div>
   );
+}
+
+/**
+ * Whether a module's write restriction has been edited away from what it ships with.
+ *
+ * Worth saying on the screen because the catalogue's restriction is a starting
+ * point, not a rule — a super admin's edit is never overwritten by a later
+ * deploy, which is exactly why somebody reading this months later needs to be
+ * told that what they are looking at is a decision rather than a default.
+ */
+function movedFromDefault(module: ModulePolicyOut): boolean {
+  const now = [...(module.write_roles ?? [])].sort().join(",");
+  const shipped = [...(module.default_write_roles ?? [])].sort().join(",");
+  return now !== shipped;
 }
 
 /**

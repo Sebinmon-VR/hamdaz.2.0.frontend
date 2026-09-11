@@ -19,6 +19,11 @@
  * It is also used inside the assistant, where a report is one of the things a
  * tool result can turn into. That is the reason it takes a plain `ReportOut`
  * and holds no state, no fetching and no routing of its own.
+ *
+ * Project reporting added three section kinds — `dials`, `timeline`,
+ * `projects` — and changed nothing about how this works: they are drawn from
+ * `project_lines` the same way `rows` is drawn from `tasks`, and a template
+ * that declares none of them renders exactly as it did before they existed.
  */
 
 import clsx from "clsx";
@@ -31,6 +36,14 @@ import {
   MetricTile,
   SeverityBadge,
 } from "@/components/reports/ReportBits";
+import {
+  NoProjectLines,
+  PortfolioTable,
+  ProjectLineHead,
+  ProjectNarrative,
+  ReportDials,
+  ReportTimeline,
+} from "@/components/reports/ProjectSections";
 
 export function ReportView({
   report,
@@ -72,6 +85,13 @@ function Section({
           ? report.summary
           : null;
 
+  const lines = report.project_lines;
+  // A single-project report has exactly one line and reads from it directly;
+  // a portfolio report has one per project and reads them as a table.
+  const single = lines.length > 0 ? lines[0] : null;
+  const projectSection =
+    section.kind === "dials" || section.kind === "timeline" || section.kind === "projects";
+
   const empty =
     section.kind === "prose"
       ? !prose?.trim() && answered.length === 0
@@ -79,7 +99,12 @@ function Section({
         ? report.tasks.length === 0 && answered.length === 0
         : section.key === "issues"
           ? report.issues.length === 0 && answered.length === 0
-          : report.metrics.length === 0 && answered.length === 0;
+          : projectSection
+            ? // A project section with no snapshot behind it is dropped like
+              // any other empty one — except on a portfolio report, where
+              // "no projects" is itself the finding and is said out loud.
+              lines.length === 0 && answered.length === 0 && report.scope !== "portfolio"
+            : report.metrics.length === 0 && answered.length === 0;
 
   if (empty) return null;
 
@@ -92,7 +117,11 @@ function Section({
             ? report.tasks.length
             : section.key === "issues"
               ? report.issues.length || undefined
-              : undefined
+              : section.kind === "projects"
+                ? report.project_lines.length
+                : section.kind === "timeline"
+                  ? report.project_lines[0]?.milestones.length || undefined
+                  : undefined
         }
       />
 
@@ -102,6 +131,27 @@ function Section({
             {prose.trim()}
           </p>
         )}
+
+        {section.kind === "dials" &&
+          (single ? (
+            <div className="space-y-3.5">
+              <ProjectLineHead line={single} />
+              <ReportDials line={single} />
+              <ProjectNarrative line={single} />
+            </div>
+          ) : (
+            <NoProjectLines scope={report.scope} />
+          ))}
+
+        {section.kind === "timeline" &&
+          (single ? <ReportTimeline line={single} /> : <NoProjectLines scope={report.scope} />)}
+
+        {section.kind === "projects" &&
+          (lines.length > 0 ? (
+            <PortfolioTable lines={lines} />
+          ) : (
+            <NoProjectLines scope={report.scope} />
+          ))}
 
         {section.key === "tasks" && report.tasks.length > 0 && (
           <TaskTable tasks={report.tasks} />

@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import clsx from "clsx";
 import useSWR from "swr";
-import { NotebookPen, ShieldAlert, Sparkles } from "lucide-react";
+import { FolderKanban, NotebookPen, ShieldAlert, Sparkles } from "lucide-react";
 import { api, withQuery } from "@/lib/api";
 import { date, humanise } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
@@ -18,6 +19,8 @@ import type {
 import { Badge, PageHead, Panel, PanelHead } from "@/components/ui/primitives";
 import { Button, Field, Input, PillRail, Select, Toggle } from "@/components/ui/controls";
 import { Empty, ErrorState, InlineNotice, PanelSkeleton } from "@/components/ui/feedback";
+import { CADENCE_OPTIONS } from "@/components/reports/ReportBits";
+import { ProgressBar, RagDot } from "@/components/projects/ProjectBits";
 
 /**
  * Starting a report.
@@ -28,6 +31,15 @@ import { Empty, ErrorState, InlineNotice, PanelSkeleton } from "@/components/ui/
  * folded into the draft: a template can add half a dozen questions to a team's
  * weekly, and finding that out after committing to a draft is how people end up
  * with three empty reports for the same week.
+ *
+ * **What is asked depends on the team, and now on what the report is about.**
+ * A team pointed at a project template is asked which project before anything
+ * else, and then gets health dials and a milestone timeline in place of some
+ * of the standard six sections. That needed no new mechanism here — the form
+ * endpoint answers with a `scope` and, where it is `project`, the projects
+ * this person may actually file on — but it is why the preview on the right
+ * matters more than it used to: the shape of the form now changes with the
+ * team, not only its questions.
  *
  * **The tasks are pulled in for you, and that is the feature.** The work is
  * already recorded in the Proposals list; retyping it is how a reporting tool
@@ -58,6 +70,8 @@ export default function NewReportPage() {
   const [on, setOn] = useState<string>("");
   const [prefill, setPrefill] = useState(true);
   const [includeClosed, setIncludeClosed] = useState(false);
+  const [projectId, setProjectId] = useState<string>("");
+  const [prefillMilestones, setPrefillMilestones] = useState(true);
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
 
@@ -79,6 +93,15 @@ export default function NewReportPage() {
     { revalidateOnFocus: false, shouldRetryOnError: false },
   );
 
+  const scope = form.data?.scope ?? "team";
+  const projects = form.data?.projects ?? [];
+  // The first one they have not already filed on. Chosen for them rather than
+  // left empty, because on a team with one project the question has one
+  // answer and asking it is friction.
+  const openProject = projects.find((entry) => !entry.already_reported);
+  const project =
+    projects.find((entry) => entry.id === projectId) ?? openProject ?? projects[0];
+
   const start = useAction(async () => {
     if (!chosen) return;
     const body: ReportStartIn = {
@@ -87,6 +110,13 @@ export default function NewReportPage() {
       on: on || null,
       prefill_tasks: prefill,
       include_closed: includeClosed,
+      // Sent only on a project report. The backend refuses one named on a
+      // team report rather than dropping it, which is the behaviour worth
+      // not defeating from here.
+      ...(scope === "project"
+        ? { project_id: project?.id ?? null, prefill_milestones: prefillMilestones }
+        : {}),
+      ...(scope === "portfolio" ? { prefill_milestones: prefillMilestones } : {}),
       ...(cadence === "ad_hoc"
         ? { period_start: periodStart || null, period_end: periodEnd || null }
         : {}),
@@ -149,13 +179,12 @@ export default function NewReportPage() {
                 <PillRail
                   value={cadence}
                   onChange={(next) => setCadence(next as ReportCadence)}
-                  options={[
-                    { value: "daily", label: "Daily" },
-                    { value: "weekly", label: "Weekly" },
-                    { value: "monthly", label: "Monthly" },
-                    { value: "ad_hoc", label: "Ad hoc" },
-                  ]}
+                  options={CADENCE_OPTIONS}
                 />
+                {/* Which template a team files is a schedule row per cadence,
+                    so changing this can change the whole shape of the form —
+                    not only its questions. The preview on the right is what
+                    makes that visible before anything is created. */}
               </div>
 
               {cadence === "ad_hoc" ? (
@@ -192,16 +221,109 @@ export default function NewReportPage() {
             </div>
           </Panel>
 
-          <Panel className="p-5">
-            <PanelHead title="Your tasks" hint="Pulled from the Proposals list, as rows" />
-            <div className="mt-4 space-y-4">
-              <Toggle
-                checked={prefill}
-                onChange={setPrefill}
-                label="Bring my Proposals tasks in"
-                hint="Title, status, deadline, the SharePoint link and whether it carries attachments. Yours only — there is no way to pull somebody else's."
+          {/* Which project, asked before anything else — because on a
+              project-scoped form it is the first thing the report is about,
+              and everything below it is a snapshot of whatever is chosen
+              here. A project already reported on for this period is offered
+              but disabled: telling somebody now is kinder than letting them
+              fill in a whole report and be refused at the end. */}
+          {scope === "project" && (
+            <Panel className="p-5">
+              <PanelHead
+                title="Which project"
+                count={projects.length || undefined}
+                hint="The ones you run on this team"
               />
-              {prefill && (
+              {projects.length === 0 ? (
+                <p className="mt-4 text-[12.5px] leading-relaxed text-ink-4">
+                  This team files project status reports, and there is no project here you
+                  run. Filing on somebody else&rsquo;s project would be reporting on work
+                  you are not answerable for, so the list is narrowed to yours — being able
+                  to <em>read</em> a project is not enough.
+                </p>
+              ) : (
+                <ul className="mt-4 space-y-1.5">
+                  {projects.map((entry) => {
+                    const on = entry.id === project?.id;
+                    return (
+                      <li key={entry.id}>
+                        <button
+                          type="button"
+                          disabled={entry.already_reported}
+                          onClick={() => setProjectId(entry.id)}
+                          aria-pressed={on}
+                          className={clsx(
+                            "flex w-full items-center gap-3 rounded-[13px] px-3 py-2.5 text-left transition disabled:opacity-45",
+                            on ? "bg-accent-soft" : "hover:bg-panel-2",
+                          )}
+                        >
+                          <RagDot value={entry.rag_overall} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[13px] font-medium text-ink">
+                              {entry.name}
+                            </span>
+                            <span className="mt-1 flex items-center gap-2">
+                              <ProgressBar
+                                percent={entry.percent_complete}
+                                rag={entry.rag_overall}
+                                height={4}
+                                className="w-24"
+                              />
+                              <span className="tnum text-[11px] text-ink-4">
+                                {entry.percent_complete}%
+                              </span>
+                              {entry.code && (
+                                <span className="text-[11px] text-ink-4">{entry.code}</span>
+                              )}
+                            </span>
+                          </span>
+                          {entry.already_reported && (
+                            <Badge tone="neutral">Already filed</Badge>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Panel>
+          )}
+
+          <Panel className="p-5">
+            <PanelHead
+              title={scope === "team" ? "Your tasks" : "What is pulled in"}
+              hint={
+                scope === "team"
+                  ? "Pulled from the Proposals list, as rows"
+                  : "Taken from the project itself, and then frozen"
+              }
+            />
+            <div className="mt-4 space-y-4">
+              {scope === "portfolio" ? (
+                <p className="text-[12px] leading-relaxed text-ink-3">
+                  Every project on this team you can see becomes a row — its status,
+                  health, percentage and counts, as they stand right now. There is no task
+                  list on a portfolio report: at that altitude it is noise, and the
+                  per-project reports carry it.
+                </p>
+              ) : (
+                <Toggle
+                  checked={prefill}
+                  onChange={setPrefill}
+                  label={
+                    scope === "project"
+                      ? "Bring the project's open work in"
+                      : "Bring my Proposals tasks in"
+                  }
+                  hint={
+                    scope === "project"
+                      ? "The project's own open tasks, soonest first. Not your SharePoint bids — those belong to a different system and would be nonsense on a project report."
+                      : "Title, status, deadline, the SharePoint link and whether it carries attachments. Yours only — there is no way to pull somebody else's."
+                  }
+                />
+              )}
+
+              {scope === "team" && prefill && (
                 <Toggle
                   checked={includeClosed}
                   onChange={setIncludeClosed}
@@ -209,10 +331,20 @@ export default function NewReportPage() {
                   hint="Off for a daily, where what matters is what is live. Worth it on a monthly."
                 />
               )}
+
+              {scope !== "team" && (
+                <Toggle
+                  checked={prefillMilestones}
+                  onChange={setPrefillMilestones}
+                  label="Bring the milestones in as a timeline"
+                  hint="On by default — a status report without its milestones is a status report missing the thing people open it for."
+                />
+              )}
+
               <p className="text-[11.5px] leading-relaxed text-ink-4">
-                Rows can be added and removed afterwards, and work that lives nowhere else
-                is typed in. If SharePoint cannot be reached the draft still opens — empty
-                rather than not at all.
+                {scope === "team"
+                  ? "Rows can be added and removed afterwards, and work that lives nowhere else is typed in. If SharePoint cannot be reached the draft still opens — empty rather than not at all."
+                  : "The figures are copied as they are now and then frozen, so this report still describes this period when it is read next year. What you write is the part only you can supply."}
               </p>
             </div>
           </Panel>
@@ -278,9 +410,24 @@ export default function NewReportPage() {
               </ul>
 
               <InlineNotice tone="info">
-                The six sections are the same on every report in the company — that is what
-                lets a manager read four teams in one pass. What each team is asked{" "}
-                <em>inside</em> them comes from its template, which a super admin sets.
+                {scope === "team" ? (
+                  <>
+                    The six sections are the same on every report in the company — that is
+                    what lets a manager read four teams in one pass. What each team is
+                    asked <em>inside</em> them comes from its template, which a super admin
+                    sets.
+                  </>
+                ) : (
+                  <>
+                    This team files{" "}
+                    {scope === "portfolio" ? "a portfolio report" : "project status reports"}
+                    , so the frame itself is different: the dials, the timeline and the
+                    counts come from{" "}
+                    {scope === "portfolio" ? "the projects" : "the project"} rather than
+                    being typed, and what is asked here is only the part a person has to
+                    supply.
+                  </>
+                )}
               </InlineNotice>
             </div>
           )}
@@ -291,17 +438,24 @@ export default function NewReportPage() {
         <p className="min-w-0 flex-1 text-[12px] text-ink-3">
           {start.error ? (
             <span className="text-danger">{start.error}</span>
+          ) : scope === "project" && form.data && !project ? (
+            "No project here is yours to report on."
           ) : form.data ? (
-            `${form.data.team} · ${form.data.period_label}`
+            [form.data.team, project?.name, form.data.period_label]
+              .filter(Boolean)
+              .join(" · ")
           ) : (
             "Choose a team and a cadence."
           )}
         </p>
         <Button
           variant="accent"
-          icon={Sparkles}
+          icon={scope === "team" ? Sparkles : FolderKanban}
           loading={start.pending}
-          disabled={!form.data}
+          // A project report with nothing to report on cannot be started, and
+          // the backend would refuse it — saying so here saves the round trip
+          // and names the reason above.
+          disabled={!form.data || (scope === "project" && !project)}
           onClick={() => void start.run()}
         >
           Start the draft

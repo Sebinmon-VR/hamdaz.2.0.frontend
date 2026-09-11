@@ -12,8 +12,10 @@ import { Avatar, PageHead, Panel, Row, RowHead, StatBox } from "@/components/ui/
 import { LinkButton, PillRail, SearchInput, Toggle } from "@/components/ui/controls";
 import { Empty, ErrorState, RowsSkeleton } from "@/components/ui/feedback";
 import {
+  CADENCE_OPTIONS,
   CadenceBadge,
   ReportStatusBadge,
+  ScopeBadge,
 } from "@/components/reports/ReportBits";
 
 /**
@@ -37,6 +39,12 @@ export default function ReportsPage() {
   const session = useSession();
   const [mine, setMine] = useState(true);
   const [cadence, setCadence] = useState<string>("all");
+  // Three kinds of report share this list now, and they answer different
+  // questions — "did my people file" and "how is the Hydra project doing" are
+  // not the same errand. Filtering by scope is the cheapest way to ask one of
+  // them at a time, and it is a backend parameter rather than a client filter
+  // so the count in the header stays honest.
+  const [scope, setScope] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
   const [search, setSearch] = useState("");
 
@@ -44,6 +52,7 @@ export default function ReportsPage() {
     withQuery("/reports", {
       mine: mine || undefined,
       cadence: cadence === "all" ? undefined : cadence,
+      scope: scope === "all" ? undefined : scope,
       status: status === "all" ? undefined : status,
       limit: 100,
     }),
@@ -57,6 +66,7 @@ export default function ReportsPage() {
       !needle ||
       report.team.toLowerCase().includes(needle) ||
       report.author_name.toLowerCase().includes(needle) ||
+      (report.project_name?.toLowerCase().includes(needle) ?? false) ||
       report.period_label.toLowerCase().includes(needle),
   );
 
@@ -112,19 +122,23 @@ export default function ReportsPage() {
         <SearchInput
           value={search}
           onChange={setSearch}
-          placeholder="Team, person or period"
+          placeholder="Team, person, project or period"
           className="w-full max-w-xs"
+        />
+        <PillRail
+          value={scope}
+          onChange={setScope}
+          options={[
+            { value: "all", label: "Everything" },
+            { value: "team", label: "Own work" },
+            { value: "project", label: "Projects" },
+            { value: "portfolio", label: "Portfolios" },
+          ]}
         />
         <PillRail
           value={cadence}
           onChange={setCadence}
-          options={[
-            { value: "all", label: "Any cadence" },
-            { value: "daily", label: "Daily" },
-            { value: "weekly", label: "Weekly" },
-            { value: "monthly", label: "Monthly" },
-            { value: "ad_hoc", label: "Ad hoc" },
-          ]}
+          options={[{ value: "all", label: "Any cadence" }, ...CADENCE_OPTIONS]}
         />
         <PillRail
           value={status}
@@ -163,11 +177,13 @@ export default function ReportsPage() {
           <RowHead>
             <span className="w-6 shrink-0" />
             <span className="micro min-w-0 flex-1 text-ink-4">Period</span>
-            <span className="micro hidden w-40 shrink-0 text-ink-4 sm:block">Team</span>
+            <span className="micro hidden w-40 shrink-0 text-ink-4 sm:block">
+              Team or project
+            </span>
             <span className="micro hidden w-20 shrink-0 text-ink-4 md:block">Tasks</span>
             <span className="micro hidden w-24 shrink-0 text-ink-4 md:block">Issues</span>
             <span className="micro w-24 shrink-0 text-ink-4">Filed</span>
-            <span className="w-[4.5rem] shrink-0" />
+            <span className="w-[7rem] shrink-0" />
           </RowHead>
 
           {rows.map((report) => (
@@ -180,8 +196,15 @@ export default function ReportsPage() {
                     {report.author_name}
                   </span>
                 </span>
-                <span className="hidden w-40 shrink-0 truncate text-[12px] text-ink-3 sm:block">
-                  {report.team}
+                {/* The project where there is one: on a status report the
+                    team is the least identifying thing about it, and six
+                    reports from the same team in a week are otherwise six
+                    identical rows. */}
+                <span
+                  className="hidden w-40 shrink-0 truncate text-[12px] text-ink-3 sm:block"
+                  title={report.project_name ? `${report.team} · ${report.project_name}` : report.team}
+                >
+                  {report.project_name ?? report.team}
                 </span>
                 <span className="tnum hidden w-20 shrink-0 text-[12px] text-ink-3 md:block">
                   {num(report.task_count)}
@@ -200,7 +223,8 @@ export default function ReportsPage() {
                     ? relative(report.submitted_at)
                     : dateShort(report.period_end)}
                 </span>
-                <span className="flex w-[4.5rem] shrink-0 justify-end gap-1.5">
+                <span className="flex w-[7rem] shrink-0 justify-end gap-1.5">
+                  <ScopeBadge value={report.scope} />
                   <CadenceBadge value={report.cadence} />
                   <ReportStatusBadge value={report.status} />
                 </span>

@@ -8,6 +8,7 @@ import {
   CalendarClock,
   CircleAlert,
   Crown,
+  Flag,
   Layers,
   Users,
 } from "lucide-react";
@@ -17,9 +18,15 @@ import { activeOf } from "@/lib/types";
 import type {
   DirectorySnapshotData,
   LeaveQueueData,
+  MilestonesAheadData,
   MyLeaveData,
+  MyProjectWorkData,
   MyProposalTasksData,
   MyStandingData,
+  ProjectActivityData,
+  ProjectAttentionData,
+  ProjectBoardData,
+  ProjectHealthData,
   ProposalWorkloadData,
   RecentMembersData,
   RenderedWidget,
@@ -32,6 +39,19 @@ import type {
 } from "@/lib/types";
 import { Avatar, AvatarStack, Badge, Panel, RampBar, Stat } from "@/components/ui/primitives";
 import { Empty } from "@/components/ui/feedback";
+import {
+  Delta,
+  MilestoneStateBadge,
+  PlanBadge,
+  ProgressBar,
+  ProjectStatusBadge,
+  RAG_COLOR,
+  RAG_LABELS,
+  RagDot,
+  TaskStatusBadge,
+  Trend,
+  UpdateKindBadge,
+} from "@/components/projects/ProjectBits";
 
 /* ── layout ──────────────────────────────────────────────────────────── */
 
@@ -205,6 +225,24 @@ function Body({ widget, teamSlug }: { widget: RenderedWidget; teamSlug?: string 
       return <WhoIsOff title={title} module={module} data={data as WhoIsOffData} />;
     case "leave_queue":
       return <LeaveQueue title={title} module={module} data={data as LeaveQueueData} />;
+    case "project_health":
+      return <ProjectHealth title={title} module={module} data={data as ProjectHealthData} />;
+    case "project_board":
+      return <ProjectBoard title={title} module={module} data={data as ProjectBoardData} />;
+    case "project_attention":
+      return (
+        <ProjectAttention title={title} module={module} data={data as ProjectAttentionData} />
+      );
+    case "my_project_work":
+      return <MyProjectWork title={title} module={module} data={data as MyProjectWorkData} />;
+    case "milestones_ahead":
+      return (
+        <MilestonesAhead title={title} module={module} data={data as MilestonesAheadData} />
+      );
+    case "project_activity":
+      return (
+        <ProjectActivity title={title} module={module} data={data as ProjectActivityData} />
+      );
     default:
       return (
         <Frame title={title} module={module}>
@@ -735,6 +773,354 @@ function LeaveQueue({ title, module, data }: WidgetProps<LeaveQueueData>) {
               <span className="shrink-0 opacity-70">
                 {dateShort(request.start_date)} · {request.days}d
               </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Frame>
+  );
+}
+
+/* ── projects ────────────────────────────────────────────────────────── */
+
+/**
+ * The portfolio in one card.
+ *
+ * The RAG counts are drawn as a bar with each segment in its own colour
+ * rather than on the accent ramp every other bar here uses — this is the one
+ * series in the app whose colours are *categorical* and already mean
+ * something. `stale_health` sits beside them deliberately: a board showing
+ * four greens and two greys reads as "mostly fine", and the same board saying
+ * two sets of dials have not been looked at for a fortnight reads correctly.
+ */
+function ProjectHealth({ title, module, data }: WidgetProps<ProjectHealthData>) {
+  const order = ["red", "amber", "green", "grey"];
+  const segments = order
+    .map((key) => ({ value: data.by_rag?.[key] ?? 0, label: RAG_LABELS[key], color: RAG_COLOR[key] }))
+    .filter((segment) => segment.value > 0);
+
+  return (
+    <Frame title={title} module={module} action={<Open href="/projects" label="All projects" />}>
+      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-3">
+        <Stat value={num(data.projects)} label="projects" />
+        <Stat value={`${data.average_percent}%`} label="average complete" />
+      </div>
+
+      {data.projects === 0 ? (
+        <p className="mt-4 text-[13px] text-ink-3">Nothing running here yet.</p>
+      ) : (
+        <>
+          <RampBar className="mt-5" height={24} segments={segments} />
+          <ul className="mt-3 space-y-1.5">
+            {order
+              .filter((key) => (data.by_rag?.[key] ?? 0) > 0)
+              .map((key) => (
+                <li key={key} className="flex items-center gap-2 text-[12.5px]">
+                  <RagDot value={key} size={8} />
+                  <span className="min-w-0 flex-1 truncate text-ink-2">{RAG_LABELS[key]}</span>
+                  <span className="tnum font-semibold">{data.by_rag[key]}</span>
+                </li>
+              ))}
+          </ul>
+        </>
+      )}
+
+      {data.stale_health > 0 && (
+        <p className="mt-3 text-[11.5px] leading-relaxed text-ink-4">
+          {data.stale_health} {data.stale_health === 1 ? "set of dials has" : "sets of dials have"}{" "}
+          not been confirmed for a fortnight. Read the colours above with that in mind.
+        </p>
+      )}
+    </Frame>
+  );
+}
+
+/**
+ * What is going wrong, in the order it matters: overdue milestones, then
+ * blocked work, then escalations. That order is the card's whole argument — a
+ * slipped milestone changes a date somebody has promised, a blocked task
+ * changes somebody's afternoon.
+ */
+function ProjectAttention({ title, module, data }: WidgetProps<ProjectAttentionData>) {
+  const rows = [
+    { label: "Milestones overdue", value: data.milestones_overdue, tone: "danger" as const },
+    { label: "Tasks overdue", value: data.tasks_overdue, tone: "danger" as const },
+    { label: "Open work", value: data.tasks_blocked_or_open, tone: undefined },
+    { label: "Issues open", value: data.issues_open, tone: "warn" as const },
+    { label: "Needing support", value: data.issues_needing_support, tone: "warn" as const },
+  ];
+  const clear = rows.every((row) => row.value === 0);
+
+  return (
+    <Frame title={title} module={module} tone={data.milestones_overdue > 0 ? "highlight" : "panel"}>
+      {clear ? (
+        <p className="text-[13px] text-ink-3">Nothing overdue, blocked or escalated.</p>
+      ) : (
+        <ul className="space-y-2">
+          {rows
+            .filter((row) => row.value > 0)
+            .map((row) => (
+              <li key={row.label} className="flex items-baseline justify-between gap-3">
+                <span className="min-w-0 truncate text-[12.5px] opacity-80">{row.label}</span>
+                <span
+                  className={clsx(
+                    "tnum shrink-0 text-[15px] font-bold",
+                    row.tone === "danger" && "text-danger",
+                    row.tone === "warn" && "text-warn",
+                  )}
+                >
+                  {row.value}
+                </span>
+              </li>
+            ))}
+        </ul>
+      )}
+    </Frame>
+  );
+}
+
+/** The team's live projects, worst health first — the order the backend sends. */
+function ProjectBoard({ title, module, data }: WidgetProps<ProjectBoardData>) {
+  return (
+    <Frame title={title} module={module} action={<Open href="/projects" label="All projects" />}>
+      {data.projects.length === 0 ? (
+        <p className="text-[13px] text-ink-3">No live projects on this team.</p>
+      ) : (
+        <div className="no-bar -mx-1 overflow-x-auto px-1">
+          <table className="w-full min-w-[42rem] border-separate border-spacing-y-1 text-left">
+            <thead>
+              <tr className="micro text-ink-4">
+                <th className="px-2 pb-1 font-medium">Project</th>
+                <th className="w-24 px-2 pb-1 font-medium">Status</th>
+                <th className="w-32 px-2 pb-1 font-medium">Complete</th>
+                <th className="w-16 px-2 pb-1 text-right font-medium">Open</th>
+                <th className="w-16 px-2 pb-1 text-right font-medium">Late</th>
+                <th className="w-24 px-2 pb-1 text-right font-medium">Target</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.projects.map((project) => (
+                <tr key={project.id} className="bg-inset align-top">
+                  <td className="rounded-l-2xl px-2.5 py-2">
+                    <Link href={`/projects/${project.id}`} className="flex items-start gap-2">
+                      <span className="mt-1">
+                        <RagDot value={project.rag_overall} />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-[12.5px] font-medium text-ink">
+                          {project.name}
+                        </span>
+                        <span className="block truncate text-[11px] text-ink-4">
+                          {[project.code, project.lead].filter(Boolean).join(" · ") ||
+                            "No lead named"}
+                        </span>
+                        {/* Only where the dates disagree with the lead. This
+                            is the card's one piece of arithmetic and it is
+                            phrased as a second opinion, never as a verdict. */}
+                        {project.schedule_hint && (
+                          <span className="mt-0.5 block truncate text-[11px] text-warn">
+                            Dates say: {project.schedule_hint}
+                          </span>
+                        )}
+                        {project.health_stale && (
+                          <span className="mt-0.5 block text-[11px] text-ink-4">
+                            Dials not confirmed lately
+                          </span>
+                        )}
+                      </span>
+                    </Link>
+                  </td>
+                  <td className="px-2.5 py-2">
+                    <ProjectStatusBadge value={project.status} />
+                  </td>
+                  <td className="px-2.5 py-2">
+                    <span className="flex items-center gap-2">
+                      <span className="tnum text-[11.5px] text-ink-2">
+                        {project.percent_complete}%
+                      </span>
+                      <Trend value={project.trend_overall} />
+                    </span>
+                    <ProgressBar
+                      percent={project.percent_complete}
+                      rag={project.rag_overall}
+                      height={4}
+                      className="mt-1"
+                    />
+                  </td>
+                  <td className="tnum px-2.5 py-2 text-right text-[12px] text-ink-3">
+                    {project.tasks_open}
+                  </td>
+                  <td
+                    className={clsx(
+                      "tnum px-2.5 py-2 text-right text-[12px]",
+                      project.tasks_overdue + project.milestones_overdue > 0
+                        ? "font-semibold text-danger"
+                        : "text-ink-3",
+                    )}
+                  >
+                    {project.tasks_overdue + project.milestones_overdue}
+                  </td>
+                  <td className="tnum rounded-r-2xl px-2.5 py-2 text-right text-[11.5px] text-ink-3">
+                    {project.target_end_on ? dateShort(project.target_end_on) : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {data.total > data.showing && (
+        <p className="mt-3 text-[12px] text-ink-4">
+          Showing {data.showing} of {data.total}.
+        </p>
+      )}
+    </Frame>
+  );
+}
+
+/** The viewer's own project tasks on this team. */
+function MyProjectWork({ title, module, data }: WidgetProps<MyProjectWorkData>) {
+  return (
+    <Frame
+      title={title}
+      module={module}
+      action={<Open href="/projects/board" label="My project work" />}
+    >
+      <div className="flex flex-wrap gap-x-6 gap-y-3">
+        <Stat value={num(data.total)} label="open" />
+        <Stat
+          value={num(data.overdue)}
+          label="overdue"
+          tone="danger"
+          delta={data.overdue > 0 ? "late" : undefined}
+        />
+        <Stat value={num(data.due_this_week)} label="due in 7d" />
+      </div>
+
+      {data.tasks.length === 0 ? (
+        <p className="mt-4 text-[13px] text-ink-3">Nothing assigned to you here.</p>
+      ) : (
+        <ul className="mt-4 space-y-1.5">
+          {data.tasks.map((task) => (
+            <li key={task.id}>
+              <Link
+                href={`/projects/${task.project_id}`}
+                className="flex items-center gap-3 rounded-xl bg-inset px-2.5 py-1.5 transition hover:bg-panel-2"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-medium">{task.title}</p>
+                  <p className="truncate text-[11.5px] text-ink-4">
+                    {task.project} · {task.percent_complete}%
+                  </p>
+                </div>
+                <DueChip due={task.due_on} />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Frame>
+  );
+}
+
+/**
+ * What is due next. Overdue first, because a plan's next date is not
+ * interesting while an earlier one is still unmet — which is the order the
+ * backend already sorts them into.
+ */
+function MilestonesAhead({ title, module, data }: WidgetProps<MilestonesAheadData>) {
+  return (
+    <Frame title={title} module={module} tone={data.overdue > 0 ? "highlight" : "panel"}>
+      <div className="flex flex-wrap gap-x-6 gap-y-3">
+        <Stat value={num(data.total)} label={`within ${data.within_days}d`} />
+        {data.overdue > 0 && <Stat value={num(data.overdue)} label="already late" tone="danger" />}
+      </div>
+
+      {data.milestones.length === 0 ? (
+        <p className="mt-4 text-[13px] opacity-70">
+          Nothing due in the next {data.within_days} days.
+        </p>
+      ) : (
+        <ul className="mt-4 space-y-1.5">
+          {data.milestones.map((stone) => (
+            <li key={stone.id}>
+              <Link
+                href={`/projects/${stone.project_id}/plan`}
+                className="flex items-center gap-2.5 rounded-xl bg-inset px-2.5 py-2 transition hover:bg-panel-2"
+              >
+                {stone.is_key && (
+                  <Flag className="size-3 shrink-0 text-accent" strokeWidth={2.4} />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12.5px] font-medium">{stone.name}</p>
+                  <p className="truncate text-[11px] text-ink-4">
+                    {stone.project}
+                    {stone.owner ? ` · ${stone.owner}` : ""} · {stone.percent_complete}%
+                  </p>
+                </div>
+                <PlanBadge value={stone.plan} />
+                <MilestoneStateBadge value={stone.state} />
+                <span className="tnum shrink-0 text-[11px] text-ink-4">
+                  {stone.due_on ? dateShort(stone.due_on) : "—"}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Frame>
+  );
+}
+
+/**
+ * Movement, where every other card here shows a state.
+ *
+ * A project with nothing in this list is the one worth asking about — which
+ * is why the counts by kind are shown even when the list itself is short.
+ */
+function ProjectActivity({ title, module, data }: WidgetProps<ProjectActivityData>) {
+  const kinds = Object.entries(data.counts).sort((a, b) => b[1] - a[1]);
+  return (
+    <Frame
+      title={title}
+      module={module}
+      action={<Open href="/projects/activity" label="What moved" />}
+    >
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+        <Stat value={num(data.total)} label={`in ${data.days} days`} />
+        <div className="flex flex-wrap gap-1.5">
+          {kinds.map(([kind, count]) => (
+            <span key={kind} className="inline-flex items-center gap-1">
+              <UpdateKindBadge value={kind} />
+              <span className="tnum text-[11px] text-ink-4">{count}</span>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {data.updates.length === 0 ? (
+        <p className="mt-4 text-[13px] text-ink-3">
+          Nothing was recorded in the last {data.days} days.
+        </p>
+      ) : (
+        <ul className="mt-4 space-y-1.5">
+          {data.updates.map((update) => (
+            <li key={update.id}>
+              <Link
+                href={`/projects/${update.project_id}`}
+                className="flex items-start gap-2.5 rounded-xl bg-inset px-2.5 py-2 transition hover:bg-panel-2"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12.5px]">
+                    {update.subject ?? humanise(update.kind)}
+                  </p>
+                  <p className="truncate text-[11px] text-ink-4">
+                    {[update.author, relative(update.at)].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
+                <Delta value={update.percent_delta} />
+                {update.status_after && <TaskStatusBadge value={update.status_after} />}
+              </Link>
             </li>
           ))}
         </ul>

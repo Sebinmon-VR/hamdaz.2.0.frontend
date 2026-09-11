@@ -23,6 +23,7 @@ import type {
   IssueIn,
   ReportEditIn,
   ReportOut,
+  ReportProjectNoteIn,
   ReportSectionOut,
   TaskLineIn,
 } from "@/lib/types";
@@ -48,9 +49,18 @@ import {
   CADENCE_LABELS,
   COMPLETION_LABELS,
   ReportStatusBadge,
+  ScopeBadge,
   SEVERITY_LABELS,
 } from "@/components/reports/ReportBits";
 import { ReportView } from "@/components/reports/ReportView";
+import {
+  NoProjectLines,
+  PortfolioTable,
+  ProjectLineHead,
+  ProjectNotes,
+  ReportDials,
+  ReportTimeline,
+} from "@/components/reports/ProjectSections";
 
 /**
  * One report — being written, or being read.
@@ -149,6 +159,22 @@ function Editor({ report, onSaved }: { report: ReportOut; onSaved: () => void })
       resolved: issue.resolved,
     })),
   );
+  // Keyed by project line id, and only the prose: the figures on a line are a
+  // snapshot the backend refuses to let anybody type over. Seeded from what is
+  // already saved so a half-written portfolio report re-opens as it was left.
+  const [projectNotes, setProjectNotes] = useState<Record<string, ReportProjectNoteIn>>(
+    () =>
+      Object.fromEntries(
+        report.project_lines.map((line) => [
+          line.id,
+          {
+            activities: line.activities,
+            action_required: line.action_required,
+            note: line.note,
+          },
+        ]),
+      ),
+  );
   // Only the overrides. A metric left alone is not sent at all, so the computed
   // figure keeps computing — sending it back would freeze today's count into
   // the report the moment somebody opened it.
@@ -173,6 +199,9 @@ function Editor({ report, onSaved }: { report: ReportOut; onSaved: () => void })
     metrics: Object.fromEntries(
       report.metrics.map((metric) => [metric.key, metrics[metric.key]?.trim() || null]),
     ),
+    // Sent only where there are lines. An empty object on a team report would
+    // be harmless but says something untrue about what the report is.
+    ...(report.project_lines.length > 0 ? { project_notes: projectNotes } : {}),
   });
 
   const save = useAction(async () => {
@@ -201,10 +230,15 @@ function Editor({ report, onSaved }: { report: ReportOut; onSaved: () => void })
     <>
       <PageHead
         eyebrow={`${report.team} · ${CADENCE_LABELS[report.cadence] ?? report.cadence}`}
-        title={report.period_label}
+        title={report.project_name ?? report.period_label}
         lead="A draft is yours alone — nobody else can see it until you file it."
         meta={`${date(report.period_start)} – ${date(report.period_end)}`}
-        actions={<ReportStatusBadge value={report.status} />}
+        actions={
+          <>
+            <ScopeBadge value={report.scope} />
+            <ReportStatusBadge value={report.status} />
+          </>
+        }
       />
 
       <div className="space-y-4">
@@ -228,6 +262,8 @@ function Editor({ report, onSaved }: { report: ReportOut; onSaved: () => void })
               setIssues,
               metrics,
               setMetrics,
+              projectNotes,
+              setProjectNotes,
             }}
           />
         ))}
@@ -321,6 +357,8 @@ interface EditorState {
   setIssues: (value: IssueIn[]) => void;
   metrics: Record<string, string>;
   setMetrics: (value: Record<string, string>) => void;
+  projectNotes: Record<string, ReportProjectNoteIn>;
+  setProjectNotes: (value: Record<string, ReportProjectNoteIn>) => void;
 }
 
 /** One section of the form, drawn from its `kind` and the template's fields. */
@@ -334,6 +372,14 @@ function EditorSection({
   state: EditorState;
 }) {
   const fields = report.fields.filter((field) => field.section === section.key);
+  const lines = report.project_lines;
+  const single = lines.length > 0 ? lines[0] : null;
+
+  const setNote = (id: string, patch: ReportProjectNoteIn) =>
+    state.setProjectNotes({
+      ...state.projectNotes,
+      [id]: { ...state.projectNotes[id], ...patch },
+    });
 
   const prose =
     section.key === "overview"
@@ -353,7 +399,11 @@ function EditorSection({
             ? state.tasks.length
             : section.key === "issues"
               ? state.issues.length || undefined
-              : undefined
+              : section.kind === "projects"
+                ? lines.length
+                : section.kind === "timeline"
+                  ? single?.milestones.length || undefined
+                  : undefined
         }
       />
       <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-4">{section.description}</p>
@@ -373,6 +423,52 @@ function EditorSection({
             }
           />
         )}
+
+        {/* The project sections. Read-only even in the draft, apart from the
+            three prose boxes underneath the dials: the figures are a snapshot
+            of the project taken when this draft was opened, and a report whose
+            numbers could be retyped would be a record of what somebody wished
+            the project said. A project whose figures are wrong is fixed in the
+            project, and the draft re-opened. */}
+        {section.kind === "dials" &&
+          (single ? (
+            <div className="space-y-3.5">
+              <ProjectLineHead line={single} />
+              <ReportDials line={single} />
+              <ProjectNotes
+                line={single}
+                value={state.projectNotes[single.id] ?? {}}
+                onChange={(patch) => setNote(single.id, patch)}
+                single
+              />
+            </div>
+          ) : (
+            <NoProjectLines scope={report.scope} />
+          ))}
+
+        {section.kind === "timeline" &&
+          (single ? <ReportTimeline line={single} /> : <NoProjectLines scope={report.scope} />)}
+
+        {section.kind === "projects" &&
+          (lines.length > 0 ? (
+            <div className="space-y-3.5">
+              <PortfolioTable lines={lines} />
+              {/* A portfolio report is written a project at a time, which is
+                  why the notes are merged rather than replaced on save. */}
+              <div className="space-y-2">
+                {lines.map((line) => (
+                  <ProjectNotes
+                    key={line.id}
+                    line={line}
+                    value={state.projectNotes[line.id] ?? {}}
+                    onChange={(patch) => setNote(line.id, patch)}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <NoProjectLines scope={report.scope} />
+          ))}
 
         {section.key === "tasks" && <TaskRows state={state} />}
         {section.key === "issues" && <IssueRows state={state} />}
@@ -686,11 +782,16 @@ function Reader({ report, onChanged }: { report: ReportOut; onChanged: () => voi
   return (
     <>
       <PageHead
-        eyebrow={`${report.team} · ${CADENCE_LABELS[report.cadence] ?? report.cadence}`}
+        eyebrow={
+          report.project_name
+            ? `${report.team} · ${report.project_name}`
+            : `${report.team} · ${CADENCE_LABELS[report.cadence] ?? report.cadence}`
+        }
         title={report.period_label}
         meta={`${date(report.period_start)} – ${date(report.period_end)}`}
         actions={
           <>
+            <ScopeBadge value={report.scope} />
             <ReportStatusBadge value={report.status} />
             <Link
               href="/reports"
@@ -710,7 +811,21 @@ function Reader({ report, onChanged }: { report: ReportOut; onChanged: () => voi
               <span className="truncate">{report.author_name}</span>
             </span>
           </Meta>
-          <Meta label="Team">{report.team}</Meta>
+          <Meta label={report.project_id ? "Project" : "Team"}>
+            {report.project_id ? (
+              // The report is a snapshot; the project has moved on. This is
+              // the way to the live one, and it is the only live thing on
+              // this screen.
+              <Link
+                href={`/projects/${report.project_id}`}
+                className="underline underline-offset-2"
+              >
+                {report.project_name ?? "the project"}
+              </Link>
+            ) : (
+              report.team
+            )}
+          </Meta>
           <Meta label="Filed">
             {report.submitted_at ? relative(report.submitted_at) : "Not yet"}
           </Meta>
