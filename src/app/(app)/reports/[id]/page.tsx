@@ -7,6 +7,8 @@ import useSWR from "swr";
 import {
   Check,
   ExternalLink,
+  FileDown,
+  FileText,
   MessageSquare,
   Paperclip,
   Plus,
@@ -15,7 +17,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, files } from "@/lib/api";
 import { date, dateTime, relative } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
@@ -52,6 +54,7 @@ import {
   ScopeBadge,
   SEVERITY_LABELS,
 } from "@/components/reports/ReportBits";
+import { ReportBrief } from "@/components/reports/ReportBrief";
 import { ReportView } from "@/components/reports/ReportView";
 import {
   NoProjectLines,
@@ -793,6 +796,29 @@ function Reader({ report, onChanged }: { report: ReportOut; onChanged: () => voi
           <>
             <ScopeBadge value={report.scope} />
             <ReportStatusBadge value={report.status} />
+            {/* Only for a filed report: a draft is the author's working copy,
+                and a PDF of one would be a copy of something that is still
+                changing — circulated, it becomes the version somebody quotes. */}
+            {report.status === "submitted" && (
+              <>
+                <a
+                  href={files.reportExport(report.id, "pdf")}
+                  className="inline-flex items-center gap-1.5 text-[12.5px] text-ink-3 transition hover:text-ink"
+                  title="Download as PDF"
+                >
+                  <FileDown className="size-3.5" strokeWidth={2} />
+                  PDF
+                </a>
+                <a
+                  href={files.reportExport(report.id, "docx")}
+                  className="inline-flex items-center gap-1.5 text-[12.5px] text-ink-3 transition hover:text-ink"
+                  title="Download as a Word file"
+                >
+                  <FileText className="size-3.5" strokeWidth={2} />
+                  Word
+                </a>
+              </>
+            )}
             <Link
               href="/reports"
               className="text-[12.5px] text-ink-3 underline underline-offset-2 transition hover:text-ink"
@@ -842,6 +868,13 @@ function Reader({ report, onChanged }: { report: ReportOut; onChanged: () => voi
           your next report.
         </InlineNotice>
       )}
+
+      {/* Above the report, not instead of it. A manager reading nine of these
+          wants the short version first and the document underneath the moment
+          the short version worries them. Draws nothing at all when the
+          summariser is off, so a team that has not turned it on sees the
+          screen it has always seen. */}
+      <ReportBrief reportId={report.id} />
 
       <ReportView report={report} />
 

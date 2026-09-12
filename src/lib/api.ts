@@ -280,4 +280,14 @@ export const files = {
     apiUrl(`/quotes/${quoteId}/documents/${documentId}`),
   comparisonDocument: (comparisonId: string, quoteId: string) =>
     apiUrl(`/comparisons/${comparisonId}/quotes/${quoteId}/document`),
+  /**
+   * A filed report as a file.
+   *
+   * A plain link rather than a fetch: the browser's own download handles the
+   * cookie, the filename from `Content-Disposition` and the save dialog, and
+   * doing it by hand would mean holding a multi-megabyte blob in memory to
+   * reproduce all three worse.
+   */
+  reportExport: (reportId: string, format: "pdf" | "docx") =>
+    apiUrl(`/reports/${reportId}/export`, { format }),
 };

@@ -2375,6 +2375,14 @@ export interface ConversationOut {
   title: string | null;
   created_at: string;
   last_message_at: string | null;
+  /**
+   * What the chat is about, when it was opened from somewhere specific — the
+   * box on a report page rather than the assistant's own screen. Null for the
+   * rest, which is most of them.
+   */
+  subject_kind?: string | null;
+  subject_id?: string | null;
+  subject_label?: string | null;
 }
 
 export interface AssistantMessageOut {
@@ -3483,9 +3491,40 @@ export interface ReportSettingsOut {
   include_issue_list: boolean;
   /** Advisory: nothing is deleted, it is what the log defaults its range to. */
   log_retention_days: number;
+
+  /**
+   * The AI summariser.
+   *
+   * Off by default and deliberately: it is the only part of reporting that
+   * spends money per report, so it starts off and a super admin turns it on
+   * knowingly rather than finding it on an invoice.
+   */
+  brief_enabled: boolean;
+  /** When a brief gets written — and therefore who waits for it. */
+  brief_mode: BriefMode;
+  /** What a reader may do with one once it is there. Each step costs more. */
+  brief_followup: BriefFollowup;
+  /** Null follows whatever model the assistant itself is set to. */
+  brief_model_key: string | null;
+  /** A brief that runs to a page has reproduced the problem it was added to solve. */
+  brief_max_words: number;
+
   updated_by_id: string | null;
   updated_at: string;
 }
+
+/**
+ * When a report's brief is written.
+ *
+ * A submitted report never changes, so its brief is written once and read many
+ * times. What these really decide is *who waits*: the author at submit time
+ * (and nobody notices, the email is going out anyway), the first manager to
+ * open it, or nobody until somebody asks.
+ */
+export type BriefMode = "on_submit" | "on_first_open" | "on_request";
+
+/** What a reader may do with a brief. `chat` turns the box into the assistant. */
+export type BriefFollowup = "off" | "refresh" | "chat";
 
 /** Only the fields sent change. */
 export interface ReportSettingsIn {
@@ -3502,6 +3541,57 @@ export interface ReportSettingsIn {
   include_task_list?: boolean;
   include_issue_list?: boolean;
   log_retention_days?: number;
+  brief_enabled?: boolean;
+  brief_mode?: BriefMode;
+  brief_followup?: BriefFollowup;
+  /** An assistant model key, or empty to follow the assistant's own setting. */
+  brief_model_key?: string | null;
+  brief_max_words?: number;
+}
+
+/**
+ * The short version of one report.
+ *
+ * `state` is what the box renders from, and it has six answers rather than
+ * "is there a brief": collapsing them would leave the screen unable to say why
+ * there is none.
+ *
+ * - `disabled` — the administrator has not turned the summariser on
+ * - `not_applicable` — a draft; briefs are for filed reports
+ * - `absent` — nobody has asked for one yet
+ * - `failed` — we tried and could not; `error` says why
+ * - `stale` — the report changed after the brief was written
+ * - `ready` — it describes this report as it stands
+ */
+export interface BriefOut {
+  report_id: string;
+  state: "disabled" | "not_applicable" | "absent" | "failed" | "stale" | "ready";
+  /** One line, for a list of reports. Null until one has been written. */
+  headline: string | null;
+  body: string | null;
+  generated_at: string | null;
+  model: string | null;
+  /** 2 or more means somebody asked for it again. */
+  revision: number;
+  error: string | null;
+  /** Both follow the administrator's `brief_followup`. */
+  may_refresh: boolean;
+  may_chat: boolean;
+}
+
+/**
+ * Where to carry on the conversation about a report.
+ *
+ * A real assistant conversation, not a copy of one: everything after this goes
+ * through `/assistant/conversations/{id}/messages`, so the follow-up questions
+ * are subject to the same admission rules, tool policies, cost caps and audit
+ * log as any other chat.
+ */
+export interface BriefChatOut {
+  conversation_id: string;
+  /** False means you are being handed back the questions you already asked. */
+  created: boolean;
+  brief: BriefOut;
 }
 
 /**

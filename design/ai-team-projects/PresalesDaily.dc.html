@@ -1,0 +1,259 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap">
+  <style>
+    body { margin: 0; font-family: Archivo, ui-sans-serif, system-ui, sans-serif; }
+    a { color: #4fd8ff; text-decoration: none; } a:hover { color: #7ae4ff; }
+    .micro { font-size: 9px; font-weight: 700; letter-spacing: 0.19em; text-transform: uppercase; }
+    .fig { font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+    .tnum { font-variant-numeric: tabular-nums; }
+    .tile { background: #1b1b21; border-radius: 15px; padding: 12px 14px 13px; display: flex; flex-direction: column; gap: 9px; }
+    .chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 3px 9px; font-size: 10.5px; font-weight: 500; line-height: 1; }
+    .wrow { display: grid; grid-template-columns: minmax(0, 1fr) 168px 96px 72px; align-items: center; gap: 12px; height: 34px; padding: 0 12px; border-radius: 11px; }
+    .qrow { display: grid; grid-template-columns: 20px minmax(0, 1fr) 150px 104px 96px 76px; align-items: center; gap: 12px; height: 34px; padding: 0 12px; border-radius: 11px; }
+    .step { background: #1b1b21; border-radius: 13px; padding: 11px 14px 12px; display: flex; flex-direction: column; gap: 7px; flex-grow: 1; }
+  </style>
+</helmet>
+
+<div style="width: 1240px; min-height: 1116px; box-sizing: border-box; background: #08080b; color: #ffffff; padding: 18px 20px 24px; display: flex; flex-direction: column; gap: 13px;">
+
+  <!-- head -->
+  <div style="display: flex; align-items: flex-end; gap: 16px;">
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <span class="micro" style="color: #54545e;">Presales · Daily</span>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.03em; line-height: 1;">Friday 11 September</h1>
+        <span class="chip" style="background: #0d2a1f; color: #34c98a;">Filed 17:42</span>
+      </div>
+    </div>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 10px;">
+      <div style="display: flex; flex-direction: column; gap: 3px; align-items: flex-end;">
+        <span class="micro" style="color: #54545e;">Filed by</span>
+        <span style="font-size: 12px; color: #a6a6b0;">Anand R.</span>
+      </div>
+      <span style="width: 1px; height: 26px; background: #26262e;"></span>
+      <div style="display: flex; flex-direction: column; gap: 3px; align-items: flex-end;">
+        <span class="micro" style="color: #54545e;">Sent to</span>
+        <span style="font-size: 12px; color: #a6a6b0;">4 people</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- the headline: read first, written first -->
+  <div style="background: #15151a; border-radius: 20px; padding: 18px 20px; display: flex; gap: 16px; align-items: flex-start;">
+    <span class="micro" style="color: #4fd8ff; padding-top: 4px; white-space: nowrap;">The day</span>
+    <p style="margin: 0; font-size: 17px; line-height: 1.45; font-weight: 500; letter-spacing: -0.01em;">Two quotes out to ADNOC and Borouge. Gulf Valves still have not priced the 8&Prime; gate valves — third chase, now blocking AD-2291.</p>
+  </div>
+
+  <!-- the funnel: the shape of a presales day -->
+  <div style="background: #15151a; border-radius: 20px; padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 13px;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <h2 style="margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em;">Today</h2>
+      <p style="margin: 0; font-size: 12px; color: #54545e;">What came in, what went out, and what it turned into.</p>
+      <span class="tnum" style="margin-left: auto; font-size: 11px; color: #54545e;">vs. the 30-day average</span>
+    </div>
+
+    <div style="display: flex; align-items: stretch; gap: 0;">
+      <div class="step">
+        <span class="micro" style="color: #6d6d78;">Enquiries in</span>
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+          <span class="fig" style="font-size: 30px;">7</span>
+          <span class="tnum" style="font-size: 11px; color: #34c98a;">+3</span>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 78px; gap: 5px;">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#35353f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+        <span class="tnum" style="font-size: 10px; color: #6d6d78;">57%</span>
+      </div>
+      <div class="step">
+        <span class="micro" style="color: #6d6d78;">Quotes sent</span>
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+          <span class="fig" style="font-size: 30px;">4</span>
+          <span class="tnum" style="font-size: 11px; color: #34c98a;">+1</span>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 78px; gap: 5px;">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#35353f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+        <span class="tnum" style="font-size: 10px; color: #6d6d78;">50%</span>
+      </div>
+      <div class="step">
+        <span class="micro" style="color: #6d6d78;">Bids submitted</span>
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+          <span class="fig" style="font-size: 30px;">2</span>
+          <span class="tnum" style="font-size: 11px; color: #54545e;">—</span>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 78px; gap: 5px;">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#35353f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+        <span class="tnum" style="font-size: 10px; color: #6d6d78;">50%</span>
+      </div>
+      <div class="step" style="background: #0d2a1f;">
+        <span class="micro" style="color: #34c98a;">Won today</span>
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+          <span class="fig" style="font-size: 30px; color: #34c98a;">1</span>
+          <span class="tnum" style="font-size: 11px; color: #6d8f7e;">AED 214k</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;">
+      <div class="tile">
+        <span class="micro" style="color: #6d6d78;">Supplier chases</span>
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+          <span class="fig" style="font-size: 24px; color: #e2a63f;">11</span>
+          <span class="tnum" style="font-size: 11px; color: #e2a63f;">+6 — the number that explains a slow week</span>
+        </div>
+      </div>
+      <div class="tile">
+        <span class="micro" style="color: #6d6d78;">Customer meetings</span>
+        <span class="fig" style="font-size: 24px;">2</span>
+      </div>
+      <div class="tile">
+        <span class="micro" style="color: #6d6d78;">Value quoted today</span>
+        <span class="fig" style="font-size: 24px;">AED 1.32m</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- waiting on: the most useful section, given a table of its own -->
+  <div style="background: #251d0f; border-radius: 20px; padding: 16px 4px 14px; display: flex; flex-direction: column; gap: 10px;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 14px;">
+      <h2 style="margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: #e2a63f;">Waiting on somebody else</h2>
+      <span class="tnum" style="font-size: 12px; color: #8a6c2c;">4</span>
+      <p style="margin: 0; font-size: 12px; color: #8a6c2c;">Who owes what, by name — with how long it has been.</p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: minmax(0, 1fr) 168px 96px 72px; gap: 12px; padding: 0 12px 7px; border-bottom: 1px solid #3d3218;">
+      <span class="micro" style="color: #8a6c2c;">What</span>
+      <span class="micro" style="color: #8a6c2c;">Who owes it</span>
+      <span class="micro" style="color: #8a6c2c;">Blocking</span>
+      <span class="micro" style="color: #8a6c2c; text-align: right;">Waiting</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 1px;">
+      <div class="wrow" style="background: rgba(242,105,79,0.14);">
+        <span style="font-size: 12.5px; color: #f3e3c8;">Pricing on 8&Prime; gate valves</span>
+        <span style="font-size: 11.5px; color: #d7c49a;">Gulf Valves · Rakesh</span>
+        <span style="font-size: 11.5px; color: #f2694f;">AD-2291</span>
+        <span class="tnum" style="font-size: 11.5px; color: #f2694f; text-align: right;">9 days</span>
+      </div>
+      <div class="wrow">
+        <span style="font-size: 12.5px; color: #f3e3c8;">Datasheet for the flow meters</span>
+        <span style="font-size: 11.5px; color: #d7c49a;">Endress · Marwan</span>
+        <span style="font-size: 11.5px; color: #d7c49a;">BOR-118</span>
+        <span class="tnum" style="font-size: 11.5px; color: #e2a63f; text-align: right;">4 days</span>
+      </div>
+      <div class="wrow">
+        <span style="font-size: 12.5px; color: #f3e3c8;">Margin approval above 12%</span>
+        <span style="font-size: 11.5px; color: #d7c49a;">Finance · Priya N.</span>
+        <span style="font-size: 11.5px; color: #d7c49a;">ADN-4410</span>
+        <span class="tnum" style="font-size: 11.5px; color: #d7c49a; text-align: right;">2 days</span>
+      </div>
+      <div class="wrow">
+        <span style="font-size: 12.5px; color: #f3e3c8;">Confirmation of the revised delivery</span>
+        <span style="font-size: 11.5px; color: #d7c49a;">ADNOC · Procurement</span>
+        <span style="font-size: 11.5px; color: #d7c49a;">—</span>
+        <span class="tnum" style="font-size: 11.5px; color: #d7c49a; text-align: right;">1 day</span>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 10px; padding: 11px 14px 0; border-top: 1px solid #3d3218; margin-top: 4px;">
+      <span class="micro" style="color: #8a6c2c;">Support needed</span>
+      <span class="chip" style="background: #e2a63f; color: #241a06; font-weight: 600;">Supplier contact</span>
+      <span style="font-size: 11.5px; color: #d7c49a;">Somebody senior to call Gulf Valves — three chases have not moved it.</span>
+    </div>
+  </div>
+
+  <!-- the work itself -->
+  <div style="background: #15151a; border-radius: 20px; padding: 16px 4px 14px; display: flex; flex-direction: column; gap: 10px;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 14px;">
+      <h2 style="margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em;">What moved</h2>
+      <span class="tnum" style="font-size: 12px; color: #54545e;">6</span>
+      <p style="margin: 0; font-size: 12px; color: #54545e;">Pulled from quotes and enquiries, with what the author said about each.</p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 20px minmax(0, 1fr) 150px 104px 96px 76px; gap: 12px; padding: 0 12px 7px; border-bottom: 1px solid #26262e;">
+      <span></span>
+      <span class="micro" style="color: #54545e;">Enquiry or quote</span>
+      <span class="micro" style="color: #54545e;">Customer</span>
+      <span class="micro" style="color: #54545e;">Stage</span>
+      <span class="micro" style="color: #54545e; text-align: right;">Value</span>
+      <span class="micro" style="color: #54545e; text-align: right;">Age</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 1px;">
+      <div class="qrow" style="background: #1b1b21;">
+        <span style="width: 9px; height: 9px; border-radius: 999px; background: #34c98a;"></span>
+        <span style="font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Q-2291 · Gate valves, 8&Prime; class 300</span>
+        <span style="font-size: 11.5px; color: #a6a6b0;">ADNOC Onshore</span>
+        <span><span class="chip" style="background: #0d2a1f; color: #34c98a;">Won</span></span>
+        <span class="tnum" style="font-size: 11.5px; text-align: right;">214,000</span>
+        <span class="tnum" style="font-size: 11.5px; color: #6d6d78; text-align: right;">12d</span>
+      </div>
+      <div class="qrow">
+        <span style="width: 9px; height: 9px; border-radius: 999px; background: #8b8af0;"></span>
+        <span style="font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Q-2317 · Flow meters and transmitters</span>
+        <span style="font-size: 11.5px; color: #a6a6b0;">Borouge</span>
+        <span><span class="chip" style="background: #1b1b3a; color: #8b8af0;">Sent</span></span>
+        <span class="tnum" style="font-size: 11.5px; text-align: right;">486,500</span>
+        <span class="tnum" style="font-size: 11.5px; color: #6d6d78; text-align: right;">3d</span>
+      </div>
+      <div class="qrow">
+        <span style="width: 9px; height: 9px; border-radius: 999px; background: #8b8af0;"></span>
+        <span style="font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Q-2318 · Butterfly valves, lined</span>
+        <span style="font-size: 11.5px; color: #a6a6b0;">ADNOC Refining</span>
+        <span><span class="chip" style="background: #1b1b3a; color: #8b8af0;">Sent</span></span>
+        <span class="tnum" style="font-size: 11.5px; text-align: right;">631,200</span>
+        <span class="tnum" style="font-size: 11.5px; color: #6d6d78; text-align: right;">1d</span>
+      </div>
+      <div class="qrow">
+        <span style="width: 9px; height: 9px; border-radius: 999px; background: #e2a63f;"></span>
+        <span style="font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">E-4410 · Instrumentation package</span>
+        <span style="font-size: 11.5px; color: #a6a6b0;">Fertiglobe</span>
+        <span><span class="chip" style="background: #2b2211; color: #e2a63f;">Pricing</span></span>
+        <span class="tnum" style="font-size: 11.5px; color: #6d6d78; text-align: right;">—</span>
+        <span class="tnum" style="font-size: 11.5px; color: #e2a63f; text-align: right;">6d</span>
+      </div>
+      <div class="qrow">
+        <span style="width: 9px; height: 9px; border-radius: 999px; background: #2c2c36; border: 1.5px solid #54545e; box-sizing: border-box;"></span>
+        <span style="font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">E-4418 · Spares, annual call-off</span>
+        <span style="font-size: 11.5px; color: #a6a6b0;">Emirates Steel</span>
+        <span><span class="chip" style="background: #22222a; color: #a6a6b0;">New</span></span>
+        <span class="tnum" style="font-size: 11.5px; color: #6d6d78; text-align: right;">—</span>
+        <span class="tnum" style="font-size: 11.5px; color: #6d6d78; text-align: right;">0d</span>
+      </div>
+      <div class="qrow">
+        <span style="width: 9px; height: 9px; border-radius: 999px; background: #f2694f;"></span>
+        <span style="font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Q-2244 · Actuated ball valves</span>
+        <span style="font-size: 11.5px; color: #a6a6b0;">TAQA</span>
+        <span><span class="chip" style="background: #331512; color: #f2694f;">Lost</span></span>
+        <span class="tnum" style="font-size: 11.5px; color: #6d6d78; text-align: right;">158,000</span>
+        <span class="tnum" style="font-size: 11.5px; color: #6d6d78; text-align: right;">21d</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- tomorrow -->
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+    <div style="background: #15151a; border-radius: 20px; padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 11px;">
+      <span class="micro" style="color: #4fd8ff;">Focus tomorrow</span>
+      <p style="margin: 0; font-size: 12.5px; line-height: 1.5; color: #a6a6b0;">Get Gulf Valves on the phone before ten. Close out the Borouge clarifications so Q-2317 can be submitted Monday.</p>
+    </div>
+    <div style="background: #15151a; border-radius: 20px; padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 11px;">
+      <span class="micro" style="color: #6d6d78;">Note</span>
+      <p style="margin: 0; font-size: 12.5px; line-height: 1.5; color: #a6a6b0;">TAQA went elsewhere on price, not on delivery — second time this quarter against the same competitor. Worth a conversation about the actuator markup.</p>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

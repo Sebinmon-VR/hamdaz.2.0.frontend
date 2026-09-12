@@ -83,6 +83,16 @@ export default function AssistantPage() {
   const [id, setId] = useState<string | null>(null);
   const [voice, setVoice] = useState(false);
 
+  // `?c=` carries a conversation in from the island at the top of the app, so
+  // "open this full size" continues the chat rather than starting another one
+  // about the same thing. Read from the location on mount rather than through
+  // useSearchParams: this page is statically rendered, and that hook would
+  // need a Suspense boundary around the whole screen to stay that way.
+  useEffect(() => {
+    const carried = new URLSearchParams(window.location.search).get("c");
+    if (carried) setId(carried);
+  }, []);
+
   const conversation = useConversation(id);
   const { send } = conversation;
 

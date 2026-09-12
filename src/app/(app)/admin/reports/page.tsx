@@ -18,6 +18,8 @@ import { dateShort, dateTime, humanise, num, relative } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import type {
+  BriefFollowup,
+  BriefMode,
   ReportDeliveryPage,
   ReportScheduleIn,
   ReportScheduleOut,
@@ -153,6 +155,11 @@ function Delivery({
       include_task_list: draft.include_task_list,
       include_issue_list: draft.include_issue_list,
       log_retention_days: draft.log_retention_days,
+      brief_enabled: draft.brief_enabled,
+      brief_mode: draft.brief_mode,
+      brief_followup: draft.brief_followup,
+      brief_model_key: draft.brief_model_key,
+      brief_max_words: draft.brief_max_words,
     };
     await api.patch<ReportSettingsOut>("/reports/admin/settings", body);
     setSaved(true);
@@ -334,6 +341,85 @@ function Delivery({
                 hint="The part a manager is meant to act on, which is the argument for keeping it even when the tasks are left out."
               />
             </div>
+          </Panel>
+
+          <Panel className="p-5">
+            <PanelHead
+              title="The AI summariser"
+              hint="A short version of each filed report"
+            />
+            <div className="mt-4">
+              <Toggle
+                checked={draft.brief_enabled}
+                onChange={(value) => set("brief_enabled", value)}
+                label="Write a brief on each filed report"
+                hint="A report is long because a record should be. This writes the short version for the managers who have several to read — from that report and nothing else, and shown only to the people who may already read it. It is the one part of reporting that costs money per report, which is why it is off until you turn it on."
+              />
+            </div>
+
+            {draft.brief_enabled && (
+              <div className="mt-5 space-y-4 border-t border-line pt-5">
+                <Field
+                  label="When to write it"
+                  hint="What this really decides is who waits. On filing, nobody notices — the author is already waiting on the email."
+                >
+                  <Select
+                    value={draft.brief_mode}
+                    onChange={(event) =>
+                      set("brief_mode", event.target.value as BriefMode)
+                    }
+                  >
+                    <option value="on_submit">As the report is filed</option>
+                    <option value="on_first_open">When somebody first opens it</option>
+                    <option value="on_request">Only when somebody asks</option>
+                  </Select>
+                </Field>
+
+                <Field
+                  label="What a reader may do with it"
+                  hint="Each step costs more than the one before. Asking questions turns the box into the assistant, opened on that report."
+                >
+                  <Select
+                    value={draft.brief_followup}
+                    onChange={(event) =>
+                      set("brief_followup", event.target.value as BriefFollowup)
+                    }
+                  >
+                    <option value="off">Read it, and nothing else</option>
+                    <option value="refresh">Ask for it again</option>
+                    <option value="chat">Ask it questions about the report</option>
+                  </Select>
+                </Field>
+
+                <Field
+                  label="Model"
+                  hint="Leave empty to follow whatever the assistant is set to — the answer that stays right when you change that."
+                >
+                  <Input
+                    value={draft.brief_model_key ?? ""}
+                    placeholder="Follows the assistant"
+                    onChange={(event) =>
+                      set("brief_model_key", event.target.value.trim() || null)
+                    }
+                  />
+                </Field>
+
+                <Field
+                  label="Keep it under this many words"
+                  hint="40–600. A brief that runs to a page has reproduced the problem it was added to solve."
+                >
+                  <Input
+                    type="number"
+                    min={40}
+                    max={600}
+                    value={draft.brief_max_words}
+                    onChange={(event) =>
+                      set("brief_max_words", Number(event.target.value))
+                    }
+                  />
+                </Field>
+              </div>
+            )}
           </Panel>
 
           <Panel className="p-5">

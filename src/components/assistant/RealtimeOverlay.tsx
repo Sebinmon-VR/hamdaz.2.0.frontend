@@ -55,11 +55,15 @@ export function RealtimeOverlay({
   const session = useRealtime({ enabled: open });
   const { phase, start, stop } = session;
 
-  // Opening starts the call and closing ends it. `start` guards against being
-  // called twice, so a re-render cannot open a second connection.
+  // Opening starts the call; the cleanup ends it. Symmetric on purpose: an
+  // effect that starts in its body and stops in an `else` branch of the same
+  // body opens two connections when React double-invokes it, which it does in
+  // development. `start` is single-flight as well, but one guard is not a
+  // reason to write the other one wrongly.
   useEffect(() => {
-    if (open) start();
-    else stop();
+    if (!open) return;
+    start();
+    return () => stop();
   }, [open, start, stop]);
 
   useEffect(() => {

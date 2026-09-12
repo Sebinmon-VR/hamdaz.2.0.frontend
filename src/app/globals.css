@@ -549,6 +549,205 @@ body {
   animation: grow 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* ── the island ──────────────────────────────────────────────────────────
+   **Nothing here animates width or height, and that is the whole point.**
+
+   The first version morphed one element from a pill into a panel by
+   transitioning width, height and border-radius. It looked right in a diagram
+   and stuttered on screen: every frame of that is a layout of the panel and
+   everything inside it — a scrolling thread, a canvas orb — so the browser
+   re-flows sixty times a second and drops most of them. It read as "stuck".
+
+   So the pill and the panel are two elements, and only `opacity` and
+   `transform` move. Both are composited: the panel is laid out once, at its
+   final size, and then slid into place by the GPU. The panel's origin is its
+   top corner, so it still reads as coming out of the pill.
+
+   Out is faster than in, and flatter. Opening is the moment worth watching;
+   closing is something to get out of the way. */
+.island-pill {
+  transition:
+    opacity 160ms ease,
+    transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Hidden HERE rather than with a utility class, and that is not a style
+   preference. The pill carries `pointer-events-auto`, so adding
+   `pointer-events-none` alongside it left both in the class list — and which
+   one wins is decided by their order in Tailwind's stylesheet, not by the
+   order they are written. `auto` won. The result was an invisible pill sitting
+   over the open panel's corner, eating every click on close and shrink: the
+   panel could be opened and then not dismissed. An attribute selector outranks
+   both utilities and cannot be argued with. */
+.island-pill[data-shown="false"] {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px) scale(0.96);
+}
+
+.island-panel {
+  transform-origin: top right;
+  will-change: opacity, transform;
+  transition:
+    opacity 200ms ease,
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.island-panel[data-shown="false"] {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-10px) scale(0.96);
+  transition:
+    opacity 130ms ease,
+    transform 180ms cubic-bezier(0.4, 0, 1, 1);
+}
+
+/* Docked, it hangs from the bottom corner instead, so it should come up out of
+   that corner rather than down out of the pill. */
+.island-panel[data-dock="true"] {
+  transform-origin: bottom right;
+}
+.island-panel[data-dock="true"][data-shown="false"] {
+  transform: translateY(10px) scale(0.96);
+}
+
+@keyframes island-line {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: none; }
+}
+/* The live status text in the collapsed pill. Re-keyed per phase, so each new
+   thing it has to say arrives rather than swapping in place. */
+.island-line { animation: island-line 220ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+
+@keyframes island-arrive {
+  from { opacity: 0; transform: translateY(-12px) scale(0.9); }
+  to { opacity: 1; transform: none; }
+}
+/* On first paint, so the app assembles rather than appearing fully formed.
+   **`backwards`, never `both`.** A filled animation keeps its last keyframe
+   applied for ever, and an animated value outranks every normal declaration —
+   so `both` left `opacity: 1` pinned on this element permanently, and the rule
+   that hides it could not take effect. `backwards` applies the starting frame
+   before the animation runs and lets go at the end, which is all an entrance
+   ever needs. */
+.island-arrive { animation: island-arrive 460ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+
+/* There was an `island-reshape` dip here to cover the switch between the tall
+   panel and the docked card. It is gone, and deliberately: it animated the one
+   property the panel needs for hiding, and a filled animation outranks the
+   rule that hides it — so the card became visible for ever and unclickable,
+   stuck in the corner with no way to dismiss it. Reshaping snaps instead,
+   which is honest and costs nothing; the panel still fades and slides on the
+   transitions above, which nothing overrides. */
+
+/* ── glass ───────────────────────────────────────────────────────────────
+   The docked card as a piece of material rather than a translucent rectangle.
+
+   Four layers, and it needs all four — this is what the first attempt (one
+   blur and a border) was missing:
+
+   1. **The blur, with saturation and a lift in brightness.** Blur alone greys
+      everything behind it; pushing saturation past 100% is what keeps the
+      colour of the page underneath alive, so it reads as something you are
+      looking THROUGH rather than a frosted panel sitting on top.
+   2. **A tint that is barely there.** 40% of the panel colour, not 62. The
+      first version was too opaque to see the page through, which defeated the
+      point of asking for it.
+   3. **A specular sweep**, on ::before. A real piece of glass catches the light
+      along one edge and falls away across the face, and that gradient — bright
+      at the top-left corner, gone by a third of the way down — is most of what
+      makes the eye read "glass" rather than "transparent div".
+   4. **A rim, lit on top and shaded underneath.** Two inset shadows, one white
+      along the upper edge and one dark along the lower, give the sheet
+      thickness. A uniform 1px border cannot: it is the DIFFERENCE between the
+      two edges that says the material has depth.
+
+   The tint and both rim colours are `color-mix` over the palette's own tokens,
+   so this follows the mode and the accent like everything else instead of
+   being a fixed grey that only looks right in dark.
+
+   `backdrop-filter` is the expensive part of any frame it appears in, which is
+   why this is a choice and applies to the 330px card alone. */
+.island-glass {
+  background: color-mix(in oklab, var(--panel) 40%, transparent);
+  -webkit-backdrop-filter: blur(30px) saturate(190%) brightness(1.06);
+  backdrop-filter: blur(30px) saturate(190%) brightness(1.06);
+  border: 1px solid color-mix(in oklab, var(--ink) 10%, transparent);
+  box-shadow:
+    /* the lit top edge and the shaded bottom one: thickness */
+    inset 0 1px 0 color-mix(in oklab, #fff 34%, transparent),
+    inset 0 -1px 0 color-mix(in oklab, var(--ink) 10%, transparent),
+    /* a soft inner wall, so the face is not flat */
+    inset 0 0 22px color-mix(in oklab, #fff 6%, transparent),
+    0 18px 50px -12px color-mix(in oklab, var(--ink) 30%, transparent);
+}
+
+/* The specular sweep. `inset: 0` with the parent's own radius, and
+   `pointer-events: none` because it covers the whole card — without that it
+   would eat every click on the controls underneath, which is the same bug
+   that has already cost this component two rounds. */
+.island-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in oklab, #fff 26%, transparent) 0%,
+      color-mix(in oklab, #fff 8%, transparent) 22%,
+      transparent 46%
+    );
+}
+
+/* The sweep is a positioned pseudo-element, so without this it paints ABOVE
+   the card's own static content and lays a white wash over the text. Lifting
+   the children into the same stacking context puts them back on top. */
+.island-glass > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Light mode reflects more and is shaded less: the page behind is bright, so a
+   white sweep at dark-mode strength washes the card out entirely. */
+:root[data-theme="light"] .island-glass {
+  background: color-mix(in oklab, var(--panel) 55%, transparent);
+  -webkit-backdrop-filter: blur(30px) saturate(170%) brightness(1.02);
+  backdrop-filter: blur(30px) saturate(170%) brightness(1.02);
+}
+:root[data-theme="light"] .island-glass::before {
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in oklab, #fff 60%, transparent) 0%,
+      color-mix(in oklab, #fff 18%, transparent) 24%,
+      transparent 48%
+    );
+}
+
+/* No support, no pretending: an opaque card beats an unreadable one, and a
+   browser without the filter would otherwise show the bare 40% tint. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .island-glass {
+    background: var(--panel);
+  }
+  .island-glass::before {
+    display: none;
+  }
+}
+
+/* ── switching screens ───────────────────────────────────────────────────
+   Applied to the screen's own container and re-keyed on the route, so a
+   navigation reads as the new screen arriving rather than as content
+   replacing itself in place. Deliberately short: this runs on every single
+   navigation, and anything longer than about a fifth of a second turns the
+   whole app into something you wait for. */
+@keyframes screen-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.994); }
+  to { opacity: 1; transform: none; }
+}
+.screen-in { animation: screen-in 260ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+
 .no-bar { scrollbar-width: none; }
 .no-bar::-webkit-scrollbar { display: none; }
 

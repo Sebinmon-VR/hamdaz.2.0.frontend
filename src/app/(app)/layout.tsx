@@ -9,6 +9,7 @@ import { labelFor } from "@/lib/nav";
 import { SessionProvider, useLoadSession } from "@/lib/session";
 import { TabsProvider } from "@/lib/tabs";
 import { CommandPalette } from "@/components/shell/CommandPalette";
+import { Island } from "@/components/shell/Island";
 import { Doodles } from "@/components/shell/Doodles";
 import { RouteProgress } from "@/components/shell/RouteProgress";
 import { Rail } from "@/components/shell/Rail";
@@ -101,6 +102,10 @@ function Shell({ children }: { children: React.ReactNode }) {
           {/* Bound to the window, so ⌘K works from any screen and from any
               focused field — the point is not having to reach for anything. */}
           <CommandPalette />
+          {/* Its neighbour on ⌘J. The palette finds a screen; the island
+              answers a question — and can open a screen itself, which is why
+              it lives here rather than on one page. */}
+          <Island />
           <Rail />
           <main className="flex min-w-0 flex-1 flex-col gap-3">
             {/* The open screens ride on the ground rather than in a block:
@@ -118,13 +123,38 @@ function Shell({ children }: { children: React.ReactNode }) {
                 contents were sliced through the middle. Headline numbers were
                 cut in half on every screen with more than a couple of blocks.
                 Children keep their natural height; the container scrolls. */}
-            <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto [&>*]:shrink-0">
-              {children}
-            </div>
+            <Screen>{children}</Screen>
           </main>
         </Frame>
       </TabsProvider>
     </SessionProvider>
+  );
+}
+
+/**
+ * The one scroll container, and the thing that makes a navigation look like one.
+ *
+ * Re-keyed on the route, so React replaces the element rather than reusing it
+ * and the entrance animation runs again — a screen that fades in where the last
+ * one was reads as arriving, which matters most when it was the assistant that
+ * moved you and you did not press anything.
+ *
+ * `[&>*]:shrink-0` is load-bearing, not tidying. A flex column gives every
+ * child `flex-shrink: 1`, so once a screen's blocks were taller than the window
+ * they were COMPRESSED to fit instead of overflowing and scrolling — panels lost
+ * height and their contents were sliced through the middle. Headline numbers
+ * were cut in half on every screen with more than a couple of blocks. Children
+ * keep their natural height; the container scrolls.
+ */
+function Screen({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  return (
+    <div
+      key={pathname}
+      className="screen-in flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto [&>*]:shrink-0"
+    >
+      {children}
+    </div>
   );
 }
 

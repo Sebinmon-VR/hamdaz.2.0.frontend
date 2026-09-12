@@ -1,17 +1,100 @@
 {
   "pages": [
-    { "id": "page-1", "name": "Status report" },
-    { "id": "page-2", "name": "Length & roadmap" }
+    {
+      "id": "page-1",
+      "name": "Status report"
+    },
+    {
+      "id": "page-2",
+      "name": "Length & roadmap"
+    },
+    {
+      "id": "page-3",
+      "name": "Presales report"
+    }
   ],
   "artboards": [
-    { "file": "Main.dc.html", "title": "AI team — Projects", "page": "page-1", "x": 0, "y": 0, "w": 1240, "h": 884 },
-    { "file": "Project.dc.html", "title": "One project — monthly strategic", "page": "page-1", "x": 1360, "y": 0, "w": 1240, "h": 1044 },
-    { "file": "Exec.dc.html", "title": "Executive status — weekly tactical", "page": "page-1", "x": 0, "y": 1200, "w": 1240, "h": 836 },
-    { "file": "Dials.dc.html", "title": "The dial — now, at rest, changing", "page": "page-1", "x": 1360, "y": 1200, "w": 1240, "h": 604 },
-
-    { "file": "Work.dc.html", "title": "Work — 211 rows become 6", "page": "page-2", "x": 0, "y": 0, "w": 1240, "h": 848 },
-    { "file": "Plan.dc.html", "title": "Project plan — the Gantt gets the page", "page": "page-2", "x": 1360, "y": 0, "w": 1240, "h": 852 },
-    { "file": "Roadmap.dc.html", "title": "Roadmap — every project on one axis", "page": "page-2", "x": 0, "y": 1000, "w": 1240, "h": 908 }
+    {
+      "file": "Main.dc.html",
+      "title": "AI team \u2014 Projects",
+      "page": "page-1",
+      "x": 0,
+      "y": 0,
+      "w": 1240,
+      "h": 884
+    },
+    {
+      "file": "Project.dc.html",
+      "title": "One project \u2014 monthly strategic",
+      "page": "page-1",
+      "x": 1360,
+      "y": 0,
+      "w": 1240,
+      "h": 1044
+    },
+    {
+      "file": "Exec.dc.html",
+      "title": "Executive status \u2014 weekly tactical",
+      "page": "page-1",
+      "x": 0,
+      "y": 1200,
+      "w": 1240,
+      "h": 836
+    },
+    {
+      "file": "Dials.dc.html",
+      "title": "The dial \u2014 now, at rest, changing",
+      "page": "page-1",
+      "x": 1360,
+      "y": 1200,
+      "w": 1240,
+      "h": 604
+    },
+    {
+      "file": "Work.dc.html",
+      "title": "Work \u2014 211 rows become 6",
+      "page": "page-2",
+      "x": 0,
+      "y": 0,
+      "w": 1240,
+      "h": 848
+    },
+    {
+      "file": "Plan.dc.html",
+      "title": "Project plan \u2014 the Gantt gets the page",
+      "page": "page-2",
+      "x": 1360,
+      "y": 0,
+      "w": 1240,
+      "h": 852
+    },
+    {
+      "file": "Roadmap.dc.html",
+      "title": "Roadmap \u2014 every project on one axis",
+      "page": "page-2",
+      "x": 0,
+      "y": 1000,
+      "w": 1240,
+      "h": 908
+    },
+    {
+      "file": "PresalesDaily.dc.html",
+      "title": "Presales \u2014 the day",
+      "page": "page-3",
+      "x": 0,
+      "y": 0,
+      "w": 1240,
+      "h": 1116
+    },
+    {
+      "file": "PresalesWeekly.dc.html",
+      "title": "Presales \u2014 the week",
+      "page": "page-3",
+      "x": 1360,
+      "y": 0,
+      "w": 1240,
+      "h": 1060
+    }
   ],
   "annotations": [
     {
@@ -20,7 +103,7 @@
       "x": 0,
       "y": -132,
       "w": 520,
-      "text": "AI team, projects module. Reference status-report layout in the app's own tokens — Archivo, electric palette, 20px panels, the .micro/.fig ramp. Dark shown; light inverts through the same tokens.\n\nBuilt: the dials, the milestone Gantt, the plain-word labels."
+      "text": "AI team, projects module. Reference status-report layout in the app's own tokens \u2014 Archivo, electric palette, 20px panels, the .micro/.fig ramp. Dark shown; light inverts through the same tokens.\n\nBuilt: the dials, the milestone Gantt, the plain-word labels."
     },
     {
       "id": "round-two",
@@ -28,8 +111,19 @@
       "x": 0,
       "y": -140,
       "w": 560,
-      "text": "Three fixes: the project page was too long, the plan page was thin, and managers had nowhere to see every project at once.\n\nThe roadmap is one row per project — not tasks — and the same block goes on a portfolio status report."
+      "text": "Three fixes: the project page was too long, the plan page was thin, and managers had nowhere to see every project at once.\n\nThe roadmap is one row per project \u2014 not tasks \u2014 and the same block goes on a portfolio status report."
+    },
+    {
+      "id": "presales",
+      "page": "page-3",
+      "x": 0,
+      "y": -150,
+      "w": 600,
+      "text": "Presales report, rebuilt. Same spine as the project reports: a headline read first, the figures as a shape rather than a list, what is stuck given its own tinted block, then the work.\n\nThe funnel, the day-by-day bars, the win rate and the pipeline are new \u2014 they need figures the template does not ask for yet."
     }
   ],
-  "launch": { "view": "canvas", "page": "page-2" }
+  "launch": {
+    "view": "canvas",
+    "page": "page-3"
+  }
 }

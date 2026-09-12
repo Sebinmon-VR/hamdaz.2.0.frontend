@@ -351,7 +351,16 @@ export function useConversation(conversationId: string | null): Conversation {
     async (text: string) => {
       const body = text.trim();
       if (!conversationId || !body) return;
-      await run(`/assistant/conversations/${conversationId}/messages`, { text: body }, body);
+      // The route the person is looking at goes with every message. It is what
+      // makes "open this one", "who filed it" and "summarise this" answerable
+      // at all — without it the assistant is being asked about a screen it
+      // cannot see. Read at send time rather than held in state, so it is the
+      // page they are on now and not the one they were on when the chat opened.
+      await run(
+        `/assistant/conversations/${conversationId}/messages`,
+        { text: body, page: currentPath() },
+        body,
+      );
     },
     [conversationId, run],
   );
@@ -514,4 +523,18 @@ export function suggestionsFor(status: AssistantStatusOut | undefined): string[]
 /** "leave.request_create" → "Leave". The module a tool belongs to, for a badge. */
 export function moduleOf(toolKey: string): string {
   return toolKey.split(".")[0] ?? toolKey;
+}
+
+
+/**
+ * The route the browser is on, for telling the assistant where somebody is.
+ *
+ * Read off `location` rather than through `usePathname`, because this is
+ * called from inside a callback at the moment a message is sent — a hook would
+ * capture the path at render time, which is the page they were looking at when
+ * the chat opened rather than the one they are on now.
+ */
+export function currentPath(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  return window.location.pathname || undefined;
 }

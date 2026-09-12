@@ -37,6 +37,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "@/lib/api";
+import { currentPath } from "@/lib/assistant";
 import type {
   RealtimeCallOut,
   RealtimeSessionOut,
@@ -290,8 +291,25 @@ export function useRealtime({ enabled }: { enabled: boolean }): RealtimeSession 
   const usage = useRef<RealtimeUsageIn>(NO_USAGE);
   const openedAt = useRef<number | null>(null);
 
+  /**
+   * A connection is being opened right now.
+   *
+   * `start` used to guard on `peer.current`, which is only set at the END of
+   * the opening sequence — minting a token, acquiring the microphone,
+   * negotiating with OpenAI. Two calls inside that window, which is most of a
+   * second, both sailed past the guard and opened two conversations that then
+   * shared one set of refs. The symptoms are memorable: two voices answering
+   * at once, and "Tool call ID not found in conversation" as the first
+   * session's tool result went down the second session's data channel.
+   *
+   * Set synchronously, before anything can await, which is the only way a
+   * guard can be honest about work that has not finished yet.
+   */
+  const starting = useRef(false);
+
   const teardown = useCallback((next: RealtimePhase) => {
     generation.current += 1;
+    starting.current = false;
     channel.current?.close();
     channel.current = null;
     peer.current?.close();
@@ -413,12 +431,16 @@ export function useRealtime({ enabled }: { enabled: boolean }): RealtimeSession 
       } catch (caught) {
         const message =
           caught instanceof ApiError ? caught.message : "That could not be run.";
-        if (generation.current === mine) {
-          setSteps((current) =>
-            current.map((s) => (s.id === callId ? { ...s, ok: false, status: 0 } : s)),
-          );
-          finished();
-        }
+        // A generation that has moved on means this call belongs to a
+        // conversation that is over. Answering it would push an old `call_id`
+        // down the current session's channel, and OpenAI rejects that with
+        // "Tool call ID not found in conversation" — a confusing error about
+        // the live call, caused entirely by a dead one.
+        if (generation.current !== mine) return;
+        setSteps((current) =>
+          current.map((s) => (s.id === callId ? { ...s, ok: false, status: 0 } : s)),
+        );
+        finished();
         // The model still needs an answer, or the conversation stalls.
         send({
           type: "conversation.item.create",
@@ -580,7 +602,8 @@ export function useRealtime({ enabled }: { enabled: boolean }): RealtimeSession 
   );
 
   const start = useCallback(() => {
-    if (peer.current) return;
+    if (peer.current || starting.current) return;
+    starting.current = true;
     setError(null);
     setTranscript("");
     setHeard("");
@@ -610,7 +633,13 @@ export function useRealtime({ enabled }: { enabled: boolean }): RealtimeSession 
 
         let minted: RealtimeSessionOut;
         try {
-          minted = await api.post<RealtimeSessionOut>("/assistant/realtime/session");
+          // Where the conversation is starting from. A spoken session's
+          // instructions are fixed when its token is minted, so this is the
+          // only chance to say it.
+          minted = await api.post<RealtimeSessionOut>(
+            "/assistant/realtime/session",
+            { page: currentPath() },
+          );
         } catch (cause) {
           // The microphone may still be opening. Let it, then close it, rather
           // than leaving a live device behind on a conversation that never was.
@@ -618,6 +647,7 @@ export function useRealtime({ enabled }: { enabled: boolean }): RealtimeSession 
           throw cause;
         }
         if (generation.current !== mine) {
+          starting.current = false;
           void asking.then((s) => s.getTracks().forEach((t) => t.stop())).catch(() => undefined);
           return;
         }
@@ -709,6 +739,8 @@ export function useRealtime({ enabled }: { enabled: boolean }): RealtimeSession 
           type: "answer",
           sdp: await answer.text(),
         });
+        // Open. `peer.current` is the guard from here on.
+        starting.current = false;
       } catch (caught) {
         if (generation.current !== mine) return;
         setError(
