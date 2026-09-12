@@ -42,6 +42,7 @@ import {
   UserSearch,
   ShieldCheck,
   Users,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import { isHrViewer } from "@/lib/hr";
@@ -190,6 +191,17 @@ export function buildNav(session: Session): Nav {
     });
   }
   if (assignment.length) more.push({ label: "Work assignment", items: assignment });
+
+  // A team's process run one task at a time — the presales flow, for now.
+  // Granted per team like proposals, and in the menu rather than the pill bar
+  // because a run asks for attention by notification when it needs it; nobody
+  // has to go and look.
+  if (can("workflows")) {
+    more.push({
+      label: "Automation",
+      items: [{ label: "Workflows", href: "/workflows", icon: Workflow, match: "/workflows" }],
+    });
+  }
 
   // Meetings has **no catalogue entry**, so there is no `can("meetings")` to
   // ask. That is not an oversight to work around: its endpoints take a bare
@@ -393,6 +405,16 @@ export function buildNav(session: Session): Nav {
       match: "/admin/assistant/analytics",
       badge: "admin",
     });
+    // The flows themselves and the three switches that let one send mail,
+    // write to SharePoint and create in Zoho. A flow acts as whoever started
+    // it, so what it is allowed to do is the company's decision, not a team's.
+    admin.push({
+      label: "Workflows",
+      href: "/admin/workflows",
+      icon: Workflow,
+      match: "/admin/workflows",
+      badge: "admin",
+    });
   }
   if (admin.length) more.push({ label: "Administration", items: admin });
 
@@ -468,6 +490,9 @@ const STATIC_LABELS: Record<string, string> = {
   "/hr/reviews": "Review cycles",
   "/hr/my-reviews": "Reviews to write",
   "/hr/me": "My HR record",
+  "/workflows": "Workflows",
+  "/workflows/runs": "Workflow runs",
+  "/admin/workflows": "Workflow admin",
 };
 
 export function labelFor(pathname: string): string {
@@ -495,6 +520,10 @@ export function labelFor(pathname: string): string {
   if (parts[0] === "directory") return `Person ${short(parts[1])}`;
   if (parts[0] === "admin" && parts[1] === "users") return `User ${short(parts[2])}`;
   if (parts[0] === "assignment" && parts[1] === "runs") return `Run ${short(parts[2])}`;
+  // A run's tag would read better than its id, but the tab strip only has the
+  // URL, and a shortened id at least tells two open runs apart.
+  if (parts[0] === "workflows" && parts[1] === "runs") return `Run ${short(parts[2])}`;
+  if (parts[0] === "admin" && parts[1] === "workflows" && parts[2]) return `Flow ${parts[2]}`;
   // HR's four detail routes. Named by what the id points at rather than by the
   // section, because two open tabs of the same section are the normal case
   // here — comparing candidates is the whole job.

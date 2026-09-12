@@ -37,7 +37,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "@/lib/api";
-import { currentPath } from "@/lib/assistant";
+import { currentPath, useAssistantStatus } from "@/lib/assistant";
+import { performActions } from "@/lib/screen";
 import type {
   RealtimeCallOut,
   RealtimeSessionOut,
@@ -278,6 +279,12 @@ export function useRealtime({ enabled }: { enabled: boolean }): RealtimeSession 
   const audio = useRef<HTMLAudioElement | null>(null);
   const runId = useRef<string | null>(null);
   const tools = useRef<Map<string, RealtimeToolOut>>(new Map());
+  // Whether this person may delete, for the screen tools — the browser runs
+  // the loop in a spoken conversation, so it presses the buttons itself, and
+  // it refuses a delete button by the same rule the server applies.
+  const { data: status } = useAssistantStatus();
+  const canDelete = useRef(false);
+  canDelete.current = Boolean(status?.can_delete);
   // Tool names the server has already refused once pending confirmation. The
   // model asks out loud, and the next call for that name carries `confirmed`.
   const awaiting = useRef<Set<string>>(new Set());
@@ -421,6 +428,32 @@ export function useRealtime({ enabled }: { enabled: boolean }): RealtimeSession 
       };
 
       let result: RealtimeCallOut;
+      if (spec?.kind === "client") {
+        // A screen tool has no route: the browser is the only thing that can
+        // press, fill, scroll or read, so it does, here, and hands the model
+        // what happened exactly as the typed chat's loop would.
+        const [done] = await performActions(
+          [
+            {
+              call_id: callId,
+              tool_key: spec.tool_key,
+              label: spec.label,
+              arguments: args,
+              warning: spec.warning,
+              kind: "client",
+            },
+          ],
+          { canDelete: canDelete.current },
+        );
+        result = {
+          ok: done.ok,
+          status: done.ok ? 200 : 0,
+          output: done.output,
+          requires_confirmation: false,
+          label: spec.label,
+          warning: null,
+        };
+      } else {
       try {
         result = await api.post<RealtimeCallOut>("/assistant/realtime/call", {
           run_id: runId.current,
@@ -452,6 +485,7 @@ export function useRealtime({ enabled }: { enabled: boolean }): RealtimeSession 
         });
         send({ type: "response.create" });
         return;
+      }
       }
 
       if (generation.current !== mine) return;

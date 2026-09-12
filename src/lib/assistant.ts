@@ -26,6 +26,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import useSWR, { type KeyedMutator } from "swr";
 import { ApiError, apiUrl } from "@/lib/api";
+import { performActions, snapshotScreen } from "@/lib/screen";
 import type {
   AssistantMessageOut,
   AssistantStatusOut,
@@ -63,6 +64,12 @@ export type StreamEvent =
       summary?: string;
     }
   | { type: "confirm"; run_id: string; actions: PendingActionOut[] }
+  /**
+   * The turn is parked on the screen: the model asked for something only the
+   * browser can do. The hook performs the actions and posts the results, and
+   * the stream that answers is the turn carrying on.
+   */
+  | { type: "client_action"; run_id: string; actions: PendingActionOut[] }
   | { type: "error"; run_id: string; message: string }
   | {
       type: "done";
@@ -216,6 +223,8 @@ export type TurnPhase =
   | "answering"
   /** A write is parked on the confirmation card. */
   | "confirming"
+  /** The screen is doing what the assistant asked — a press, a fill, a scroll. */
+  | "acting"
   /** The person stopped watching. The turn is still running on the server. */
   | "detached";
 
@@ -273,6 +282,12 @@ export function useConversation(conversationId: string | null): Conversation {
     revalidateOnFocus: false,
     shouldRetryOnError: false,
   });
+  // Whether this person may delete, for the screen actions. Read here rather
+  // than threaded in from every caller: the rule is the assistant's, and the
+  // status is already cached by SWR for the chat that is open.
+  const { data: status } = useAssistantStatus();
+  const canDelete = useRef(false);
+  canDelete.current = Boolean(status?.can_delete);
 
   const [turn, setTurn] = useState<Turn>(IDLE);
   const abort = useRef<AbortController | null>(null);
@@ -294,28 +309,60 @@ export function useConversation(conversationId: string | null): Conversation {
 
   // A chat reopened while a write was still parked has its pending actions on
   // the detail payload rather than on any event, so the card comes back.
+  //
+  // A chat reopened while parked on the *screen* is different: the screen the
+  // assistant was pressing on is gone with the reload, so the actions are
+  // answered as not done and the turn is let go — see `report` below.
+  const reported = useRef<string | null>(null);
   useEffect(() => {
     if (!data?.pending) return;
+    if (data.pending.status === "awaiting_client") {
+      if (reported.current === data.pending.run_id) return;
+      reported.current = data.pending.run_id;
+      void report(
+        data.pending.run_id,
+        data.pending.actions.map((action) => ({
+          call_id: action.call_id,
+          ok: false,
+          output: "Not done: the page was reloaded before the screen could act. Ask again if it still matters.",
+        })),
+      );
+      return;
+    }
     openRun.current = data.pending.run_id;
     setTurn((current) =>
       current.phase === "idle"
         ? { ...IDLE, phase: "confirming", pending: data.pending }
         : current,
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.pending]);
 
   const run = useCallback(
-    async (path: string, body: unknown, asked: string | null) => {
+    async (path: string, body: unknown, asked: string | null, continuing = false) => {
       const controller = new AbortController();
       abort.current = controller;
-      setTurn({ ...IDLE, phase: "waiting", asked });
+      // Continuing a turn keeps what it has said and done so far; the steps
+      // and the answer belong to the same message, not a new one.
+      setTurn((current) =>
+        continuing ? { ...current, phase: "waiting", pending: null } : { ...IDLE, phase: "waiting", asked },
+      );
 
+      // Set from inside the event callback, so a ref-shaped holder rather than
+      // a `let`: TypeScript cannot see an assignment made in a closure and
+      // would narrow a plain variable to null at the check below.
+      const parkedOn: { current: { run_id: string; actions: PendingActionOut[] } | null } = {
+        current: null,
+      };
       try {
         await streamTurn(path, body, {
           signal: controller.signal,
           onEvent: (event) => {
             setTurn((current) => reduce(current, event));
             if (event.type === "confirm") openRun.current = event.run_id;
+            if (event.type === "client_action") {
+              parkedOn.current = { run_id: event.run_id, actions: event.actions };
+            }
           },
         });
       } catch (caught) {
@@ -334,6 +381,20 @@ export function useConversation(conversationId: string | null): Conversation {
         abort.current = null;
       }
 
+      // The turn stopped to let the screen act. Do it, then carry on with the
+      // results — the answer to this message is on the far side of that.
+      if (parkedOn.current && !controller.signal.aborted) {
+        const parked = parkedOn.current;
+        const results = await performActions(parked.actions, { canDelete: canDelete.current });
+        await run(
+          `/assistant/conversations/${conversationId}/client-result`,
+          { run_id: parked.run_id, results },
+          null,
+          true,
+        );
+        return;
+      }
+
       setTurn((current) => {
         // A parked write stays on screen: its card is the only way forward.
         if (current.phase === "confirming") return current;
@@ -344,21 +405,36 @@ export function useConversation(conversationId: string | null): Conversation {
       });
       await mutate();
     },
-    [mutate],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mutate, conversationId],
+  );
+
+  /** Answer a turn parked on the screen, when the screen cannot act. */
+  const report = useCallback(
+    async (runId: string, results: { call_id: string; ok: boolean; output: string }[]) => {
+      if (!conversationId) return;
+      await run(
+        `/assistant/conversations/${conversationId}/client-result`,
+        { run_id: runId, results },
+        null,
+        true,
+      );
+    },
+    [conversationId, run],
   );
 
   const send = useCallback(
     async (text: string) => {
       const body = text.trim();
       if (!conversationId || !body) return;
-      // The route the person is looking at goes with every message. It is what
-      // makes "open this one", "who filed it" and "summarise this" answerable
-      // at all — without it the assistant is being asked about a screen it
-      // cannot see. Read at send time rather than held in state, so it is the
-      // page they are on now and not the one they were on when the chat opened.
+      // The route the person is looking at goes with every message, and so
+      // does what is on it. The route is what makes "open this one" and
+      // "summarise this" answerable; the controls are what make "press Save"
+      // a press rather than a question. Both read at send time, so they are
+      // the screen they are on now and not the one the chat opened on.
       await run(
         `/assistant/conversations/${conversationId}/messages`,
-        { text: body, page: currentPath() },
+        { text: body, page: currentPath(), screen: snapshotScreen() ?? null },
         body,
       );
     },
@@ -407,7 +483,7 @@ export function useConversation(conversationId: string | null): Conversation {
     loading: isLoading && !data,
     loadError: error,
     turn,
-    busy: turn.phase === "waiting" || turn.phase === "answering",
+    busy: turn.phase === "waiting" || turn.phase === "answering" || turn.phase === "acting",
     send,
     respond,
     detach,
@@ -471,6 +547,22 @@ function reduce(turn: Turn, event: StreamEvent): Turn {
         ...turn,
         phase: "confirming",
         pending: { run_id: event.run_id, actions: event.actions },
+      };
+    case "client_action":
+      // Each action becomes a step on the trace, filled in when the result
+      // comes back through the continued stream as an ordinary tool_result.
+      return {
+        ...turn,
+        phase: "acting",
+        pending: null,
+        steps: [
+          ...turn.steps,
+          ...event.actions.map((action) => ({
+            tool_key: action.tool_key,
+            label: action.label,
+            arguments: action.arguments,
+          })),
+        ],
       };
     case "error":
       return { ...turn, error: event.message };

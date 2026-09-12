@@ -2318,7 +2318,12 @@ export interface MeetingPage {
  * everybody's behalf is a different question from running a team.
  */
 
-export type ToolKind = "read" | "write";
+/**
+ * `client` is a tool the browser performs — press a button, fill a field,
+ * scroll, read the screen — rather than a route the API calls. See
+ * `lib/screen.ts`.
+ */
+export type ToolKind = "read" | "write" | "client";
 
 export interface ToolCapabilityOut {
   key: string;
@@ -2368,6 +2373,12 @@ export interface AssistantStatusOut {
   realtime_enabled: boolean;
   /** What this person's turn would actually be given — drives the suggestions. */
   modules: ModuleCapabilityOut[];
+  /**
+   * Whether this person may have the assistant delete anything: a manager or
+   * above. The backend keeps every delete tool out of their offer; the screen
+   * reads this to refuse pressing a delete button on their behalf too.
+   */
+  can_delete: boolean;
 }
 
 export interface ConversationOut {
@@ -2396,18 +2407,40 @@ export interface AssistantMessageOut {
   created_at: string;
 }
 
-/** One write the model asked for that policy says a person must approve. */
+/**
+ * One action the turn stopped on: a write a person must approve, or a thing
+ * only the screen can do and must report back on.
+ */
 export interface PendingActionOut {
   call_id: string;
   tool_key: string;
   label: string;
   arguments: Record<string, unknown>;
   warning: string | null;
+  /** `confirm` waits on the person; `client` waits on the browser. */
+  kind: "confirm" | "client";
 }
 
 export interface PendingOut {
   run_id: string;
   actions: PendingActionOut[];
+  /** `awaiting_confirmation` or `awaiting_client` — what the run is parked on. */
+  status: "awaiting_confirmation" | "awaiting_client" | string;
+}
+
+/** One thing on the screen, as sent with a message. See `lib/screen.ts`. */
+export interface ScreenControlIn {
+  /** button, link, tab, field, select, checkbox, heading */
+  kind: string;
+  label: string;
+  value: string | null;
+}
+
+/** The browser's report on one action a turn parked for it. */
+export interface ClientResultItem {
+  call_id: string;
+  ok: boolean;
+  output: string;
 }
 
 export interface ConversationDetailOut extends ConversationOut {
@@ -2419,6 +2452,7 @@ export interface ConversationDetailOut extends ConversationOut {
 export type RunStatus =
   | "running"
   | "awaiting_confirmation"
+  | "awaiting_client"
   | "completed"
   | "failed"
   | "blocked"
@@ -2649,6 +2683,11 @@ export interface ToolPolicyOut {
    * So the everyday tools are always present and the rest are a search away.
    */
   deferred: boolean;
+  /**
+   * Deletes something. Offered to managers and above only, whatever the
+   * write roles say — the one rule this screen shows and cannot change.
+   */
+  destructive: boolean;
   enabled: boolean;
   confirm_override: boolean | null;
   allowed_roles: string[] | null;
@@ -4392,4 +4431,287 @@ export interface BoardOut {
   tasks: MyProjectTaskOut[];
   projects: ProjectSummaryOut[];
   portfolio: PortfolioOut;
+}
+
+// ── workflows ──────────────────────────────────────────────────────────
+
+/** How a flow begins: somebody presses Start, or a task lands on them. */
+export type WorkflowTrigger = "manual" | "task_assigned";
+
+/**
+ * Where a run is. The first three are the open states — the ones a list
+ * still watches — and the two waits are told apart on purpose: one is
+ * waiting on the person reading the screen, the other on a supplier's reply
+ * or an approval nobody here can hurry.
+ */
+export type WorkflowRunStatus =
+  | "running"
+  | "waiting_user"
+  | "waiting_event"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+/** One step as the run sees it. */
+export type RunStepState = "pending" | "running" | "waiting" | "done" | "skipped" | "failed";
+
+/** A step condition: run only when the value at `path` is `is`. */
+export interface StepWhen {
+  path: string;
+  is: boolean;
+}
+
+export interface StepOut {
+  key: string;
+  kind: string;
+  name: string;
+  config: Record<string, unknown>;
+  when: Record<string, unknown> | null;
+}
+
+export interface StepIn {
+  key: string;
+  kind: string;
+  name?: string | null;
+  config: Record<string, unknown>;
+  when?: Record<string, unknown> | null;
+}
+
+export interface WorkflowOut {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  team_id: string | null;
+  team_slug: string | null;
+  team_name: string | null;
+  subject_kind: string;
+  trigger: WorkflowTrigger;
+  enabled: boolean;
+  version: number;
+  /** Shipped with the product. Editable, never deletable. */
+  is_system: boolean;
+  archived_at: string | null;
+  steps: StepOut[];
+  /** Runs still going on this flow. */
+  open_runs: number;
+}
+
+export interface WorkflowIn {
+  key: string;
+  name: string;
+  description?: string | null;
+  /** A team slug, or null for any team. */
+  team?: string | null;
+  trigger?: WorkflowTrigger;
+  enabled?: boolean;
+  steps: StepIn[];
+}
+
+export interface WorkflowPatch {
+  name?: string;
+  description?: string | null;
+  team?: string | null;
+  trigger?: WorkflowTrigger;
+  enabled?: boolean;
+  /** Replaces the whole list — the backend does not diff. */
+  steps?: StepIn[];
+}
+
+/** The three switches and the mailbox behind them. */
+export interface WorkflowSettingsOut {
+  send_email: boolean;
+  write_sharepoint: boolean;
+  write_zoho: boolean;
+  from_mailbox: string | null;
+  poll_seconds: number;
+}
+
+export interface WorkflowSettingsIn {
+  send_email?: boolean;
+  write_sharepoint?: boolean;
+  write_zoho?: boolean;
+  from_mailbox?: string | null;
+  poll_seconds?: number;
+}
+
+/** What a block's config asks for — one control in the builder. */
+export type ConfigFieldType =
+  | "text"
+  | "textarea"
+  | "number"
+  | "boolean"
+  | "select"
+  | "json"
+  | "tool"
+  | "path"
+  | "fields";
+
+export interface ConfigFieldOut {
+  key: string;
+  label: string;
+  type: ConfigFieldType | string;
+  required: boolean;
+  help: string;
+  options: string[];
+  default: unknown;
+}
+
+export interface BlockOut {
+  kind: string;
+  name: string;
+  description: string;
+  /** "user" or "event" when a run stops on this block; null when it does not. */
+  waits: string | null;
+  /** The settings switch this block's side effect sits behind, if any. */
+  switch: string | null;
+  fields: ConfigFieldOut[];
+}
+
+/** A route an `endpoint` or `wait_status` block may call. */
+export interface ToolChoiceOut {
+  key: string;
+  label: string;
+  module: string;
+  method: string;
+  path: string;
+}
+
+export interface BlocksOut {
+  blocks: BlockOut[];
+  tools: ToolChoiceOut[];
+  /** Named answer shapes an agent or extract block can ask for. */
+  schemas: string[];
+}
+
+/** One thing an `ask_user` form asks for. */
+export type PendingFieldType = "text" | "textarea" | "number" | "checkbox" | "table" | "file";
+
+export interface PendingColumn {
+  key: string;
+  label: string;
+  type: string;
+}
+
+export interface PendingField {
+  key: string;
+  label: string;
+  type: PendingFieldType | string;
+  required?: boolean;
+  columns?: PendingColumn[];
+}
+
+/**
+ * What a run is stopped on, when it is stopped on the person. A form asks
+ * for `fields`; a review shows `review_value` and asks for it to be checked,
+ * edited if need be, and verified.
+ */
+export interface PendingPrompt {
+  step_key: string;
+  title: string;
+  message?: string | null;
+  mode: "form" | "review";
+  fields?: PendingField[];
+  allow_files?: boolean;
+  resume_label?: string | null;
+  review_of?: string | null;
+  review_value?: unknown;
+}
+
+export interface WorkflowAnswerIn {
+  values: Record<string, unknown>;
+  /** The edited review value. Left out to verify as shown. */
+  value?: unknown;
+}
+
+export interface StartRunIn {
+  subject_id: string;
+  subject_label?: string | null;
+}
+
+export interface WorkflowRunEventOut {
+  seq: number;
+  kind: string;
+  step_key: string | null;
+  payload: Record<string, unknown> | null;
+  by_user_id: string | null;
+  created_at: string;
+}
+
+export interface WorkflowRunFileOut {
+  id: string;
+  step_key: string | null;
+  /** sharepoint, upload, email or zoho — where the bytes came from. */
+  source: string;
+  file_name: string;
+  content_type: string | null;
+  size: number;
+  origin: string | null;
+  created_at: string;
+}
+
+export interface WorkflowRunMessageOut {
+  id: string;
+  step_key: string | null;
+  direction: "out" | "in" | string;
+  party: string | null;
+  address: string | null;
+  subject: string | null;
+  body: string | null;
+  /** held, sent, failed or received. */
+  state: string;
+  error: string | null;
+  sent_at: string | null;
+  received_at: string | null;
+}
+
+export interface WorkflowRunStepOut {
+  key: string;
+  kind: string;
+  name: string;
+  state: RunStepState | string;
+  note: string | null;
+}
+
+export interface WorkflowRunSummaryOut {
+  id: string;
+  workflow_id: string;
+  workflow_key: string;
+  workflow_name: string;
+  subject_kind: string;
+  subject_id: string;
+  subject_label: string | null;
+  owner_id: string;
+  owner_name: string;
+  team_id: string | null;
+  tag: string;
+  status: WorkflowRunStatus | string;
+  step_index: number;
+  step_count: number;
+  current_step: string | null;
+  /** The pending question's title, when waiting on the person. */
+  waiting_for: string | null;
+  started_at: string;
+  finished_at: string | null;
+  error: string | null;
+  /** A decimal string — model spend so far. */
+  cost_usd: string;
+}
+
+export interface WorkflowRunOut extends WorkflowRunSummaryOut {
+  /** Keys starting with "_" are already dropped by the backend. */
+  context: Record<string, unknown>;
+  pending: PendingPrompt | null;
+  wake_at: string | null;
+  deadline_at: string | null;
+  steps: WorkflowRunStepOut[];
+  events: WorkflowRunEventOut[];
+  files: WorkflowRunFileOut[];
+  messages: WorkflowRunMessageOut[];
+}
+
+/** What a task page shows: flows it could start, and runs already on it. */
+export interface TaskRunsOut {
+  workflows: WorkflowOut[];
+  runs: WorkflowRunSummaryOut[];
 }

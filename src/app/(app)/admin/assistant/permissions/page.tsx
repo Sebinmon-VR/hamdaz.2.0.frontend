@@ -145,7 +145,10 @@ function Module({
   onChange: (path: string, body: unknown) => Promise<void>;
 }) {
   const base = `/assistant/admin/policies/modules/${module.module_key}`;
-  const reads = module.tools.filter((tool) => tool.kind === "read");
+  // Screen tools — press, fill, scroll, read the screen — sit with the reads:
+  // they have no route, no write switch and no write roles, and the browser
+  // bounds them by what is on the page and by the delete rule.
+  const reads = module.tools.filter((tool) => tool.kind !== "write");
   const writes = module.tools.filter((tool) => tool.kind === "write");
   // Counted against the tools that could ever be reached, not against every
   // row: a module with four built tools and three planned ones was reading
@@ -391,6 +394,16 @@ function ToolTable({
                 )}
                 {tool.warning && (
                   <TriangleAlert className="size-3.5 shrink-0 text-warn" strokeWidth={2.2} />
+                )}
+                {/* The one rule this screen cannot change: a delete reaches
+                    managers and above, whatever the write roles below say. */}
+                {tool.destructive && (
+                  <Badge
+                    tone="danger"
+                    title="Deletes something. Offered to managers and above only; write roles can narrow that, never widen it."
+                  >
+                    Managers+
+                  </Badge>
                 )}
                 {tool.kind === "write" && tool.effective_enabled && (
                   <Badge tone={tool.effective_confirm ? "neutral" : "danger"}>

@@ -945,6 +945,10 @@ function statusLine({
 }): string | null {
   if (heading) return `Opening ${heading}…`;
   if (phase === "confirming") return "Waiting for you to confirm";
+  if (phase === "acting") {
+    const last = steps[steps.length - 1];
+    return last ? `${last.label}…` : "Working on the screen…";
+  }
   if (phase === "waiting") {
     const last = steps[steps.length - 1];
     return last ? `${last.label}…` : "Thinking…";

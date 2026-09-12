@@ -121,6 +121,7 @@ export default function AssistantRunsPage() {
               <option value="">Any outcome</option>
               <option value="completed">Completed</option>
               <option value="awaiting_confirmation">Waiting on somebody</option>
+              <option value="awaiting_client">Waiting on the screen</option>
               <option value="running">Running</option>
               <option value="failed">Failed</option>
               <option value="blocked">Blocked</option>
@@ -243,6 +244,7 @@ const STATUS_TONE: Record<string, Tone> = {
   completed: "positive",
   running: "info",
   awaiting_confirmation: "warn",
+  awaiting_client: "warn",
   failed: "danger",
   blocked: "danger",
   cancelled: "neutral",
@@ -251,7 +253,11 @@ const STATUS_TONE: Record<string, Tone> = {
 function StatusBadge({ status }: { status: string }) {
   return (
     <Badge tone={STATUS_TONE[status] ?? "neutral"}>
-      {status === "awaiting_confirmation" ? "Waiting" : humanise(status)}
+      {status === "awaiting_confirmation"
+        ? "Waiting"
+        : status === "awaiting_client"
+          ? "On screen"
+          : humanise(status)}
     </Badge>
   );
 }
@@ -287,7 +293,10 @@ function RunDetail({
     onCancelled();
   });
 
-  const open = data?.status === "running" || data?.status === "awaiting_confirmation";
+  const open =
+    data?.status === "running" ||
+    data?.status === "awaiting_confirmation" ||
+    data?.status === "awaiting_client";
 
   return (
     <Modal
@@ -384,6 +393,8 @@ const EVENT_TONE: Record<string, string> = {
   declined: "text-warn",
   confirmation_requested: "text-warn",
   confirmed: "text-positive",
+  client_action_requested: "text-warn",
+  client_action_result: "text-ink-2",
   cancelled: "text-ink-3",
 };
 

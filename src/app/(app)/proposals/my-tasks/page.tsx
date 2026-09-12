@@ -4,6 +4,7 @@ import useSWR from "swr";
 import { RefreshCw, UserX } from "lucide-react";
 import { withQuery } from "@/lib/api";
 import { num } from "@/lib/format";
+import { useSession } from "@/lib/session";
 import type { MyTasksOut } from "@/lib/types";
 import { Panel, PageHead, Stat } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/controls";
@@ -11,6 +12,7 @@ import { Empty, ErrorState, RowsSkeleton } from "@/components/ui/feedback";
 import { TaskList } from "@/components/proposals/TaskList";
 
 export default function MyTasksPage() {
+  const session = useSession();
   // Everything, not just open — the filter rail on the list needs the closed
   // ones to count them, and one sweep of the list is cheaper than two.
   const { data, error, isLoading, isValidating, mutate } = useSWR<MyTasksOut>(
@@ -52,7 +54,7 @@ export default function MyTasksPage() {
             <Stat value={num(data.total - data.open_count)} label="closed" />
             <Stat value={num(data.total)} label="assigned in total" />
           </Panel>
-          <TaskList tasks={data.tasks} />
+          <TaskList tasks={data.tasks} workflows={session.can("workflows")} />
         </>
       )}
     </div>
