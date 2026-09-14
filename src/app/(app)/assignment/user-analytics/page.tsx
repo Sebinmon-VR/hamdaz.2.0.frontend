@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import {
@@ -64,6 +64,94 @@ import {
 /** How often the live standing is re-read. The loop behind it notices a change
  *  in SharePoint within about ten seconds, so faster than this buys nothing. */
 const LIVE_EVERY_MS = 10_000;
+
+/** A standing older than this is suspicious: the loop behind it recomputes
+ *  within seconds of a change and does a full pass every two minutes, so
+ *  five minutes of silence means it has stopped, not that nothing moved. */
+const STALE_AFTER_MS = 5 * 60_000;
+
+/**
+ * Whether the screen is following the list, and how closely.
+ *
+ * Green and pulsing while the live standing is fresh; amber when it has not
+ * been recomputed for a while, which means the background loop has stalled
+ * rather than that the list is quiet; grey when the page is on the on-demand
+ * fallback, where nothing updates by itself. The age ticks every second so
+ * "12s ago" is readable as a heartbeat rather than a timestamp.
+ */
+function LiveIndicator({
+  live,
+  computedAt,
+  refreshing,
+}: {
+  live: boolean;
+  computedAt: string | null;
+  refreshing: boolean;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const ageMs = computedAt ? now - new Date(computedAt).getTime() : null;
+  const stale = live && ageMs !== null && ageMs > STALE_AFTER_MS;
+  const tone = !live ? "off" : stale ? "stale" : "live";
+
+  const label = !live
+    ? "On demand"
+    : stale
+      ? "Not updating"
+      : "Live";
+  const detail =
+    ageMs === null
+      ? null
+      : ageMs < 60_000
+        ? `${Math.max(0, Math.round(ageMs / 1000))}s ago`
+        : ageMs < 3_600_000
+          ? `${Math.round(ageMs / 60_000)} min ago`
+          : `${Math.round(ageMs / 3_600_000)} h ago`;
+
+  return (
+    <span
+      role="status"
+      title={
+        !live
+          ? "Read from SharePoint when you ask. Nothing updates by itself on this view."
+          : stale
+            ? "The background loop has not recomputed this team for a while. Check the mirror status under Mail intake."
+            : `Follows the Proposals list. Re-read every ${LIVE_EVERY_MS / 1000}s; the loop behind it notices a change in SharePoint within about ten seconds.`
+      }
+      className={clsx(
+        "inline-flex h-9 items-center gap-2 rounded-full border px-3 text-[12px] font-medium",
+        tone === "live" && "border-positive/30 bg-positive/10 text-positive",
+        tone === "stale" && "border-warn/30 bg-warn/10 text-warn",
+        tone === "off" && "border-line bg-panel-2 text-ink-3",
+      )}
+    >
+      <span className="relative flex size-2.5">
+        {tone === "live" && (
+          <span
+            className={clsx(
+              "absolute inline-flex size-full rounded-full bg-positive opacity-60",
+              refreshing ? "animate-ping" : "animate-pulse",
+            )}
+          />
+        )}
+        <span
+          className={clsx(
+            "relative inline-flex size-2.5 rounded-full",
+            tone === "live" && "bg-positive",
+            tone === "stale" && "bg-warn",
+            tone === "off" && "bg-ink-4",
+          )}
+        />
+      </span>
+      {label}
+      {detail && <span className="tnum font-normal opacity-70">{detail}</span>}
+    </span>
+  );
+}
 
 export default function UserAnalyticsPage() {
   const session = useSession();
@@ -168,6 +256,11 @@ export default function UserAnalyticsPage() {
         }
         actions={
           <>
+            <LiveIndicator
+              live={isLive}
+              computedAt={run?.created_at ?? null}
+              refreshing={busy}
+            />
             <Button
               icon={RefreshCw}
               loading={busy}
