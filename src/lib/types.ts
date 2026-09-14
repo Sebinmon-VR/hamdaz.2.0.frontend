@@ -537,9 +537,12 @@ export interface QuotableTasksOut {
    * and nothing could ever reach you here".
    */
   in_sharepoint: boolean;
-  /** Before `open_only` is applied, so "showing 12 of 27" is available. */
+  /** Before the scope is applied, so "showing 12 of 27" is available. */
   total: number;
+  /** Not finished, closed bids included. */
   open_count: number;
+  /** Not finished and the bid has not closed — what can still be quoted for. */
+  live_count: number;
   quoted_count: number;
   /** Already sorted soonest deadline first, by BCD. Do not re-sort. */
   tasks: QuotableTaskOut[];

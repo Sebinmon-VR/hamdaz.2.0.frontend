@@ -9,7 +9,7 @@ import { withQuery } from "@/lib/api";
 import { date, num } from "@/lib/format";
 import type { QuotableTaskOut, QuotableTasksOut } from "@/lib/types";
 import { Badge, Panel, Stat } from "@/components/ui/primitives";
-import { Button, SearchInput, Toggle } from "@/components/ui/controls";
+import { Button, PillRail, SearchInput } from "@/components/ui/controls";
 import { Empty, ErrorState, RowsSkeleton } from "@/components/ui/feedback";
 import { DueChip } from "@/components/widgets";
 import { QuoteStatusBadge } from "@/components/quotes/QuoteRequestBits";
@@ -32,14 +32,21 @@ import { RaiseQuoteDialog } from "@/components/quotes/RaiseQuote";
  * The order is the server's, by bid closing date. It is deliberately not
  * re-sorted here: BCD is the date that decides whether a bid is still worth
  * working on, and due date is not a stand-in for it.
+ *
+ * **Live by default.** Most of what is assigned to anybody is a bid that
+ * closed months ago and was never marked finished. Listing those first buried
+ * the handful that can still be quoted for, so the default is the live ones
+ * and the rest are one click away.
  */
+type Scope = "live" | "open" | "all";
+
 export function EnquiryPicker() {
-  const [openOnly, setOpenOnly] = useState(true);
+  const [scope, setScope] = useState<Scope>("live");
   const [search, setSearch] = useState("");
   const [raising, setRaising] = useState<QuotableTaskOut | null>(null);
 
   const { data, error, isLoading, mutate } = useSWR<QuotableTasksOut>(
-    withQuery("/quote-requests/tasks", { open_only: openOnly }),
+    withQuery("/quote-requests/tasks", { scope }),
     { revalidateOnFocus: false },
   );
 
@@ -72,29 +79,35 @@ export function EnquiryPicker() {
   return (
     <div className="space-y-4">
       <Panel className="flex flex-wrap items-center gap-x-8 gap-y-4 px-4 py-3.5">
-        <Stat value={num(data.tasks.length)} label={openOnly ? "open" : "listed"} />
+        <Stat value={num(data.live_count)} label="live" />
         <Stat value={num(data.quoted_count)} label="already quoted" />
         <Stat value={num(data.total)} label="assigned in total" />
-        <div className="ml-auto">
-          <Toggle
-            checked={openOnly}
-            onChange={setOpenOnly}
-            label="Open only"
-            hint={
-              openOnly
-                ? `Showing ${data.tasks.length} of ${data.total} — completed ones are hidden.`
-                : "Completed enquiries included."
-            }
-          />
-        </div>
+        <p className="ml-auto max-w-xs text-[12px] leading-relaxed text-ink-4">
+          {scope === "live"
+            ? `Showing the ${num(data.tasks.length)} that can still be quoted for: not finished, bid not yet closed.`
+            : scope === "open"
+              ? `Showing ${num(data.tasks.length)} not finished, closed bids included.`
+              : `Showing all ${num(data.tasks.length)}, completed ones included.`}
+        </p>
       </Panel>
 
-      <SearchInput
-        value={search}
-        onChange={setSearch}
-        placeholder="Search title, end user, quote number"
-        className="w-full max-w-sm"
-      />
+      <div className="flex flex-wrap items-center gap-2.5">
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search title, end user, quote number"
+          className="w-full max-w-sm"
+        />
+        <PillRail
+          value={scope}
+          onChange={setScope}
+          options={[
+            { value: "live", label: "Live", count: data.live_count },
+            { value: "open", label: "Open", count: data.open_count },
+            { value: "all", label: "All tasks", count: data.total },
+          ]}
+        />
+      </div>
 
       {rows.length === 0 ? (
         <Empty
@@ -103,9 +116,11 @@ export function EnquiryPicker() {
           body={
             needle
               ? "No enquiry matches that search."
-              : openOnly
-                ? "You have no open enquiries. Turn off “open only” to see the finished ones."
-                : "Nothing on the Proposals list is assigned to you."
+              : scope === "live"
+                ? "Nothing of yours is live right now. Choose Open or All tasks to see the rest."
+                : scope === "open"
+                  ? "You have no open enquiries. Choose All tasks to see the finished ones."
+                  : "Nothing on the Proposals list is assigned to you."
           }
         />
       ) : (
