@@ -331,7 +331,7 @@ export function buildNav(session: Session): Nav {
   }
   if (roles.is_super_admin) {
     admin.push({
-      label: "Team access",
+      label: "Module access",
       href: "/admin/access",
       icon: KeyRound,
       match: "/admin/access",
@@ -473,7 +473,7 @@ const STATIC_LABELS: Record<string, string> = {
   "/comparisons/new": "New comparison",
   "/admin/roles": "Roles",
   "/admin/roles/assignments": "Who holds what",
-  "/admin/access": "Team access",
+  "/admin/access": "Module access",
   "/assistant": "Assistant",
   "/admin/assistant": "Assistant settings",
   "/admin/assistant/permissions": "Assistant permissions",
