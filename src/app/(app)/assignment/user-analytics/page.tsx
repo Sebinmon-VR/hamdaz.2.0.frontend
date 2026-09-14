@@ -43,19 +43,28 @@ import {
  * Who should get the next task, and why.
  *
  * **Nothing here assigns anything.** The backend says so in as many words: it
- * ranks, and handing the work over is still a person's action. Task counts are
- * read live from SharePoint on every call and nothing is written back there.
+ * ranks, and handing the work over is still a person's action.
  *
- * Two endpoints, and the split is the whole design. `/preview` computes and
- * keeps nothing — the common case, since a history full of rankings nobody
- * acted on would bury the ones that mattered. `POST /runs` computes the same
- * thing and stores it with the policy frozen onto the row, so a later edit to
- * the policy cannot rewrite what a decision was based on.
+ * What is shown is the **live standing**: the table the background loop
+ * rewrites whenever the Proposals list moves, and the same one the
+ * useranalytics list in SharePoint is published from. It is re-read every few
+ * seconds, so the screen follows the list without anybody pressing anything,
+ * and what it shows is what the published list holds. The on-demand read of
+ * SharePoint (`/preview`) remains as the fallback for a team the loop has not
+ * computed yet.
+ *
+ * `POST /runs` keeps a ranking as the record of a decision, with the policy
+ * frozen onto the row so a later edit cannot rewrite what it was based on.
  *
  * A team is required and must have an assignment policy **of its own**. The
  * organisation default deliberately does not qualify, so a 409 here is a
  * configuration answer rather than a failure, and is reported as one.
  */
+
+/** How often the live standing is re-read. The loop behind it notices a change
+ *  in SharePoint within about ten seconds, so faster than this buys nothing. */
+const LIVE_EVERY_MS = 10_000;
+
 export default function UserAnalyticsPage() {
   const session = useSession();
   const teams = session.teams.map((t) => t.team).filter((t) => !t.archived_at);
@@ -63,15 +72,33 @@ export default function UserAnalyticsPage() {
   const [saving, setSaving] = useState(false);
   const [opened, setOpened] = useState<string | null>(null);
 
+  // The live standing first: the table the background loop rewrites whenever
+  // the Proposals list moves, and the same one the useranalytics list is
+  // published from. One indexed query, so asking every ten seconds is cheap,
+  // and what this screen shows is what the list holds.
+  const live = useSWR<RunOut>(
+    slug ? withQuery("/analytics/live", { team: slug }) : null,
+    {
+      refreshInterval: LIVE_EVERY_MS,
+      revalidateOnFocus: true,
+      shouldRetryOnError: false,
+    },
+  );
+  // 404 means the loop has not computed this team yet — the mirror has never
+  // synced — so the on-demand read of SharePoint stands in until it has.
+  const liveMissing = live.error instanceof ApiError && live.error.status === 404;
   const preview = useSWR<RunOut>(
-    slug ? withQuery("/analytics/preview", { team: slug }) : null,
+    slug && liveMissing ? withQuery("/analytics/preview", { team: slug }) : null,
     { revalidateOnFocus: false, shouldRetryOnError: false },
   );
   const runs = useSWR<RunSummaryOut[]>(
     slug ? withQuery("/analytics/runs", { team: slug, limit: 10 }) : null,
   );
 
-  const run = preview.data;
+  const run = live.data ?? preview.data;
+  const isLive = live.data !== undefined;
+  const loadError = liveMissing ? preview.error : live.error;
+  const busy = live.isValidating || preview.isValidating;
   const entries = run?.entries ?? [];
   // Every entry carries the weights the run used, so the panel below reports
   // what was actually applied rather than what the policy screen says now.
@@ -102,11 +129,15 @@ export default function UserAnalyticsPage() {
 
   // A 409 means the team has no policy of its own — a setup answer, not a
   // breakage, and it comes with instructions the backend wrote.
-  const scope = preview.error instanceof ApiError && preview.error.status === 409
-    ? preview.error.message
+  const scope = loadError instanceof ApiError && loadError.status === 409
+    ? loadError.message
     : null;
 
   function refresh() {
+    if (!liveMissing) {
+      live.mutate();
+      return;
+    }
     preview.mutate(
       () => api.get<RunOut>("/analytics/preview", { team: slug, refresh: true }),
       { revalidate: false },
@@ -130,16 +161,20 @@ export default function UserAnalyticsPage() {
       <PageHead
         eyebrow="Work assignment"
         title="User analytics"
-        lead="Read live from SharePoint. Nothing here assigns anything."
+        lead={
+          isLive && run
+            ? `Live. Follows the Proposals list as it changes; last recomputed ${relative(run.created_at)}. Nothing here assigns anything.`
+            : "Read from SharePoint on demand. Nothing here assigns anything."
+        }
         actions={
           <>
             <Button
               icon={RefreshCw}
-              loading={preview.isValidating}
+              loading={busy}
               onClick={refresh}
               disabled={!slug}
             >
-              Re-read SharePoint
+              {isLive ? "Refresh" : "Re-read SharePoint"}
             </Button>
             <Button
               variant="accent"
@@ -174,8 +209,8 @@ export default function UserAnalyticsPage() {
           </Link>
           .
         </InlineNotice>
-      ) : preview.error ? (
-        <ErrorState error={preview.error} onRetry={() => preview.mutate()} />
+      ) : loadError ? (
+        <ErrorState error={loadError} onRetry={() => (liveMissing ? preview : live).mutate()} />
       ) : !run ? (
         <RowsSkeleton rows={8} />
       ) : (
