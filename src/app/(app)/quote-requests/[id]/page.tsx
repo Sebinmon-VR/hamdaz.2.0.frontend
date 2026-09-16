@@ -5,6 +5,7 @@ import Link from "next/link";
 import useSWR from "swr";
 import {
   Check,
+  ClipboardList,
   ExternalLink,
   Handshake,
   MessageSquare,
@@ -14,7 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { amount, date, dateTime, decimalPercent, num, relative } from "@/lib/format";
+import { amount, date, dateTime, decimal, decimalPercent, num, relative } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
 import {
   toDraft,
@@ -26,7 +27,7 @@ import {
   type SupplierQuoteFailure,
 } from "@/lib/types";
 import { Badge, Meta, PageHead, Panel, StatBox } from "@/components/ui/primitives";
-import { Button, Field, Select, Textarea } from "@/components/ui/controls";
+import { Button, Field, PillRail, Select, Textarea } from "@/components/ui/controls";
 import { ErrorState, InlineNotice, Modal, PanelSkeleton } from "@/components/ui/feedback";
 import {
   canEdit,
@@ -39,9 +40,31 @@ import { SupplierComparison } from "@/components/quotes/SupplierComparison";
 import { SupplierUpload } from "@/components/quotes/SupplierUpload";
 import { History } from "@/components/quotes/History";
 import { Discussion, QUOTE_ANCHOR, type CommentAnchor } from "@/components/quotes/Discussion";
+import { SummarySheet } from "@/components/quotes/sheet/SummarySheet";
+import { ComplianceSheet } from "@/components/quotes/sheet/ComplianceSheet";
+import { LandedCostSheet } from "@/components/quotes/sheet/LandedCostSheet";
+import { CostingSheet } from "@/components/quotes/sheet/CostingSheet";
+import { PortalSheet } from "@/components/quotes/sheet/PortalSheet";
+import {
+  bidDraftOf,
+  bidLists,
+  bidPatch,
+  complianceRowIn,
+  complianceRowOf,
+  costRowIn,
+  costRowOf,
+  hasBidPack,
+  portalRowIn,
+  portalRowOf,
+  type BidDraft,
+  type ComplianceRow,
+  type CostRow,
+  type PortalRow,
+} from "@/components/quotes/bid";
 
 /**
- * One quote, at every stage of its life.
+ * One quote, at every stage of its life — and, when it is a tender, the whole
+ * bid behind it.
  *
  * There is deliberately one screen rather than one per stage. A quote goes
  * draft → approval → back → negotiation → back again, and the person reading
@@ -50,6 +73,13 @@ import { Discussion, QUOTE_ANCHOR, type CommentAnchor } from "@/components/quote
  * "compare" page and an "approve" page would mean the approver cannot see what
  * the comparison said and the requester cannot see what the approver did.
  *
+ * **The sections are tabs, and the bid ones only appear on a bid.** A quote is
+ * four fields and some lines when somebody rings up and asks for a price; a
+ * tender is that plus an event number, a compliance matrix against forty
+ * clauses, a landed-cost build-up and a list of portal cells. Showing all of it
+ * to the first person would bury the four fields they actually need, so the bid
+ * tabs appear once there is a bid pack — or once somebody says there is one.
+ *
  * What changes between stages is which parts are open, and that is the
  * backend's answer, not this screen's: `may_edit`, `may_submit` /
  * `submit_reason`, `may_approve` / `approve_reason`. Nothing here re-derives a
@@ -57,9 +87,28 @@ import { Discussion, QUOTE_ANCHOR, type CommentAnchor } from "@/components/quote
  * disabled control they explain — the whole point of the field is that nobody
  * should have to press a button to discover why it will not work.
  *
- * No money is calculated anywhere in this file. Every total, margin and
- * probability is the server's, rendered from the exact decimal string it sent.
+ * No money is calculated anywhere in this file. Every total, margin, landed
+ * cost, markup rung and probability is the server's, rendered from the exact
+ * decimal string it sent.
  */
+
+/**
+ * The workbook's own tabs, in the workbook's own order.
+ *
+ * `quote` and `discussion` are this system's rather than the workbook's — the
+ * line items with their supplier comparison, and the approval conversation —
+ * and they sit at either end so the five sheets in the middle read as the
+ * workbook does.
+ */
+type Tab =
+  | "quote"
+  | "summary"
+  | "compliance"
+  | "landed"
+  | "costing"
+  | "portal"
+  | "discussion";
+
 export default function QuoteRequestPage({
   params,
 }: {
@@ -83,10 +132,19 @@ export default function QuoteRequestPage({
   );
 
   const [form, setForm] = useState<QuoteFormDraft | null>(null);
+  const [bid, setBid] = useState<BidDraft | null>(null);
   const [lines, setLines] = useState<QuoteLineDraft[]>([]);
+  const [costs, setCosts] = useState<CostRow[]>([]);
+  const [rules, setRules] = useState<ComplianceRow[]>([]);
+  const [portal, setPortal] = useState<PortalRow[]>([]);
   const [title, setTitle] = useState("");
   const [dirtyLines, setDirtyLines] = useState<Set<string>>(new Set());
   const [stamp, setStamp] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("quote");
+  // Turned on by hand for a quote that is becoming a tender before any of the
+  // bid fields have been filled in. Never turned off: hiding a tab whose
+  // section has something in it is how work disappears.
+  const [asBid, setAsBid] = useState(false);
   const [deciding, setDeciding] = useState<ReviewAction | null>(null);
   const [negotiating, setNegotiating] = useState(false);
   const [anchor, setAnchor] = useState<CommentAnchor>(QUOTE_ANCHOR);
@@ -96,13 +154,26 @@ export default function QuoteRequestPage({
   // supplier choice, a decision. Comparing the stamp rather than the object
   // means an unchanged revalidation leaves work in progress alone.
   const current = data
-    ? `${data.updated_at}|${data.revision}|${data.status}|${data.items.map((i) => i.id).join(",")}`
+    ? [
+        data.updated_at,
+        data.revision,
+        data.status,
+        data.items.map((i) => i.id).join(","),
+        bidLists(data).costLines.map((c) => c.id).join(","),
+        bidLists(data).compliance.map((c) => c.id).join(","),
+        bidLists(data).submissionFields.map((f) => f.id).join(","),
+      ].join("|")
     : null;
   if (data && current !== stamp) {
     setStamp(current);
     setForm(draftOf(data));
+    setBid(bidDraftOf(data));
     setTitle(data.title);
     setLines(data.items.map(toDraft));
+    const lists = bidLists(data);
+    setCosts(lists.costLines.map(costRowOf));
+    setRules(lists.compliance.map(complianceRowOf));
+    setPortal(lists.submissionFields.map(portalRowOf));
     setDirtyLines(new Set());
   }
 
@@ -120,18 +191,31 @@ export default function QuoteRequestPage({
   );
   if (error) return <ErrorState error={error} onRetry={() => mutate()} />;
   if (isLoading && !data) return <PanelSkeleton lines={10} />;
-  if (!data || !form) return null;
+  if (!data || !form || !bid) return null;
 
   const editable = data.may_edit && canEdit(data.status);
   const spec = QUOTE_STATUS[data.status];
   const openComments = (data.comments ?? []).filter((c) => c.is_open);
+  const isBid = asBid || hasBidPack(data);
+  const lists = bidLists(data);
+  const blocking = lists.compliance.filter((c) => c.is_blocking).length;
 
   const unsaved =
     dirtyLines.size > 0 ||
     title !== data.title ||
     lines.length !== data.items.length ||
     lines.some((line, i) => line.id !== data.items[i]?.id) ||
-    formChanged(form, draftOf(data));
+    formChanged(form, draftOf(data)) ||
+    bidChanged(bid, bidDraftOf(data)) ||
+    listChanged(costs.map(costRowIn), lists.costLines.map((c) => costRowIn(costRowOf(c)))) ||
+    listChanged(
+      rules.map(complianceRowIn),
+      lists.compliance.map((c) => complianceRowIn(complianceRowOf(c))),
+    ) ||
+    listChanged(
+      portal.map(portalRowIn),
+      lists.submissionFields.map((f) => portalRowIn(portalRowOf(f))),
+    );
 
   function patchBody() {
     return {
@@ -161,6 +245,13 @@ export default function QuoteRequestPage({
       adjustment: form!.adjustment.trim() || "0",
       multiple_supplier_quotes: data!.multiple_supplier_quotes,
       items: lines.filter((line) => line.name.trim()).map(toLineIn),
+      // The bid pack. Same rule as the lines: the lists are replaced whole, so
+      // a row somebody started and abandoned is dropped rather than saved as a
+      // blank, and every list goes every time.
+      ...bidPatch(bid!),
+      cost_lines: costs.filter((row) => row.label.trim()).map(costRowIn),
+      compliance: rules.filter((row) => row.requirement.trim()).map(complianceRowIn),
+      submission_fields: portal.filter((row) => row.label.trim()).map(portalRowIn),
     };
   }
 
@@ -177,12 +268,40 @@ export default function QuoteRequestPage({
       ? null
       : (data.submit_reason ?? "This quote cannot be sent yet.");
 
+  // Named as the workbook names its tabs, so somebody who has used the
+  // spreadsheet knows where they are before they read anything.
+  const tabs: { value: Tab; label: string; count?: number }[] = [
+    { value: "quote", label: "Quote & lines", count: data.items.length || undefined },
+    ...(isBid
+      ? ([
+          { value: "summary", label: "Summary" },
+          {
+            value: "compliance",
+            label: "Compliance matrix",
+            count: lists.compliance.length || undefined,
+          },
+          { value: "landed", label: "Landed cost" },
+          { value: "costing", label: "Costing sheet" },
+          {
+            value: "portal",
+            label: "Portal fields",
+            count: lists.submissionFields.length || undefined,
+          },
+        ] as const)
+      : []),
+    {
+      value: "discussion",
+      label: "Discussion",
+      count: openComments.length || undefined,
+    },
+  ];
+
   return (
     <>
       <PageHead
         eyebrow={<Link href="/quote-requests">Quote requests</Link>}
         title={data.title}
-        meta={data.reference ?? undefined}
+        meta={data.rfp_number ?? data.reference ?? undefined}
         actions={
           <>
             {editable && (
@@ -275,14 +394,34 @@ export default function QuoteRequestPage({
         </InlineNotice>
       )}
 
+      {/* What the bid pack wants somebody to know before this goes anywhere.
+          Advisory by design — see `bidpack.warnings`. It takes no button away,
+          because a system that refuses at four o'clock on the day of a deadline
+          has not prevented a bad bid, it has prevented a bid. */}
+      {data.bid && data.bid.warnings.length > 0 && (
+        <InlineNotice tone="warn">
+          <span className="block font-medium">Before this is submitted</span>
+          <ul className="mt-1.5 space-y-1">
+            {data.bid.warnings.map((warning) => (
+              <li key={warning} className="leading-relaxed">
+                {warning}
+              </li>
+            ))}
+          </ul>
+        </InlineNotice>
+      )}
+
       {/* ── where it is ── */}
       <Panel className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
         <QuoteStatusBadge status={data.status} />
         <span className="text-[13px] text-ink-2">{spec.hint}</span>
-        {data.revision > 1 && (
-          <Badge tone="neutral">Pass {data.revision}</Badge>
-        )}
+        {data.revision > 1 && <Badge tone="neutral">Pass {data.revision}</Badge>}
         {unsaved && <Badge tone="warn">Unsaved changes</Badge>}
+        {blocking > 0 && (
+          <Badge tone="danger" title="Compliance rows that are non-compliant, open or awaiting a clarification.">
+            {blocking} to clear
+          </Badge>
+        )}
         <div className="flex-1" />
         {/* The reason lives beside the control it explains. */}
         {editable && submitBlocked && (
@@ -315,8 +454,28 @@ export default function QuoteRequestPage({
       {/* ── the numbers ── */}
       <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
         <StatBox label="Total" value={amount(data.total, data.currency)} />
-        <StatBox label="Lines" value={num(data.items.length)} />
-        <WinChance quote={data} />
+        {isBid && data.bid ? (
+          <StatBox
+            label="Landed cost"
+            value={amount(data.bid.landed.total, data.currency)}
+            hint="What it costs to put the goods where the customer wants them. The build-up is on the costing tab."
+          />
+        ) : (
+          <StatBox label="Lines" value={num(data.items.length)} />
+        )}
+        {isBid && data.bid ? (
+          <StatBox
+            label="Margin"
+            value={
+              data.bid.gross_margin_percent
+                ? `${decimal(data.bid.gross_margin_percent, { min: 1 })}%`
+                : "—"
+            }
+            hint={`${amount(data.bid.gross_margin, data.currency)} over the landed cost.`}
+          />
+        ) : (
+          <WinChance quote={data} />
+        )}
         <StatBox
           label="Open comments"
           value={num(openComments.length)}
@@ -324,135 +483,169 @@ export default function QuoteRequestPage({
         />
       </div>
 
-      <div className="grid gap-3.5 xl:grid-cols-[1.65fr_1fr]">
-        <div className="min-w-0 space-y-3.5">
-          <LineEditor
-            lines={lines}
-            currency={data.currency}
-            editable={editable}
-            dirtyIds={dirtyLines}
-            quote={data}
-            onChange={(next) => {
-              setLines(next);
-              setDirtyLines(dirtyAgainst(next, data.items));
+      <div className="flex flex-wrap items-center gap-3">
+        <PillRail options={tabs} value={tab} onChange={setTab} className="min-w-0 flex-1" />
+        {!isBid && editable && (
+          <Button
+            icon={ClipboardList}
+            onClick={() => {
+              setAsBid(true);
+              setTab("summary");
             }}
-            onComment={(line) =>
-              setAnchor({
-                target_type: "item",
-                target_ref: line.id,
-                label: `the line “${line.name || "untitled"}”`,
-              })
-            }
-          />
+          >
+            This is a tender
+          </Button>
+        )}
+      </div>
 
-          <SupplierUpload
-            attached={data.comparison?.suppliers?.length ?? 0}
-            editable={editable}
-            // Deliberately not wrapped in useAction: the per-file failures are
-            // inside the ApiError's detail, and the panel below is the thing
-            // that knows how to read them. Catching here would lose the names.
-            onUpload={async (files) => {
-              const body = new FormData();
-              for (const file of files) body.append("files", file);
-              const result = await api.upload<
-                QuoteRequestOut & { failed?: SupplierQuoteFailure[] }
-              >(`/quote-requests/${id}/supplier-quotes`, body);
-              await mutate(result, { revalidate: false });
-              return result.failed ?? null;
-            }}
-          />
-
-          {/* The comparison lives here, not on a page of its own: it exists so
-              that somebody picks, and picking is what gives this quote lines. */}
-          {data.comparison && (
-            <SupplierComparison
-              comparison={data.comparison}
+      {tab === "quote" && (
+        <div className="grid gap-3.5 xl:grid-cols-[1.65fr_1fr]">
+          <div className="min-w-0 space-y-3.5">
+            <LineEditor
+              lines={lines}
               currency={data.currency}
-              selectedId={data.selected_supplier_quote_id}
-              hasEdits={dirtyLines.size > 0}
-              canChoose={editable}
-              pending={choose.pending}
-              error={choose.error}
-              onChoose={async (supplierId, markup) => {
-                const next = await choose.run(supplierId, markup);
-                if (next) await mutate(next, { revalidate: false });
-                return next;
+              editable={editable}
+              dirtyIds={dirtyLines}
+              quote={data}
+              onChange={(next) => {
+                setLines(next);
+                setDirtyLines(dirtyAgainst(next, data.items));
+              }}
+              onComment={(line) =>
+                setAnchor({
+                  target_type: "item",
+                  target_ref: line.id,
+                  label: `the line “${line.name || "untitled"}”`,
+                })
+              }
+            />
+
+            <SupplierUpload
+              attached={data.comparison?.suppliers?.length ?? 0}
+              editable={editable}
+              // Deliberately not wrapped in useAction: the per-file failures are
+              // inside the ApiError's detail, and the panel below is the thing
+              // that knows how to read them. Catching here would lose the names.
+              onUpload={async (files) => {
+                const body = new FormData();
+                for (const file of files) body.append("files", file);
+                const result = await api.upload<
+                  QuoteRequestOut & { failed?: SupplierQuoteFailure[] }
+                >(`/quote-requests/${id}/supplier-quotes`, body);
+                await mutate(result, { revalidate: false });
+                return result.failed ?? null;
               }}
             />
-          )}
 
-          <Discussion
-            quote={data}
-            anchor={anchor}
-            onAnchorChange={setAnchor}
-            onChanged={() => mutate()}
-          />
-        </div>
-
-        <div className="min-w-0 space-y-3.5">
-          <Panel className="p-5">
-            <dl className="grid grid-cols-2 gap-x-5 gap-y-4">
-              <Meta label="Customer">{data.customer_name}</Meta>
-              <Meta label="Currency">{data.currency}</Meta>
-              <Meta label="Bid closing">{data.cf_bcd ? date(data.cf_bcd) : "—"}</Meta>
-              <Meta label="Valid until">
-                {data.expiry_date ? date(data.expiry_date) : "—"}
-              </Meta>
-              <Meta label="Team">{data.team_name ?? "—"}</Meta>
-              <Meta label="Raised by">{data.created_by_name ?? "—"}</Meta>
-              <Meta label="Sent">
-                {data.submitted_at ? relative(data.submitted_at) : "not yet"}
-              </Meta>
-              <Meta label="Decided">
-                {data.decided_at ? relative(data.decided_at) : "not yet"}
-              </Meta>
-            </dl>
-
-            {/* Back to where the enquiry actually lives. SharePoint stays the
-                system of record for the bid itself. */}
-            {data.source_task_url && (
-              <a
-                href={data.source_task_url}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-4 inline-flex items-center gap-1.5 border-t border-line pt-4 text-[12px] text-ink-3 transition hover:text-ink"
-              >
-                <ExternalLink className="size-3.5" strokeWidth={1.8} />
-                Open the enquiry in SharePoint
-              </a>
-            )}
-          </Panel>
-
-          {editable && (
-            <Panel className="p-5">
-              <span className="mb-1.5 block text-[12px] text-ink-3">Title</span>
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full rounded-2xl border border-transparent bg-panel-2 px-4 py-2.5 text-[13px] outline-none transition focus:border-accent"
-                placeholder="What this quote is for"
+            {/* The comparison lives here, not on a page of its own: it exists so
+                that somebody picks, and picking is what gives this quote lines. */}
+            {data.comparison && (
+              <SupplierComparison
+                comparison={data.comparison}
+                currency={data.currency}
+                selectedId={data.selected_supplier_quote_id}
+                hasEdits={dirtyLines.size > 0}
+                canChoose={editable}
+                pending={choose.pending}
+                error={choose.error}
+                onChoose={async (supplierId, markup) => {
+                  const next = await choose.run(supplierId, markup);
+                  if (next) await mutate(next, { revalidate: false });
+                  return next;
+                }}
               />
-            </Panel>
-          )}
+            )}
+          </div>
 
-          <QuoteForm
-            draft={form}
-            currency={data.currency}
-            editable={editable}
-            onChange={(patch) => setForm({ ...form, ...patch })}
-            commentCounts={fieldComments(data)}
-            onComment={(fieldKey, label) =>
-              setAnchor({
-                target_type: "field",
-                target_ref: fieldKey,
-                label: `the ${label.toLowerCase()} field`,
-              })
-            }
-          />
+          <div className="min-w-0 space-y-3.5">
+            <Sidebar data={data} editable={editable} title={title} onTitle={setTitle} />
 
-          <History quote={data} />
+            <QuoteForm
+              draft={form}
+              currency={data.currency}
+              editable={editable}
+              onChange={(patch) => setForm({ ...form, ...patch })}
+              commentCounts={fieldComments(data)}
+              onComment={(fieldKey, label) =>
+                setAnchor({
+                  target_type: "field",
+                  target_ref: fieldKey,
+                  label: `the ${label.toLowerCase()} field`,
+                })
+              }
+            />
+          </div>
         </div>
-      </div>
+      )}
+
+      {tab === "summary" && (
+        <SummarySheet
+          quote={data}
+          bid={data.bid}
+          draft={bid}
+          editable={editable}
+          onChange={(patch) => setBid({ ...bid, ...patch })}
+          onOpenCompliance={() => setTab("compliance")}
+        />
+      )}
+
+      {tab === "compliance" && (
+        <ComplianceSheet rows={rules} editable={editable} onChange={setRules} />
+      )}
+
+      {/* The derived block comes from the same response as the lists, so a
+          backend that has not caught up yet leaves these empty rather than
+          wrong. Said out loud: a blank sheet reads as a bug, and this is not
+          one — it is two halves of the system on different versions. */}
+      {(tab === "landed" || tab === "costing") && !data.bid && (
+        <InlineNotice tone="info">
+          This sheet is worked out by the server, and this one has not sent it. That
+          happens when the API is running an older build than this screen — the quote
+          itself is fine, and the figures appear as soon as the two agree.
+        </InlineNotice>
+      )}
+
+      {tab === "landed" && data.bid && (
+        <LandedCostSheet
+          bid={data.bid}
+          draft={bid}
+          rows={costs}
+          currency={data.currency}
+          editable={editable}
+          onDraftChange={(patch) => setBid({ ...bid, ...patch })}
+          onRowsChange={setCosts}
+        />
+      )}
+
+      {tab === "costing" && data.bid && (
+        <CostingSheet
+          quote={data}
+          bid={data.bid}
+          draft={bid}
+          editable={editable}
+          onChange={(patch) => setBid({ ...bid, ...patch })}
+        />
+      )}
+
+      {tab === "portal" && (
+        <PortalSheet rows={portal} editable={editable} onChange={setPortal} />
+      )}
+
+      {tab === "discussion" && (
+        <div className="grid gap-3.5 xl:grid-cols-[1.65fr_1fr]">
+          <div className="min-w-0">
+            <Discussion
+              quote={data}
+              anchor={anchor}
+              onAnchorChange={setAnchor}
+              onChanged={() => mutate()}
+            />
+          </div>
+          <div className="min-w-0">
+            <History quote={data} />
+          </div>
+        </div>
+      )}
 
       <DecideDialog
         action={deciding}
@@ -487,12 +680,105 @@ export default function QuoteRequestPage({
   );
 }
 
+/* ── the facts that hold on every tab ────────────────────────────────── */
+
+/**
+ * Who it is for and where it stands, repeated beside each editing tab.
+ *
+ * Repeated rather than fixed above the tabs because it is reference, not
+ * navigation: somebody filling in a compliance row wants the customer and the
+ * closing date in the corner of their eye, and somebody reading the discussion
+ * does not. A quote's title is edited here for the same reason — it belongs
+ * beside the customer rather than in a panel of its own.
+ */
+function Sidebar({
+  data,
+  editable,
+  title,
+  onTitle,
+}: {
+  data: QuoteRequestOut;
+  editable: boolean;
+  title: string;
+  onTitle: (value: string) => void;
+}) {
+  return (
+    <>
+      <Panel className="p-5">
+        <dl className="grid grid-cols-2 gap-x-5 gap-y-4">
+          <Meta label="Customer">{data.customer_name}</Meta>
+          <Meta label="Currency">{data.currency}</Meta>
+          <Meta label="Bid closing">{data.cf_bcd ? date(data.cf_bcd) : "—"}</Meta>
+          <Meta label="Valid until">
+            {data.expiry_date ? date(data.expiry_date) : "—"}
+          </Meta>
+          {data.rfp_number && <Meta label="RFP">{data.rfp_number}</Meta>}
+          {data.line_item_ref && <Meta label="Line">{data.line_item_ref}</Meta>}
+          <Meta label="Team">{data.team_name ?? "—"}</Meta>
+          <Meta label="Raised by">{data.created_by_name ?? "—"}</Meta>
+          <Meta label="Sent">
+            {data.submitted_at ? relative(data.submitted_at) : "not yet"}
+          </Meta>
+          <Meta label="Decided">
+            {data.decided_at ? relative(data.decided_at) : "not yet"}
+          </Meta>
+        </dl>
+
+        {/* Back to where the enquiry actually lives. SharePoint stays the
+            system of record for the bid itself. */}
+        {data.source_task_url && (
+          <a
+            href={data.source_task_url}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-4 inline-flex items-center gap-1.5 border-t border-line pt-4 text-[12px] text-ink-3 transition hover:text-ink"
+          >
+            <ExternalLink className="size-3.5" strokeWidth={1.8} />
+            Open the enquiry in SharePoint
+          </a>
+        )}
+      </Panel>
+
+      {editable && (
+        <Panel className="p-5">
+          <span className="mb-1.5 block text-[12px] text-ink-3">Title</span>
+          <input
+            value={title}
+            onChange={(e) => onTitle(e.target.value)}
+            className="w-full rounded-2xl border border-transparent bg-panel-2 px-4 py-2.5 text-[13px] outline-none transition focus:border-accent"
+            placeholder="What this quote is for"
+          />
+        </Panel>
+      )}
+    </>
+  );
+}
+
 /* ── helpers ─────────────────────────────────────────────────────────── */
 
 const nullable = (v: string) => (v.trim() === "" ? null : v.trim());
 
 function formChanged(a: QuoteFormDraft, b: QuoteFormDraft): boolean {
   return (Object.keys(a) as (keyof QuoteFormDraft)[]).some((key) => a[key] !== b[key]);
+}
+
+function bidChanged(a: BidDraft, b: BidDraft): boolean {
+  return (Object.keys(a) as (keyof BidDraft)[]).some((key) => a[key] !== b[key]);
+}
+
+/**
+ * Whether one of the bid lists has moved since the server sent it.
+ *
+ * Compared as the bodies that would be sent rather than field by field, which
+ * is both shorter and stricter: it catches a reorder, a removal and an added
+ * row as readily as an edit, and it cannot drift out of step with the patch
+ * body the way a hand-written comparison of eleven fields eventually does.
+ *
+ * The rows are already strings — nothing here has been through a number — so
+ * serialising them is comparing exactly what would be sent.
+ */
+function listChanged(now: unknown[], before: unknown[]): boolean {
+  return JSON.stringify(now) !== JSON.stringify(before);
 }
 
 /**

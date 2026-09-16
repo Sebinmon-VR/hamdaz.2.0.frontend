@@ -1356,6 +1356,199 @@ export interface QuoteCommentOut {
   is_open: boolean;
 }
 
+/* ── the bid pack ────────────────────────────────────────────────────── */
+
+/**
+ * A tender is not an estimate with a longer subject line.
+ *
+ * An estimate is a customer, some dates and a list of priced lines. A tender
+ * arrives as an RFP with numbered clauses, a specification that has to be met
+ * character for character, a portal with named cells, and a price the buyer
+ * will read against the supplier's own quotation. Everything below is that
+ * second layer: what the RFP asks for, what the supplier answered, what it
+ * costs to land the goods, and what has to be typed where.
+ *
+ * All of it is optional. A quote raised because somebody rang up and asked for
+ * a price carries none of it, and the screen shows none of it.
+ */
+
+/** Which side of the customs border a cost sits on. Duty is charged on CIF. */
+export type CostStage = "origin" | "destination";
+
+export type ComplianceStatus =
+  | "compliant"
+  | "deviation"
+  | "non_compliant"
+  | "clarify"
+  | "risk"
+  | "open"
+  | "not_applicable"
+  | "noted";
+
+/** What puts a compliance row on the red-flag list. Null keeps it off. */
+export type Severity = "stopper" | "critical" | "high" | "medium" | "note";
+
+export type ComplianceArea = "technical" | "commercial" | "documents" | "logistics";
+
+/**
+ * One row of the landed-cost build-up, as stored.
+ *
+ * The goods are not one of these — they come from the quote's own priced lines
+ * so that repricing from another supplier carries the cost with it. Duty and
+ * financing are not either; both are arithmetic the server does on read. All
+ * three appear in `bid.landed.elements` marked `computed`.
+ */
+export interface QuoteCostLineOut {
+  id: string;
+  position: number;
+  stage: CostStage;
+  label: string;
+  /** Where the number came from: a firm quotation, or our own estimate. */
+  basis: string | null;
+  amount_source: string | null;
+  source_currency: string | null;
+  amount_base: string;
+  is_principal: boolean;
+  is_firm: boolean;
+  notes: string | null;
+}
+
+export interface QuoteComplianceOut {
+  id: string;
+  position: number;
+  /** The matrix's own short handle — "T4", "C11". */
+  ref: string | null;
+  area: ComplianceArea;
+  requirement: string;
+  source_clause: string | null;
+  supplier_position: string | null;
+  status: ComplianceStatus;
+  severity: Severity | null;
+  action: string | null;
+  owner: string | null;
+  resolved: boolean;
+  resolved_at: string | null;
+  is_open: boolean;
+  /** Unresolved and in a state that ought to stop a submission. */
+  is_blocking: boolean;
+}
+
+export interface QuoteSubmissionFieldOut {
+  id: string;
+  position: number;
+  clause: string | null;
+  label: string;
+  /** A cell reference, a tab and cell, or a field name. */
+  destination: string | null;
+  value: string | null;
+  note: string | null;
+  is_mandatory: boolean;
+  entered: boolean;
+  entered_at: string | null;
+}
+
+/**
+ * One row of the build-up as the server reads it back — typed rows and derived
+ * rows together, in the order they are read.
+ *
+ * `computed` is the difference, and it is shown rather than hidden: somebody
+ * checking a landed cost needs to know which figures they can argue with and
+ * which ones follow from the figures above them. A computed row has no `id`,
+ * because there is nothing on it to edit.
+ */
+export interface CostElementOut {
+  ref: number;
+  stage: CostStage;
+  label: string;
+  basis: string | null;
+  amount_source: string | null;
+  source_currency: string | null;
+  amount_base: string;
+  is_principal: boolean;
+  is_firm: boolean;
+  computed: boolean;
+  notes: string | null;
+  id: string | null;
+}
+
+export interface LandedCostOut {
+  currency: string;
+  elements: CostElementOut[];
+  /** Everything up to arrival. What duty is charged on. */
+  cif_subtotal: string;
+  customs_duty: string;
+  financing_cost: string;
+  destination_subtotal: string;
+  total: string;
+  quantity: string | null;
+  per_unit: string | null;
+  /** Why there is no per-unit figure, when there is not. */
+  per_unit_note: string | null;
+  /** The share the supplier or forwarder has committed to; the rest is ours. */
+  firm_percent: string;
+  principal_value: string;
+}
+
+export interface MarkupScenarioOut {
+  markup_percent: string;
+  unit_sell: string | null;
+  total_sell: string;
+  /**
+   * Margin as a share of the selling price — which is what "margin" means to
+   * everybody except the person who applied the markup. A 45% markup is a 31%
+   * margin, and reading one as the other underprices the bid.
+   */
+  margin_percent: string;
+  is_target: boolean;
+}
+
+/** What the buyer makes of our price when they are shown the supplier's. */
+export interface DisclosureOut {
+  principal_value: string;
+  bid_value: string;
+  apparent_uplift_percent: string | null;
+  /** The part of the uplift that is real landed cost rather than margin. */
+  recoverable_cost: string;
+  true_margin_percent: string | null;
+  disclosed: boolean;
+}
+
+export interface RedFlagOut {
+  id: string;
+  ref: string | null;
+  severity: Severity;
+  status: string;
+  issue: string;
+  action: string | null;
+  owner: string | null;
+  resolved: boolean;
+}
+
+/**
+ * Everything derived, computed by the server on every read.
+ *
+ * Nothing in here is stored, and nothing in here is calculated on this side of
+ * the wire. A saved total and the inputs it came from disagree the first time
+ * anybody edits one, and the one people believe is always the wrong one.
+ */
+export interface BidPackOut {
+  landed: LandedCostOut;
+  scenarios: MarkupScenarioOut[];
+  /** The rung the bid is actually built at, when a markup is set. */
+  target: MarkupScenarioOut | null;
+  bid_unit_price: string | null;
+  bid_total: string;
+  /** True when the total is the ladder's answer rather than a decision. */
+  bid_total_is_suggested: boolean;
+  gross_margin: string;
+  gross_margin_percent: string | null;
+  disclosure: DisclosureOut;
+  /** The compliance rows carrying a severity, worst first. */
+  red_flags: RedFlagOut[];
+  /** Said plainly, and deliberately taking no button away. */
+  warnings: string[];
+}
+
 export interface QuoteRequestSummaryOut {
   id: string;
   reference: string | null;
@@ -1370,6 +1563,14 @@ export interface QuoteRequestSummaryOut {
   created_by_name: string | null;
   assigned_to_name: string | null;
   open_comments: number;
+  /**
+   * Unresolved compliance rows that ought to stop a submission. The column a
+   * list of bids is actually scanned for: a total says what one is worth, this
+   * says whether it can be sent.
+   */
+  blocking_issues?: number;
+  rfp_number?: string | null;
+  cf_bcd?: string | null;
   created_at: string;
 }
 
@@ -1402,6 +1603,42 @@ export interface QuoteRequestOut {
   adjustment: string;
   sub_total: string;
   total: string;
+
+  /* ── the bid pack, as stored. All null on an ordinary quote. ── */
+  /** The buyer's own event number. What a bid is quoted by, everywhere. */
+  rfp_number: string | null;
+  buying_entity: string | null;
+  /** The RFP's own numbering for the line being bid — "3.13.5 — CLOTH". */
+  line_item_ref: string | null;
+  manufacturer_name: string | null;
+  manufacturer_part_number: string | null;
+  manufacturer_class_no: string | null;
+  /** The Incoterm the RFP demands, and the place it names. */
+  incoterm_required: string | null;
+  incoterm_place: string | null;
+  ship_to: string | null;
+  requested_delivery_date: string | null;
+  /** What we will commit to, in calendar days from the order. */
+  delivery_days: number | null;
+  /** ISO 3166 alpha-2. Never our own country by default on a branded line. */
+  country_of_origin: string | null;
+  mode_of_shipment: string | null;
+  bid_validity_days: number | null;
+  bid_reference: string | null;
+  technical_verdict: string | null;
+  commercial_verdict: string | null;
+
+  /* The landed-cost inputs. Inputs only — the totals are in `bid`. */
+  supplier_currency: string | null;
+  fx_rate: string | null;
+  customs_duty_percent: string;
+  financing_rate_percent: string;
+  cash_exposure_days: number;
+  target_markup_percent: string | null;
+  submission_unit_price: string | null;
+  submission_total: string | null;
+  /** The RFP makes the principal's quotation a mandatory attachment. */
+  discloses_principal_price: boolean;
 
   multiple_supplier_quotes: boolean;
   /** Set once supplier quotes are attached — they are compared as a unit. */
@@ -1439,6 +1676,27 @@ export interface QuoteRequestOut {
   items: QuoteLineOut[];
   reviews: QuoteReviewOut[];
   comments: QuoteCommentOut[];
+  /**
+   * The bid pack's three lists, and everything derived from them.
+   *
+   * **Optional on purpose, and the compiler should keep them that way.** A
+   * backend that has not been migrated yet — or simply has not been restarted —
+   * answers without these, and a screen that reads `.map` off one of them dies
+   * on render rather than degrading. The two halves of this system deploy
+   * separately, so "the server always sends it" is true only eventually, and
+   * the window where it is false is exactly when somebody is looking.
+   *
+   * Read them through `bidLists()` rather than directly.
+   */
+  cost_lines?: QuoteCostLineOut[];
+  compliance?: QuoteComplianceOut[];
+  submission_fields?: QuoteSubmissionFieldOut[];
+  /**
+   * Everything derived from the above: the landed cost, the margin ladder, the
+   * price the buyer reads against the principal's, and what is outstanding.
+   * Computed by the server on every read; never calculated on this side.
+   */
+  bid?: BidPackOut | null;
   /**
    * The supplier comparison, inline. Same analysis the comparison module
    * builds, carried on the quote so the picking happens here rather than on a

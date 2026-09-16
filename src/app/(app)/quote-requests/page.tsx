@@ -63,7 +63,10 @@ export default function QuoteRequestsPage() {
         !needle ||
         q.title.toLowerCase().includes(needle) ||
         q.customer_name.toLowerCase().includes(needle) ||
-        (q.reference ?? "").toLowerCase().includes(needle),
+        (q.reference ?? "").toLowerCase().includes(needle) ||
+        // On a tender nobody remembers our own reference — they remember the
+        // buyer's event number, which is what every email about it quotes.
+        (q.rfp_number ?? "").toLowerCase().includes(needle),
     );
 
   const count = (s: QuoteStatus) => all.filter((q) => q.status === s).length;
@@ -100,7 +103,7 @@ export default function QuoteRequestsPage() {
         <SearchInput
           value={search}
           onChange={setSearch}
-          placeholder="Title, customer or reference"
+          placeholder="Title, customer, reference or RFP number"
           className="w-full max-w-xs"
         />
         <PillRail
@@ -127,7 +130,7 @@ export default function QuoteRequestsPage() {
           title={needle ? "Nothing matches" : "No quotes here yet"}
           body={
             needle
-              ? "Try part of a title, a customer or a reference."
+              ? "Try part of a title, a customer, a reference or an RFP number."
               : "A quote request is how a customer quote gets written, priced against supplier offers, and approved before it reaches Zoho."
           }
           action={
@@ -151,8 +154,15 @@ export default function QuoteRequestsPage() {
           {rows.map((quote) => (
             <Link key={quote.id} href={`/quote-requests/${quote.id}`} className="block">
               <Row className="cursor-pointer">
-                <span className="tnum w-24 shrink-0 truncate text-[12px] text-ink-3">
-                  {quote.reference ?? "—"}
+                <span
+                  className="tnum w-24 shrink-0 truncate text-[12px] text-ink-3"
+                  title={
+                    quote.rfp_number && quote.reference
+                      ? `${quote.rfp_number} · ours: ${quote.reference}`
+                      : undefined
+                  }
+                >
+                  {quote.rfp_number ?? quote.reference ?? "—"}
                 </span>
 
                 <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
@@ -170,6 +180,16 @@ export default function QuoteRequestsPage() {
                   <QuoteStatusBadge status={quote.status} />
                   {quote.open_comments > 0 && (
                     <Badge tone="warn">{quote.open_comments} open</Badge>
+                  )}
+                  {/* A total says what a bid is worth. This says whether it can
+                      be sent, which on a tender is the question being asked. */}
+                  {(quote.blocking_issues ?? 0) > 0 && (
+                    <Badge
+                      tone="danger"
+                      title="Compliance rows that are non-compliant, open, or waiting on a clarification from the buyer."
+                    >
+                      {quote.blocking_issues} to clear
+                    </Badge>
                   )}
                 </span>
 

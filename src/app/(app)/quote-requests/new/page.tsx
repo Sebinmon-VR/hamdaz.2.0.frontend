@@ -50,6 +50,25 @@ export default function NewQuoteRequestPage() {
     { name: "", quantity: 1, rate: 0 },
   ]);
 
+  // The tender half. Behind a switch because most quotes are not tenders, and
+  // a blank form that opens with an RFP number and an Incoterm has told the
+  // person quoting for a phone call that they are in the wrong place.
+  //
+  // Only the particulars that come off the enquiry document are here. The
+  // compliance matrix, the landed cost and the portal checklist are the work
+  // of the next few days rather than of this form, and they need the supplier
+  // quotes — which do not exist yet — so they live on the quote itself.
+  const [tender, setTender] = useState(false);
+  const [rfp, setRfp] = useState("");
+  const [entity, setEntity] = useState("");
+  const [lineRef, setLineRef] = useState("");
+  const [incoterm, setIncoterm] = useState("");
+  const [incotermPlace, setIncotermPlace] = useState("");
+  const [shipTo, setShipTo] = useState("");
+  const [origin, setOrigin] = useState("");
+  const [wanted, setWanted] = useState("");
+  const [validity, setValidity] = useState("");
+
   const create = useAction(async () =>
     api.post<QuoteRequestOut>(
       withQuery("/quote-requests", { team }),
@@ -64,6 +83,21 @@ export default function NewQuoteRequestPage() {
         multiple_supplier_quotes: several,
         // A line with no name is a row somebody started and abandoned.
         items: lines.filter((line) => line.name.trim()),
+        // Sent only when the switch is on, so turning it off and creating the
+        // quote does not quietly store half a tender.
+        ...(tender
+          ? {
+              rfp_number: rfp.trim() || null,
+              buying_entity: entity.trim() || null,
+              line_item_ref: lineRef.trim() || null,
+              incoterm_required: incoterm.trim() || null,
+              incoterm_place: incotermPlace.trim() || null,
+              ship_to: shipTo.trim() || null,
+              country_of_origin: origin.trim() || null,
+              requested_delivery_date: wanted || null,
+              bid_validity_days: validity.trim() || null,
+            }
+          : {}),
       },
     ),
   );
@@ -181,12 +215,18 @@ export default function NewQuoteRequestPage() {
             </Field>
           </div>
 
-          <div className="mt-5 border-t border-line pt-5">
+          <div className="mt-5 space-y-4 border-t border-line pt-5">
             <Toggle
               checked={several}
               onChange={setSeveral}
               label="Several suppliers will quote for this"
               hint="Their quotes get compared side by side, and approving means naming the one that won."
+            />
+            <Toggle
+              checked={tender}
+              onChange={setTender}
+              label="This is a tender"
+              hint="An RFP with numbered clauses and a portal to submit through, rather than somebody asking us for a price. Opens the bid particulars."
             />
           </div>
         </Panel>
@@ -209,6 +249,86 @@ export default function NewQuoteRequestPage() {
           </Panel>
         </div>
       </div>
+
+      {tender && (
+        <Panel className="p-5">
+          <PanelHead
+            title="Bid particulars"
+            hint="What the enquiry document says. The compliance matrix, the landed cost and the portal fields come next, on the quote itself — they need the supplier quotes, which do not exist yet."
+          />
+          <div className="mt-5 grid gap-4 sm:grid-cols-3">
+            <Field label="Event / RFP number" hint="Theirs, not ours. Quoted back in every clarification.">
+              <Input
+                value={rfp}
+                onChange={(e) => setRfp(e.target.value)}
+                placeholder="RFP 6000149233"
+              />
+            </Field>
+            <Field label="Buying entity" hint="Often not the same as whoever ran the tender.">
+              <Input value={entity} onChange={(e) => setEntity(e.target.value)} />
+            </Field>
+            <Field label="Line item reference" hint="How the buyer numbers the line.">
+              <Input
+                value={lineRef}
+                onChange={(e) => setLineRef(e.target.value)}
+                placeholder="3.13.5 — CLOTH"
+              />
+            </Field>
+
+            <Field label="Incoterm required">
+              <Select value={incoterm} onChange={(e) => setIncoterm(e.target.value)}>
+                <option value="">—</option>
+                {["EXW", "FCA", "FAS", "FOB", "CFR", "CIF", "CPT", "CIP", "DAP", "DPU", "DDP"].map(
+                  (term) => (
+                    <option key={term} value={term}>
+                      {term}
+                    </option>
+                  ),
+                )}
+              </Select>
+            </Field>
+            <Field label="Named place">
+              <Input
+                value={incotermPlace}
+                onChange={(e) => setIncotermPlace(e.target.value)}
+                placeholder="Where that term hands the goods over"
+              />
+            </Field>
+            <Field
+              label="Ship to, as stated"
+              hint="When it disagrees with the named place, ask which is meant — it is a real cost."
+            >
+              <Input value={shipTo} onChange={(e) => setShipTo(e.target.value)} />
+            </Field>
+
+            <Field
+              label="Country of origin"
+              hint="Two letters, and it is where the goods are made — not where we are."
+            >
+              <Input
+                value={origin}
+                maxLength={2}
+                onChange={(e) => setOrigin(e.target.value.toUpperCase())}
+                placeholder="GB"
+              />
+            </Field>
+            <Field
+              label="Delivery date asked for"
+              hint="As stated, even when it has already passed — the gap is a deviation to declare."
+            >
+              <Input type="date" value={wanted} onChange={(e) => setWanted(e.target.value)} />
+            </Field>
+            <Field label="Bid validity" hint="Days our price has to stand for.">
+              <Input
+                value={validity}
+                inputMode="numeric"
+                onChange={(e) => setValidity(e.target.value)}
+                placeholder="90"
+              />
+            </Field>
+          </div>
+        </Panel>
+      )}
 
       <Panel className="p-5">
         <PanelHead
