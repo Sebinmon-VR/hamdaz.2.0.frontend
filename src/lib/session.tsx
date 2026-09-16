@@ -37,32 +37,27 @@ export interface Session {
 const SessionContext = createContext<Session | null>(null);
 
 /**
- * Modules whose READ endpoints take nothing but a session.
+ * The one module that is reachable without a team grant.
  *
- * All three are in the module catalogue "for navigation", in its own words —
- * being listed there is what gives them a route and a name, not what gates
- * them. Their routers use `CurrentUser` with no `require_module`, unlike
- * proposals and quote comparison which do gate.
+ * `leave`, `quotes` and `assignment` used to be here too, and were listed
+ * unconditionally because their routers took a bare session and gated nothing.
+ * That was honest about the backend and wrong for the person using the screen:
+ * the module access page offered a switch for each of them, turning it off did
+ * nothing, and the only reasonable conclusion was that access was broken. They
+ * now enforce their grant — see `app/access/deps.py` — so the grant is what
+ * decides, here and there alike.
  *
- * Assignment is the one worth spelling out: its router says reading is open
- * because "the rule deciding how much work somebody gets should be visible to
- * the person it applies to". Hiding it behind a team grant would defeat that
- * exactly. Writing is still gated — by role and team membership, checked by
- * the backend, with `may_edit` coming back per policy so the UI reports the
- * real answer rather than guessing.
- *
- * HR is the awkward one and is only half here. Its catalogue entry says in so
- * many words that being listed is for navigation and that "who may actually
- * use it is membership of the HR team", so a grant is not what opens it and
- * `hr` belongs in this list. But most of its router depends on `HRUser`, not
- * `CurrentUser`, so only the two genuinely personal pages are listed in
- * OPEN_PAGES below — `my_reviews` and `my_record`, whose endpoints narrow
- * themselves to the caller's own rows. Everything else in HR is gated on
- * `isHr` at the call site, exactly as the leave queue already is, because a
- * module grant does not make anybody HR and offering a colleague a link to
- * the personnel files would only ever produce a 403.
+ * `hr` stays, and only half of it. Its catalogue entry says in so many words
+ * that being listed is for navigation and that "who may actually use it is
+ * membership of the HR team", so a grant is not what opens it. Most of its
+ * router depends on `HRUser` rather than `CurrentUser`, which is why only the
+ * two genuinely personal pages appear in OPEN_PAGES below — `my_reviews` and
+ * `my_record`, whose endpoints narrow themselves to the caller's own rows.
+ * Everything else in HR is gated on `isHr` at the call site, exactly as the
+ * leave queue already is: a module grant does not make anybody HR, and offering
+ * a colleague a link to the personnel files would only ever produce a 403.
  */
-const ALWAYS_OPEN = ["leave", "quotes", "assignment", "hr"] as const;
+const ALWAYS_OPEN = ["hr"] as const;
 
 export function useSession(): Session {
   const session = useContext(SessionContext);
@@ -147,9 +142,6 @@ export function useLoadSession(): SessionLoad {
 
 /** The page keys of the always-open modules, from the backend catalogue. */
 const OPEN_PAGES: Record<(typeof ALWAYS_OPEN)[number], string[]> = {
-  leave: ["mine", "request", "calendar", "queue", "rules"],
-  quotes: ["list", "detail"],
-  assignment: ["labels", "policy", "preview"],
   // Only the two pages whose endpoints take a bare `CurrentUser`. The other
   // eight HR pages are `HRUser` on the backend and are gated on `isHr`, so
   // listing them here would hand every colleague a guaranteed 403.

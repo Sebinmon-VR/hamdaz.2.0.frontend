@@ -904,6 +904,12 @@ export interface ComparisonQuoteOut extends Required<Omit<QuoteIn, "items" | "so
   file_type: string | null;
   items: ItemOut[];
   document_url?: string | null;
+  /**
+   * Where the supplier's own document was filed in OneDrive, when filing
+   * is switched on. Opening it uses the viewer's own drive access, not
+   * ours — so a link here is not a promise that they can read it.
+   */
+  drive_url?: string | null;
 }
 
 export interface ExtractionFailure {
@@ -1549,6 +1555,22 @@ export interface BidPackOut {
   warnings: string[];
 }
 
+/** One supplier document uploaded against a quote. */
+export interface QuoteDocumentOut {
+  supplier_quote_id: string;
+  supplier_name: string;
+  file_name: string | null;
+  file_type: string | null;
+  /**
+   * Where it was filed in the shared library. Opening it uses the viewer's own
+   * SharePoint access, never the app's — so a link here is not a promise that
+   * they can read it.
+   */
+  drive_url: string | null;
+  /** True for the offer this quote is actually priced from. */
+  is_selected: boolean;
+}
+
 export interface QuoteRequestSummaryOut {
   id: string;
   reference: string | null;
@@ -1571,6 +1593,12 @@ export interface QuoteRequestSummaryOut {
   blocking_issues?: number;
   rfp_number?: string | null;
   cf_bcd?: string | null;
+  /**
+   * Super admin only, and the server's answer rather than a role check done
+   * here. Optional for the same reason the bid fields are: an API that has not
+   * been restarted does not send it, and absent must read as "no".
+   */
+  may_delete?: boolean;
   created_at: string;
 }
 
@@ -1688,6 +1716,12 @@ export interface QuoteRequestOut {
    *
    * Read them through `bidLists()` rather than directly.
    */
+  /**
+   * The supplier documents uploaded against this quote, and where each was
+   * filed. Read off the saved rows rather than out of `comparison`, which is a
+   * snapshot of a computation made before anything is filed anywhere.
+   */
+  documents?: QuoteDocumentOut[];
   cost_lines?: QuoteCostLineOut[];
   compliance?: QuoteComplianceOut[];
   submission_fields?: QuoteSubmissionFieldOut[];
@@ -1717,6 +1751,12 @@ export interface QuoteRequestOut {
   submit_reason: string | null;
   may_approve: boolean;
   approve_reason: string | null;
+  /**
+   * Super admin only, and the server's answer rather than one worked out here
+   * from a role. A quote carries an approval history that is appended and never
+   * edited, so removing one is deliberately not the author's to do.
+   */
+  may_delete: boolean;
 }
 
 /**

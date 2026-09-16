@@ -2,6 +2,7 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import {
   Check,
@@ -10,8 +11,10 @@ import {
   Handshake,
   MessageSquare,
   RotateCcw,
+  Download,
   Save,
   Send,
+  Trash2,
   X,
 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -27,7 +30,7 @@ import {
   type SupplierQuoteFailure,
 } from "@/lib/types";
 import { Badge, Meta, PageHead, Panel, StatBox } from "@/components/ui/primitives";
-import { Button, Field, PillRail, Select, Textarea } from "@/components/ui/controls";
+import { Button, Field, Input, PillRail, Select, Textarea } from "@/components/ui/controls";
 import { ErrorState, InlineNotice, Modal, PanelSkeleton } from "@/components/ui/feedback";
 import {
   canEdit,
@@ -38,6 +41,8 @@ import { QuoteForm, draftOf, type QuoteFormDraft } from "@/components/quotes/Quo
 import { LineEditor } from "@/components/quotes/LineEditor";
 import { SupplierComparison } from "@/components/quotes/SupplierComparison";
 import { SupplierUpload } from "@/components/quotes/SupplierUpload";
+import { Documents } from "@/components/quotes/Documents";
+import { DeleteQuoteDialog } from "@/components/quotes/DeleteQuote";
 import { History } from "@/components/quotes/History";
 import { Discussion, QUOTE_ANCHOR, type CommentAnchor } from "@/components/quotes/Discussion";
 import { SummarySheet } from "@/components/quotes/sheet/SummarySheet";
@@ -115,6 +120,7 @@ export default function QuoteRequestPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const router = useRouter();
 
   const { data, error, isLoading, mutate } = useSWR<QuoteRequestOut>(
     `/quote-requests/${id}`,
@@ -147,6 +153,7 @@ export default function QuoteRequestPage({
   const [asBid, setAsBid] = useState(false);
   const [deciding, setDeciding] = useState<ReviewAction | null>(null);
   const [negotiating, setNegotiating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [anchor, setAnchor] = useState<CommentAnchor>(QUOTE_ANCHOR);
   const [repriced, setRepriced] = useState<{ before: string; after: string } | null>(null);
 
@@ -183,6 +190,19 @@ export default function QuoteRequestPage({
   const submit = useAction(async () =>
     api.post<QuoteRequestOut>(`/quote-requests/${id}/submit`),
   );
+  // Returns an explicit `true` rather than the call's own result. A 204 gives
+  // back undefined and so does a failed action, so the result alone cannot tell
+  // the two apart — and navigating away on a delete that did not happen is the
+  // one outcome worth ruling out here.
+  // The five sheets as an .xlsx, built by the server from the same computation
+  // the screen draws — so the workbook and the page cannot disagree.
+  const exportBook = useAction(async () =>
+    api.download(`/quote-requests/${id}/workbook`, "bid.xlsx"),
+  );
+  const remove = useAction(async () => {
+    await api.del(`/quote-requests/${id}`);
+    return true as const;
+  });
   const choose = useAction(async (supplier_quote_id: string, markup_percent: string) =>
     api.post<QuoteRequestOut>(`/quote-requests/${id}/select-supplier`, {
       supplier_quote_id,
@@ -355,14 +375,38 @@ export default function QuoteRequestPage({
               </Button>
             )}
 
+            {/* Shown on a bid only. An ordinary estimate would export five
+                sheets of blanks, which is worse than no button. */}
+            {isBid && (
+              <Button
+                icon={Download}
+                loading={exportBook.pending}
+                onClick={() => exportBook.run()}
+              >
+                Export
+              </Button>
+            )}
+
             <Button icon={MessageSquare} onClick={() => setDeciding("comment")}>
               Comment
             </Button>
+
+            {/* Last, and deliberately far from Approve. Super admin only —
+                `may_delete` is the server's answer, not a role check done
+                here. */}
+            {data.may_delete && (
+              <Button variant="danger" icon={Trash2} onClick={() => setDeleting(true)}>
+                Delete
+              </Button>
+            )}
           </>
         }
       />
 
       {save.error && <InlineNotice tone="danger">{save.error}</InlineNotice>}
+      {exportBook.error && (
+        <InlineNotice tone="danger">{exportBook.error}</InlineNotice>
+      )}
       {submit.error && <InlineNotice tone="danger">{submit.error}</InlineNotice>}
 
       {/* Submitting and notifying are separate things on the backend, and the
@@ -537,6 +581,8 @@ export default function QuoteRequestPage({
               }}
             />
 
+            <Documents documents={data.documents ?? []} editable={editable} />
+
             {/* The comparison lives here, not on a page of its own: it exists so
                 that somebody picks, and picking is what gives this quote lines. */}
             {data.comparison && (
@@ -664,6 +710,27 @@ export default function QuoteRequestPage({
           } else {
             await mutate();
           }
+        }}
+      />
+
+      <DeleteQuoteDialog
+        open={deleting}
+        quote={{
+          reference: data.reference,
+          rfp_number: data.rfp_number,
+          title: data.title,
+          revision: data.revision,
+          itemCount: data.items.length,
+          reviewCount: data.reviews.length,
+        }}
+        pending={remove.pending}
+        error={remove.error}
+        onClose={() => setDeleting(false)}
+        onConfirm={async () => {
+          // Only on a confirmed success. Otherwise the dialog stays open with
+          // the reason on it, rather than the screen navigating away from a
+          // delete that did not happen.
+          if (await remove.run()) router.push("/quote-requests");
         }}
       />
 
@@ -1112,3 +1179,4 @@ function NegotiateDialog({
     </Modal>
   );
 }
+

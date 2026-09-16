@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { FileText, Plus } from "lucide-react";
-import { withQuery } from "@/lib/api";
+import { FileText, Plus, Trash2 } from "lucide-react";
+import { api, withQuery } from "@/lib/api";
+import { useAction } from "@/lib/hooks";
 import { amount, decimalPercent, num } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import type { QuoteRequestSummaryOut, QuoteStatus } from "@/lib/types";
@@ -19,6 +20,7 @@ import {
 import { LinkButton, PillRail, SearchInput, Toggle } from "@/components/ui/controls";
 import { Empty, ErrorState, RowsSkeleton } from "@/components/ui/feedback";
 import { QuoteStatusBadge } from "@/components/quotes/QuoteRequestBits";
+import { DeleteQuoteDialog } from "@/components/quotes/DeleteQuote";
 
 /**
  * Customer quotes we are putting together, and where each one has got to.
@@ -52,6 +54,14 @@ export default function QuoteRequestsPage() {
 
   const all = data ?? [];
   const needle = search.trim().toLowerCase();
+  // The quote awaiting confirmation, or null. Held as the row itself rather
+  // than an id so the dialog can name what is about to go.
+  const [doomed, setDoomed] = useState<QuoteRequestSummaryOut | null>(null);
+  const remove = useAction(async (id: string) => {
+    await api.del(`/quote-requests/${id}`);
+    return true as const;
+  });
+
   const rows = all
     .filter((q) =>
       status === "open"
@@ -152,7 +162,8 @@ export default function QuoteRequestsPage() {
           </RowHead>
 
           {rows.map((quote) => (
-            <Link key={quote.id} href={`/quote-requests/${quote.id}`} className="block">
+            <div key={quote.id} className="group relative">
+            <Link href={`/quote-requests/${quote.id}`} className="block">
               <Row className="cursor-pointer">
                 <span
                   className="tnum w-24 shrink-0 truncate text-[12px] text-ink-3"
@@ -202,6 +213,23 @@ export default function QuoteRequestsPage() {
                 </span>
               </Row>
             </Link>
+
+            {/* Outside the anchor, not inside it: a button nested in a link is
+                invalid markup and behaves differently in every browser. Sits
+                over the row's right edge and appears on hover or keyboard
+                focus, so it is reachable without a mouse but not competing for
+                attention on every row. */}
+            {quote.may_delete && (
+              <button
+                aria-label={`Delete ${quote.title}`}
+                title="Delete this quote request"
+                onClick={() => setDoomed(quote)}
+                className="absolute right-3 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-[10px] text-ink-4 opacity-0 transition hover:bg-danger-soft hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
+              >
+                <Trash2 className="size-3.5" strokeWidth={1.8} />
+              </button>
+            )}
+            </div>
           ))}
         </Panel>
       )}
@@ -215,6 +243,25 @@ export default function QuoteRequestsPage() {
           until somebody creates them there. Nothing here writes to Zoho.
         </p>
       )}
+
+      <DeleteQuoteDialog
+        open={doomed !== null}
+        quote={
+          doomed ?? { reference: null, title: "", revision: 1 }
+        }
+        pending={remove.pending}
+        error={remove.error}
+        onClose={() => setDoomed(null)}
+        onConfirm={async () => {
+          if (!doomed) return;
+          // Only on a confirmed success. A 204 and a failed action both return
+          // undefined, so the action returns an explicit true instead.
+          if (await remove.run(doomed.id)) {
+            setDoomed(null);
+            await mutate();
+          }
+        }}
+      />
     </>
   );
 }

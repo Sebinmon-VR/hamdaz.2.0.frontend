@@ -207,9 +207,64 @@ function detailOf(payload: unknown): string | null {
   return null;
 }
 
+/**
+ * Fetch a file and hand it to the browser as a download.
+ *
+ * Deliberately not an `<a href>` to the API. Every request here carries the
+ * session cookie via `credentials: "include"`, and a plain link is a top-level
+ * navigation to a different origin — which may or may not carry that cookie
+ * depending on the SameSite setting, and fails as an unhelpful sign-in page
+ * when it does not. Fetching the blob uses the same authenticated path as
+ * everything else, and then the anchor is a local object URL.
+ *
+ * The filename comes from `Content-Disposition` when the server sends one, so
+ * the name is the server's decision rather than a guess assembled here.
+ */
+async function download(path: string, fallbackName: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(apiUrl(path), {
+      credentials: "include",
+      headers: { Accept: "*/*" },
+    });
+  } catch (cause) {
+    throw new ApiError(0, "Could not reach the Hamdaz API.", cause);
+  }
+
+  if (!response.ok) {
+    // The body of a failed download is JSON like any other error, so it is
+    // read the same way rather than surfacing a bare status code.
+    let detail = `The download failed (${response.status}).`;
+    try {
+      const body = await response.json();
+      if (typeof body?.detail === "string") detail = body.detail;
+    } catch {
+      // A non-JSON error body tells us nothing more than the status did.
+    }
+    throw new ApiError(response.status, detail);
+  }
+
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+  const name = match ? decodeURIComponent(match[1]) : fallbackName;
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  // Revoked on the next tick rather than immediately: Safari has not always
+  // finished reading the blob by the time click() returns.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export const api = {
   get: <T>(path: string, query?: Query, signal?: AbortSignal) =>
     request<T>(path, { query, signal }),
+  download,
   post: <T>(path: string, body?: unknown, query?: Query) =>
     request<T>(path, { method: "POST", body, query }),
   put: <T>(path: string, body?: unknown) => request<T>(path, { method: "PUT", body }),
