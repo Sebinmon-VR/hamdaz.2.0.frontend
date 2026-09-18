@@ -78,6 +78,8 @@ export function LineEditor({
   dirtyIds: ReadonlySet<string>;
   quote: {
     sub_total: string;
+    total_excl_tax: string;
+    tax_total: string;
     total: string;
     discount: string;
     shipping_charge: string;
@@ -678,6 +680,8 @@ function Totals({
 }: {
   quote: {
     sub_total: string;
+    total_excl_tax: string;
+    tax_total: string;
     total: string;
     discount: string;
     shipping_charge: string;
@@ -685,6 +689,7 @@ function Totals({
   };
   currency: string;
 }) {
+  const taxed = !isZero(quote.tax_total);
   return (
     <div className="space-y-1.5 border-t border-line px-5 py-4">
       <Line label="Sub-total" value={quote.sub_total} currency={currency} />
@@ -697,7 +702,18 @@ function Totals({
       {!isZero(quote.adjustment) && (
         <Line label="Adjustment" value={quote.adjustment} currency={currency} />
       )}
-      <Line label="Total" value={quote.total} currency={currency} strong />
+      {/* Both totals, when there is tax: a customer reads the one before tax
+          and the one they pay, and neither stands in for the other. */}
+      {taxed && (
+        <Line label="Total before tax" value={quote.total_excl_tax} currency={currency} />
+      )}
+      {taxed && <Line label="Tax" value={quote.tax_total} currency={currency} />}
+      <Line
+        label={taxed ? "Total incl. tax" : "Total"}
+        value={quote.total}
+        currency={currency}
+        strong
+      />
     </div>
   );
 }

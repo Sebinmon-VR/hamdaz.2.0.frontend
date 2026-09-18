@@ -1630,6 +1630,9 @@ export interface QuoteRequestOut {
   shipping_charge: string;
   adjustment: string;
   sub_total: string;
+  /** Before tax, and the tax on its own. `total` is what the customer pays. */
+  total_excl_tax: string;
+  tax_total: string;
   total: string;
 
   /* ── the bid pack, as stored. All null on an ordinary quote. ── */

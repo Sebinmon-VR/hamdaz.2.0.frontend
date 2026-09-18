@@ -508,8 +508,13 @@ export default function QuoteRequestPage({
       </Panel>
 
       {/* ── the numbers ── */}
-      <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <StatBox label="Total" value={amount(data.total, currency)} />
+      <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
+        <StatBox
+          label="Total incl. tax"
+          value={amount(data.total, currency)}
+          hint={`${amount(data.tax_total, currency)} of it is tax.`}
+        />
+        <StatBox label="Total before tax" value={amount(data.total_excl_tax, currency)} />
         {isBid && data.bid ? (
           <StatBox
             label="Landed cost"
