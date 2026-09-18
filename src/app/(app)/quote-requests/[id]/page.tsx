@@ -38,6 +38,7 @@ import {
   QuoteStatusBadge,
 } from "@/components/quotes/QuoteRequestBits";
 import { QuoteForm, draftOf, type QuoteFormDraft } from "@/components/quotes/QuoteForm";
+import { Calculations } from "@/components/quotes/Calculations";
 import { LineEditor } from "@/components/quotes/LineEditor";
 import { SupplierComparison } from "@/components/quotes/SupplierComparison";
 import { SupplierUpload } from "@/components/quotes/SupplierUpload";
@@ -628,6 +629,8 @@ export default function QuoteRequestPage({
               title={title}
               onTitle={setTitle}
             />
+
+            <Calculations steps={data.calculation} />
 
             <QuoteForm
               draft={form}

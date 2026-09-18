@@ -1462,6 +1462,29 @@ export interface QuoteSubmissionFieldOut {
  * which ones follow from the figures above them. A computed row has no `id`,
  * because there is nothing on it to edit.
  */
+/** Zoho Books' rate between two currencies, with its working. */
+export interface FxQuoteOut {
+  from_currency: string;
+  to_currency: string;
+  /** Units of `to_currency` per unit of `from_currency` — the bid's `fx_rate`. */
+  rate: string;
+  base_currency: string;
+  from_in_base: string;
+  to_in_base: string;
+  effective_date: string | null;
+  source: string;
+}
+
+/** One line of the working behind a quote's figures. */
+export interface CalcStepOut {
+  group: "rate" | "lines" | "totals" | "tax" | "landed" | "bid";
+  label: string;
+  working: string;
+  result: string;
+  /** Null for a rate or a percentage. */
+  currency: string | null;
+}
+
 export interface CostElementOut {
   ref: number;
   stage: CostStage;
@@ -1725,6 +1748,8 @@ export interface QuoteRequestOut {
    * snapshot of a computation made before anything is filed anywhere.
    */
   documents?: QuoteDocumentOut[];
+  /** Every sum on the quote, written out in the order it runs. */
+  calculation: CalcStepOut[];
   cost_lines?: QuoteCostLineOut[];
   compliance?: QuoteComplianceOut[];
   submission_fields?: QuoteSubmissionFieldOut[];

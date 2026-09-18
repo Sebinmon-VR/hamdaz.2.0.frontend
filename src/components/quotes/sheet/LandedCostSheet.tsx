@@ -1,7 +1,11 @@
 "use client";
 
-import { Lock, Plus, Trash2 } from "lucide-react";
-import { amount, decimal } from "@/lib/format";
+import { useState } from "react";
+import { Lock, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { api } from "@/lib/api";
+import { useAction } from "@/lib/hooks";
+import { amount, date, decimal } from "@/lib/format";
+import type { FxQuoteOut } from "@/lib/types";
 import type { BidPackOut } from "@/lib/types";
 import { blankCostRow, type BidDraft, type CostRow } from "@/components/quotes/bid";
 import {
@@ -62,6 +66,23 @@ export function LandedCostSheet({
   const foreign = draft.supplier_currency.trim();
   const hasRate = Boolean(draft.fx_rate.trim()) && Boolean(foreign);
 
+  // Zoho's rate, into the cell. The estimate will be converted at this exact
+  // figure, so costing the bid at it is what makes the two documents agree.
+  const [rateNote, setRateNote] = useState<string | null>(null);
+  const zohoRate = useAction(async () =>
+    api.get<FxQuoteOut>("/quote-requests/fx-rate", { from: foreign, to: currency }),
+  );
+  async function useZohoRate() {
+    const found = await zohoRate.run();
+    if (!found) return;
+    onDraftChange({ fx_rate: found.rate });
+    setRateNote(
+      `Zoho Books: 1 ${found.from_currency} = ${found.rate} ${found.to_currency}` +
+        (found.effective_date ? `, effective ${date(found.effective_date)}` : "") +
+        ". Save to keep it.",
+    );
+  }
+
   const set =
     <K extends keyof BidDraft>(key: K) =>
     (value: string) =>
@@ -108,14 +129,32 @@ export function LandedCostSheet({
           label={`${currency} per ${foreign || "unit"}`}
           note="The rate the bid is costed at — mid-market plus a spread. The price stands for months; the money moves once."
         >
-          <div className="w-32">
-            <CellInput
-              value={draft.fx_rate}
-              editable={editable}
-              onChange={set("fx_rate")}
-              numeric
-              placeholder="4.9500"
-            />
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="w-32">
+              <CellInput
+                value={draft.fx_rate}
+                editable={editable}
+                onChange={set("fx_rate")}
+                numeric
+                placeholder="4.9500"
+              />
+            </div>
+            {editable && foreign.length === 3 && (
+              <button
+                type="button"
+                onClick={useZohoRate}
+                disabled={zohoRate.pending}
+                className="inline-flex items-center gap-1 rounded-[4px] border border-line px-2 py-1 text-[11.5px] text-ink-2 hover:border-line-strong disabled:opacity-60"
+              >
+                <RefreshCw className={zohoRate.pending ? "size-3 animate-spin" : "size-3"} />
+                Use Zoho&apos;s rate
+              </button>
+            )}
+            {(rateNote || zohoRate.error) && (
+              <span className={zohoRate.error ? "text-[11.5px] text-danger" : "text-[11.5px] text-ink-4"}>
+                {zohoRate.error ?? rateNote}
+              </span>
+            )}
           </div>
         </Fact>
         <Fact
