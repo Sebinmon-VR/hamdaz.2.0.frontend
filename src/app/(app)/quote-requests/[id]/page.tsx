@@ -18,7 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { amount, date, dateTime, decimal, decimalPercent, num, relative } from "@/lib/format";
+import { amount, date, dateTime, decimal, decimalPercent, num, quotePreview, relative } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
 import {
   toDraft,
@@ -141,6 +141,7 @@ export default function QuoteRequestPage({
   const [form, setForm] = useState<QuoteFormDraft | null>(null);
   const [bid, setBid] = useState<BidDraft | null>(null);
   const [lines, setLines] = useState<QuoteLineDraft[]>([]);
+  const [targetMarkup, setTargetMarkup] = useState<string | null>(null);
   const [costs, setCosts] = useState<CostRow[]>([]);
   const [rules, setRules] = useState<ComplianceRow[]>([]);
   const [portal, setPortal] = useState<PortalRow[]>([]);
@@ -178,6 +179,7 @@ export default function QuoteRequestPage({
     setBid(bidDraftOf(data));
     setTitle(data.title);
     setLines(data.items.map(toDraft));
+    setTargetMarkup(data.target_markup_percent);
     const lists = bidLists(data);
     setCosts(lists.costLines.map(costRowOf));
     setRules(lists.compliance.map(complianceRowOf));
@@ -245,6 +247,7 @@ export default function QuoteRequestPage({
     title !== data.title ||
     lines.length !== data.items.length ||
     lines.some((line, i) => line.id !== data.items[i]?.id) ||
+    targetMarkup !== data.target_markup_percent ||
     formChanged(form, draftOf(data)) ||
     bidChanged(bid, bidDraftOf(data)) ||
     listChanged(costs.map(costRowIn), lists.costLines.map((c) => costRowIn(costRowOf(c)))) ||
@@ -256,6 +259,30 @@ export default function QuoteRequestPage({
       portal.map(portalRowIn),
       lists.submissionFields.map((f) => portalRowIn(portalRowOf(f))),
     );
+
+  // This is deliberately a local calculation only. `persist` below remains
+  // the sole path that sends a PATCH request, so a person can see the exact
+  // Zoho-shaped result while typing without changing the saved quote.
+  const livePreview = unsaved
+    ? quotePreview(
+        lines
+          .filter((line) => line.name.trim())
+          .map((line) => ({
+            key: line.key,
+            quantity: line.quantity,
+            rate: line.rate,
+            discount: line.discount,
+            taxPercentage: line.tax_percentage,
+            costRate: line.cost_rate,
+          })),
+        {
+          discount: form.discount,
+          shipping_charge: form.shipping_charge,
+          adjustment: form.adjustment,
+        },
+      )
+    : null;
+  const displayedTotals = livePreview ?? data;
 
   function patchBody() {
     return {
@@ -283,6 +310,7 @@ export default function QuoteRequestPage({
       discount: form!.discount.trim() || "0",
       shipping_charge: form!.shipping_charge.trim() || "0",
       adjustment: form!.adjustment.trim() || "0",
+      target_markup_percent: targetMarkup?.trim() || null,
       multiple_supplier_quotes: data!.multiple_supplier_quotes,
       items: lines.filter((line) => line.name.trim()).map(toLineIn),
       // The bid pack. Same rule as the lines: the lists are replaced whole, so
@@ -519,10 +547,10 @@ export default function QuoteRequestPage({
       <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
         <StatBox
           label="Total incl. tax"
-          value={amount(data.total, currency)}
-          hint={`${amount(data.tax_total, currency)} of it is tax.`}
+          value={amount(displayedTotals.total, currency)}
+          hint={`${amount(displayedTotals.tax_total, currency)} of it is tax.${livePreview ? " Live preview — save to apply." : ""}`}
         />
-        <StatBox label="Total before tax" value={amount(data.total_excl_tax, currency)} />
+        <StatBox label="Total before tax" value={amount(displayedTotals.total_excl_tax, currency)} />
         {isBid && data.bid ? (
           <StatBox
             label="Landed cost"
@@ -576,11 +604,14 @@ export default function QuoteRequestPage({
               fxRate={data.fx_rate}
               editable={editable}
               dirtyIds={dirtyLines}
-              quote={data}
+              quote={displayedTotals}
+              preview={livePreview}
+              targetMarkup={targetMarkup}
               onChange={(next) => {
                 setLines(next);
                 setDirtyLines(dirtyAgainst(next, data.items));
               }}
+              onTargetMarkupChange={setTargetMarkup}
               onComment={(line) =>
                 setAnchor({
                   target_type: "item",

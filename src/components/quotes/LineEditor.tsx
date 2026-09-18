@@ -16,6 +16,8 @@ import {
   markupOf,
   quantity,
   priceViaSupplier,
+  type QuotePreview,
+  type QuotePreviewLine,
   rateFromMarkup,
   sign,
   subExact,
@@ -38,12 +40,10 @@ import { Margin } from "@/components/quotes/QuoteRequestBits";
  * and type the answer is how a price ends up a few cents out.
  *
  * That derivation is the one calculation this file does, and it is deliberate:
- * what it produces is an **input** the user was going to type anyway. Every
- * number presented as an answer — the line total, what the line makes, the
- * sub-total, the total — is the server's and is only rendered. An edited row
- * says its totals are stale rather than showing a locally patched-up figure,
- * because a quote is a document somebody signs and "close enough" is worse
- * than "not yet known".
+ * what it produces is an **input** the user was going to type anyway. The
+ * parent may also give this editor an exact local preview of the server's
+ * arithmetic. It is visibly marked as a preview and is never persisted until
+ * the person presses Save.
  *
  * Cost and price never look alike. `cost_rate` is the cost price — what the
  * supplier charges us — and `rate` is the selling price, what the customer
@@ -69,8 +69,11 @@ export function LineEditor({
   editable,
   dirtyIds,
   quote,
+  preview,
+  targetMarkup,
   fxRate,
   onChange,
+  onTargetMarkupChange,
   onComment,
 }: {
   lines: QuoteLineDraft[];
@@ -87,11 +90,16 @@ export function LineEditor({
     shipping_charge: string;
     adjustment: string;
   };
+  /** Exact local totals for unsaved edits; null means render the saved reply. */
+  preview?: QuotePreview | null;
+  /** The markup the quote was intentionally priced at, before Zoho rounds. */
+  targetMarkup?: string | null;
   /** One unit of the quote's currency in the supplier's — "1 USD = 3.672501
       AED" — or null when the quote has no rate. Lets a retyped margin rebuild
       the price the way it was built: in the supplier's currency first. */
   fxRate?: string | null;
   onChange: (lines: QuoteLineDraft[]) => void;
+  onTargetMarkupChange?: (markup: string) => void;
   onComment?: (line: QuoteLineDraft) => void;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -156,6 +164,18 @@ export function LineEditor({
   /** What the margin cell shows: the raw text while typing, else derived. */
   function marginText(line: QuoteLineDraft): string {
     if (typing?.key === line.key) return typing.text;
+    // A supplier price is marked up and rounded in its own currency before it
+    // is converted. The USD rate therefore implies 20.46% even though the
+    // intended markup is 20%. Show the decision that was made, not a different
+    // percentage reverse-engineered from rounded figures.
+    if (
+      mode === "percent" &&
+      line.supplier_unit_price &&
+      line.supplier_currency &&
+      targetMarkup?.trim()
+    ) {
+      return targetMarkup;
+    }
     const cost = line.cost_rate?.trim() ? line.cost_rate : "0";
     const derived =
       mode === "percent" ? markupOf(cost, line.rate) : subExact(line.rate, cost);
@@ -188,13 +208,31 @@ export function LineEditor({
             line.supplier_currency,
           )
         : null;
+    if (viaSupplier !== null) {
+      // The target markup applies to the supplier-priced quote, not just the
+      // row that happened to be clicked. Rebuild every source line using the
+      // same Zoho order: markup and source-currency rounding, then FX.
+      onTargetMarkupChange?.(trimmed);
+      onChange(
+        lines.map((candidate) => {
+          if (!candidate.supplier_unit_price || !candidate.supplier_currency) return candidate;
+          const rate = priceViaSupplier(
+            candidate.supplier_unit_price,
+            trimmed,
+            candidate.supplier_currency === currency ? "1" : (fxRate ?? ""),
+            candidate.supplier_currency,
+          );
+          return rate === null ? candidate : { ...candidate, rate };
+        }),
+      );
+      return;
+    }
     const next =
-      viaSupplier ??
-      (mode === "percent" ? rateFromMarkup(cost, trimmed, 2) : sumExact([cost, trimmed]));
+      mode === "percent" ? rateFromMarkup(cost, trimmed, 2) : sumExact([cost, trimmed]);
     if (next !== null) patch(line.key, { rate: next });
   }
 
-  const belowCost = lines.filter((line) => sign(line.margin) < 0).length;
+  const belowCost = lines.filter((line) => sign(preview?.lines[line.key]?.margin ?? line.margin) < 0).length;
 
   return (
     <Panel className="overflow-hidden">
@@ -243,7 +281,7 @@ export function LineEditor({
                   Cost price
                 </span>
                 <span className={clsx("micro shrink-0 text-right text-ink-4", W.margin)}>
-                  {mode === "percent" ? "Margin %" : `Margin ${currency}`}
+                  {mode === "percent" ? "Markup %" : `Margin ${currency}`}
                 </span>
                 <span className={clsx("micro shrink-0 text-right text-ink-4", W.price)}>
                   Selling price
@@ -264,6 +302,7 @@ export function LineEditor({
                   editable={editable}
                   mode={mode}
                   dirty={dirtyIds.has(line.key)}
+                  preview={preview?.lines[line.key] ?? null}
                   open={expanded === line.key}
                   marginText={marginText(line)}
                   onMargin={(text) => setMargin(line, text)}
@@ -278,7 +317,7 @@ export function LineEditor({
             </div>
           </div>
 
-          <Totals quote={quote} currency={currency} />
+          <Totals quote={quote} currency={currency} preview={preview !== null && preview !== undefined} />
         </>
       )}
     </Panel>
@@ -333,6 +372,7 @@ function LineRow({
   editable,
   mode,
   dirty,
+  preview,
   open,
   marginText,
   onMargin,
@@ -350,6 +390,7 @@ function LineRow({
   editable: boolean;
   mode: MarginMode;
   dirty: boolean;
+  preview: QuotePreviewLine | null;
   open: boolean;
   marginText: string;
   onMargin: (text: string) => void;
@@ -365,6 +406,12 @@ function LineRow({
   const noCost =
     line.cost_rate === null || line.cost_rate.trim() === "" || isZero(line.cost_rate);
   const noBasis = mode === "percent" && noCost;
+  const calculated = preview ?? {
+    line_total: line.line_total,
+    tax_amount: line.tax_amount,
+    total_incl_tax: line.total_incl_tax,
+    margin: line.margin,
+  };
 
   return (
     <div className={clsx("border-b border-line/60", open && "bg-panel-2/40")}>
@@ -479,34 +526,33 @@ function LineRow({
           label="Selling price — what the customer pays"
         />
 
-        {/* The server owns these. An edited row shows the last figures it sent,
-            struck through and labelled, rather than a guess made here. */}
+        {/* During an edit these are an exact local preview. The server remains
+            the source of record and only receives values after Save. */}
         <span className={clsx("shrink-0 text-right", W.total)}>
           <span
-            className={clsx(
-              "tnum block text-[12.5px]",
-              dirty ? "text-ink-4 line-through decoration-ink-4/40" : "font-semibold",
-            )}
-            title={dirty ? "Out of date — the server totals this when you save." : undefined}
+            className={clsx("tnum block text-[12.5px]", preview ? "font-semibold" : dirty ? "text-ink-4 line-through decoration-ink-4/40" : "font-semibold")}
+            title={preview ? "Live preview — saved only when you press Save changes." : dirty ? "Out of date — finish the number to preview its total." : undefined}
           >
-            {line.line_total === null ? "—" : amount(line.line_total, currency)}
+            {calculated.line_total === null ? "—" : amount(calculated.line_total, currency)}
           </span>
           <span className="mt-0.5 block text-[10.5px]">
-            {dirty ? (
-              <span className="text-ink-4">recalculates on save</span>
-            ) : line.margin === null ? null : (
+            {preview ? (
+              <span className="text-accent">live preview</span>
+            ) : dirty ? (
+              <span className="text-ink-4">finish number to preview</span>
+            ) : calculated.margin === null ? null : (
               <>
                 <span className="text-ink-4">makes </span>
-                <Margin value={line.margin} currency={currency} className="text-[10.5px]" />
+                <Margin value={calculated.margin} currency={currency} className="text-[10.5px]" />
               </>
             )}
           </span>
           {/* Zoho's "Tax" and "Amount" columns, under the taxable amount, so a
               line here reads the same as its line on the estimate. */}
-          {!dirty && line.tax_amount !== null && !isZero(line.tax_amount) && (
+          {calculated.tax_amount !== null && !isZero(calculated.tax_amount) && (
             <span className="tnum mt-0.5 block text-[10.5px] text-ink-4">
-              + {amount(line.tax_amount, currency)} tax ={" "}
-              <span className="text-ink-2">{amount(line.total_incl_tax, currency)}</span>
+              + {amount(calculated.tax_amount, currency)} tax ={" "}
+              <span className="text-ink-2">{amount(calculated.total_incl_tax, currency)}</span>
             </span>
           )}
         </span>
@@ -710,6 +756,7 @@ function NumCell({
 function Totals({
   quote,
   currency,
+  preview,
 }: {
   quote: {
     sub_total: string;
@@ -721,10 +768,14 @@ function Totals({
     adjustment: string;
   };
   currency: string;
+  preview: boolean;
 }) {
   const taxed = !isZero(quote.tax_total);
   return (
     <div className="space-y-1.5 border-t border-line px-5 py-4">
+      {preview && (
+        <p className="text-[11px] text-accent">Live preview — Save changes to apply it.</p>
+      )}
       <Line label="Sub-total" value={quote.sub_total} currency={currency} />
       {!isZero(quote.discount) && (
         <Line label="Discount" value={quote.discount} currency={currency} negate />

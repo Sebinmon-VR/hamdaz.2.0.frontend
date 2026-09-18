@@ -391,6 +391,135 @@ export function subExact(a: string, b: string): string | null {
   return sumExact([a, negate(b)]);
 }
 
+/** `a × b`, exactly, without sending either decimal through a float. */
+export function multiplyExact(a: string, b: string): string | null {
+  const x = parts(a);
+  const y = parts(b);
+  if (!x || !y) return null;
+  return fromUnits(unitsOf(x) * unitsOf(y), x.frac.length + y.frac.length);
+}
+
+/** Round a decimal half-up to a fixed number of places, as Zoho does for tax. */
+export function roundExact(value: string, places = 2): string | null {
+  const p = parts(value);
+  if (!p) return null;
+  if (p.frac.length <= places) {
+    return fromUnits(unitsOf(p) * 10n ** BigInt(places - p.frac.length), places);
+  }
+  return fromUnits(divRound(unitsOf(p), 10n ** BigInt(p.frac.length - places)), places);
+}
+
+/** The editable values that affect one quote line's three Zoho columns. */
+export interface QuotePreviewLineInput {
+  key: string;
+  quantity: string;
+  rate: string;
+  discount: string;
+  taxPercentage: string | null;
+  costRate: string | null;
+}
+
+/** A calculated line for an on-screen preview. Nothing here has been saved. */
+export interface QuotePreviewLine {
+  line_total: string;
+  tax_amount: string;
+  total_incl_tax: string;
+  margin: string | null;
+}
+
+/** The client-side preview of the quote figures that the backend will save. */
+export interface QuotePreview {
+  lines: Record<string, QuotePreviewLine>;
+  sub_total: string;
+  total_excl_tax: string;
+  tax_total: string;
+  total: string;
+  discount: string;
+  shipping_charge: string;
+  adjustment: string;
+}
+
+function previewInput(value: string | null | undefined, fallback: string): string | null {
+  const text = value?.trim();
+  if (!text) return fallback;
+  return parts(text) ? text : null;
+}
+
+/**
+ * Reproduce the quote-total arithmetic locally while somebody is editing.
+ *
+ * The preview is intentionally read-only: it does not update the SWR record
+ * or make a request. Save remains the only operation that persists a quote.
+ * Invalid, half-typed numerics yield `null`, so the screen never presents a
+ * made-up total as the number that will be saved.
+ */
+export function quotePreview(
+  lines: readonly QuotePreviewLineInput[],
+  adjustments: Pick<QuotePreview, "discount" | "shipping_charge" | "adjustment">,
+): QuotePreview | null {
+  const discount = previewInput(adjustments.discount, "0");
+  const shipping = previewInput(adjustments.shipping_charge, "0");
+  const adjustment = previewInput(adjustments.adjustment, "0");
+  if (discount === null || shipping === null || adjustment === null) return null;
+
+  const calculated: Record<string, QuotePreviewLine> = {};
+  const taxable: string[] = [];
+  const taxes: string[] = [];
+
+  for (const line of lines) {
+    // These defaults are the same ones `toLineIn` sends when a numeric cell is
+    // blank. A blank quantity is one unit; blank money and tax are zero.
+    const quantity = previewInput(line.quantity, "1");
+    const rate = previewInput(line.rate, "0");
+    const lineDiscount = previewInput(line.discount, "0");
+    const taxPercentage = previewInput(line.taxPercentage, "0");
+    if (
+      quantity === null ||
+      rate === null ||
+      lineDiscount === null ||
+      taxPercentage === null
+    ) {
+      return null;
+    }
+
+    const extended = multiplyExact(quantity, rate);
+    const lineTotal = extended === null ? null : subExact(extended, lineDiscount);
+    const taxBase = lineTotal === null ? null : multiplyExact(lineTotal, taxPercentage);
+    const tax = taxBase === null ? null : divideExact(taxBase, "100", 2);
+    if (lineTotal === null || tax === null) return null;
+
+    const cost = previewInput(line.costRate, "");
+    const perUnitMargin = cost === null || cost === "" ? null : subExact(rate, cost);
+    const margin = perUnitMargin === null ? null : multiplyExact(perUnitMargin, quantity);
+    calculated[line.key] = {
+      line_total: lineTotal,
+      tax_amount: tax,
+      total_incl_tax: sumExact([lineTotal, tax])!,
+      margin,
+    };
+    taxable.push(lineTotal);
+    taxes.push(tax);
+  }
+
+  const subTotal = sumExact(taxable) ?? "0";
+  const taxTotal = sumExact(taxes) ?? "0";
+  const totalExclTax = sumExact([subTotal, negate(discount), shipping, adjustment]);
+  if (totalExclTax === null) return null;
+  const total = sumExact([totalExclTax, taxTotal]);
+  if (total === null) return null;
+
+  return {
+    lines: calculated,
+    sub_total: subTotal,
+    total_excl_tax: totalExclTax,
+    tax_total: taxTotal,
+    total,
+    discount,
+    shipping_charge: shipping,
+    adjustment,
+  };
+}
+
 /**
  * The sell rate a markup on cost produces: cost × (100 + percent) ÷ 100.
  *
