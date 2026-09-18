@@ -1782,6 +1782,11 @@ export interface QuoteRequestOut {
    * correctable for as long as the quote is theirs.
    */
   may_set_currency: boolean;
+  /**
+   * Whether the caller may re-price the quote at Zoho's rate — same people as
+   * the currency, in any state, once a supplier has been chosen.
+   */
+  may_reprice: boolean;
   may_submit: boolean;
   submit_reason: string | null;
   may_approve: boolean;
