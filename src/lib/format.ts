@@ -20,6 +20,23 @@ export function avatarHue(seed: string): number {
   return Math.abs(hash) % 360;
 }
 
+/**
+ * The currencies a quote can be raised in.
+ *
+ * Exactly the set the supplier-quote parser recognises, so a quote can never
+ * be put in a currency the comparison is then unable to read back off a
+ * supplier's PDF. AED leads because almost everything is quoted in it; the
+ * rest are the Gulf neighbours and the majors, in that order.
+ *
+ * Nothing here converts between them. A quote is raised, priced and approved
+ * in one currency, and the code is carried so the figures are labelled
+ * correctly — not so that two of them can be added together.
+ */
+export const CURRENCIES = [
+  "AED", "USD", "EUR", "GBP", "SAR", "QAR", "OMR", "KWD",
+  "BHD", "INR", "JPY", "CNY", "CHF", "AUD", "CAD", "SGD",
+] as const;
+
 export function money(
   value: number | string | null | undefined,
   currency?: string | null,

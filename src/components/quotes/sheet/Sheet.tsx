@@ -409,12 +409,16 @@ export function CellSelect({
   onChange,
   options,
   blank = "—",
+  required = false,
 }: {
   value: string;
   editable: boolean;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
   blank?: string;
+  /** No empty choice. For a cell the quote cannot be without, such as its
+      currency — offering "—" there only invites a value the server refuses. */
+  required?: boolean;
 }) {
   if (!editable) {
     const chosen = options.find((option) => option.value === value);
@@ -431,7 +435,7 @@ export function CellSelect({
       onChange={(e) => onChange(e.target.value)}
       className="w-full min-w-0 rounded-[4px] bg-warn-soft/70 px-1.5 py-1 text-[12.5px] text-ink outline-none focus:bg-warn-soft focus:ring-1 focus:ring-accent"
     >
-      <option value="">{blank}</option>
+      {!required && <option value="">{blank}</option>}
       {options.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}

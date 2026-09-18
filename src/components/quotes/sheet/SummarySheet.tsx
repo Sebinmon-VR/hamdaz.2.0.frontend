@@ -1,6 +1,6 @@
 "use client";
 
-import { amount, date, decimal } from "@/lib/format";
+import { CURRENCIES, amount, date, decimal } from "@/lib/format";
 import type { BidPackOut, QuoteRequestOut } from "@/lib/types";
 import { SEVERITY } from "@/components/quotes/bid";
 import type { BidDraft } from "@/components/quotes/bid";
@@ -46,6 +46,9 @@ export function SummarySheet({
   draft,
   editable,
   onChange,
+  currency,
+  currencyEditable,
+  onCurrency,
   onOpenCompliance,
 }: {
   quote: QuoteRequestOut;
@@ -53,6 +56,13 @@ export function SummarySheet({
   draft: BidDraft;
   editable: boolean;
   onChange: (patch: Partial<BidDraft>) => void;
+  /** The quote's currency. Not part of the bid draft: it belongs to the quote
+      itself, and the estimate form edits the same value. */
+  currency: string;
+  /** Its own permission: the sheet freezes when the quote goes up, this cell
+      does not. Nothing here converts, so the code is a label, not a term. */
+  currencyEditable: boolean;
+  onCurrency: (value: string) => void;
   onOpenCompliance: () => void;
 }) {
   const set =
@@ -162,8 +172,19 @@ export function SummarySheet({
             />
           </div>
         </Fact>
-        <Fact label="Bid currency">
-          <Num>{quote.currency}</Num>
+        {/* The currency the whole bid is stated in — every figure on every
+            sheet, and the one the customer sees. Nothing is converted: picking
+            another code relabels these numbers, it does not restate them. */}
+        <Fact label="Bid currency" note="Everything on the bid is stated in it. Figures are not converted.">
+          <div className="w-28">
+            <CellSelect
+              value={currency}
+              editable={currencyEditable}
+              onChange={onCurrency}
+              options={CURRENCIES.map((code) => ({ value: code, label: code }))}
+              required
+            />
+          </div>
         </Fact>
         <Fact label="Offer in hand" note="The supplier this quote is priced from.">
           {supplier ? (
@@ -230,10 +251,10 @@ export function SummarySheet({
         >
           {bid ? (
             <span>
-              <Num strong>{amount(bid.landed.total, quote.currency)}</Num>
+              <Num strong>{amount(bid.landed.total, currency)}</Num>
               {bid.landed.per_unit && (
                 <span className="ml-2 text-ink-3">
-                  (<Num muted>{amount(bid.landed.per_unit, quote.currency)}</Num> each)
+                  (<Num muted>{amount(bid.landed.per_unit, currency)}</Num> each)
                 </span>
               )}
             </span>
@@ -259,10 +280,10 @@ export function SummarySheet({
         >
           {bid ? (
             <span>
-              <Num strong>{amount(bid.bid_total, quote.currency)}</Num>
+              <Num strong>{amount(bid.bid_total, currency)}</Num>
               {bid.bid_unit_price && (
                 <span className="ml-2 font-normal text-ink-3">
-                  (<Num muted>{amount(bid.bid_unit_price, quote.currency)}</Num> each)
+                  (<Num muted>{amount(bid.bid_unit_price, currency)}</Num> each)
                 </span>
               )}
             </span>

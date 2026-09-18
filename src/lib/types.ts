@@ -1747,6 +1747,13 @@ export interface QuoteRequestOut {
    * nobody has to press a disabled button to find out.
    */
   may_edit: boolean;
+  /**
+   * Whether the caller may set the currency. Not the same question as
+   * `may_edit`: submitting freezes the document, but the currency is a label on
+   * figures that are already what they are — nothing converts — so it stays
+   * correctable for as long as the quote is theirs.
+   */
+  may_set_currency: boolean;
   may_submit: boolean;
   submit_reason: string | null;
   may_approve: boolean;

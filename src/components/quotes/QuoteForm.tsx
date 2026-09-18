@@ -1,10 +1,10 @@
 "use client";
 
 import clsx from "clsx";
-import { amount, date } from "@/lib/format";
+import { CURRENCIES, amount, date } from "@/lib/format";
 import type { QuoteRequestOut } from "@/lib/types";
 import { Panel, PanelHead } from "@/components/ui/primitives";
-import { Input, Textarea } from "@/components/ui/controls";
+import { Input, Select, Textarea } from "@/components/ui/controls";
 import { CommentOn } from "@/components/quotes/Discussion";
 
 /**
@@ -68,6 +68,8 @@ export function draftOf(quote: QuoteRequestOut): QuoteFormDraft {
 export function QuoteForm({
   draft,
   currency,
+  currencyEditable,
+  onCurrency,
   editable,
   onChange,
   onComment,
@@ -75,9 +77,13 @@ export function QuoteForm({
 }: {
   draft: QuoteFormDraft;
   currency: string;
+  /** Its own permission, and its own save. Submitting freezes the rest of the
+      quote; the currency stays correctable because nothing here converts. */
+  currencyEditable: boolean;
+  onCurrency: (value: string) => void;
   editable: boolean;
   onChange: (patch: Partial<QuoteFormDraft>) => void;
-  onComment: (field: keyof QuoteFormDraft, label: string) => void;
+  onComment: (field: string, label: string) => void;
   /** Open comments per field name, so a discussed field says so. */
   commentCounts: Record<string, number>;
 }) {
@@ -118,6 +124,20 @@ export function QuoteForm({
             {...field("cf_bcd", "Bid closing date")}
             type="date"
             hint="The customer's deadline. This is the date the work is timed against."
+          />
+          {/* The currency the whole quote is in — its lines, its adjustments
+              and the figure that reaches the customer. Changing it relabels
+              those figures and does not convert them, which is why it sits
+              with the terms rather than beside the totals. */}
+          <F
+            label="Currency"
+            value={currency}
+            editable={currencyEditable}
+            onChange={onCurrency}
+            options={CURRENCIES}
+            comments={commentCounts.currency ?? 0}
+            onComment={() => onComment("currency", "Currency")}
+            hint="Saved on its own, so it can be corrected after the quote has gone up. Figures are not converted."
           />
           <F {...field("place_of_supply", "Place of supply")} />
           <F {...field("payment_terms", "Payment terms")} placeholder="30 days net" />
@@ -174,6 +194,7 @@ function F({
   numeric,
   suffix,
   required,
+  options,
 }: {
   label: string;
   value: string;
@@ -188,6 +209,8 @@ function F({
   numeric?: boolean;
   suffix?: string;
   required?: boolean;
+  /** A fixed set of values. Renders a picker instead of a free text box. */
+  options?: readonly string[];
 }) {
   const head = (
     <span className="mb-1.5 flex items-center gap-1 text-[12px] text-ink-3">
@@ -225,7 +248,15 @@ function F({
   return (
     <div className={clsx(multiline && "sm:col-span-2")}>
       {head}
-      {multiline ? (
+      {options ? (
+        <Select value={value} onChange={(e) => onChange(e.target.value)}>
+          {options.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </Select>
+      ) : multiline ? (
         <Textarea
           value={value}
           onChange={(e) => onChange(e.target.value)}

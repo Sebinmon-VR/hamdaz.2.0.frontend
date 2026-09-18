@@ -203,6 +203,11 @@ export default function QuoteRequestPage({
     await api.del(`/quote-requests/${id}`);
     return true as const;
   });
+  // Its own route, so it works on a quote that has gone up for approval —
+  // where the ordinary save is refused. See the currency route.
+  const setCurrency = useAction(async (value: string) =>
+    api.patch<QuoteRequestOut>(`/quote-requests/${id}/currency`, { currency: value }),
+  );
   const choose = useAction(async (supplier_quote_id: string, markup_percent: string) =>
     api.post<QuoteRequestOut>(`/quote-requests/${id}/select-supplier`, {
       supplier_quote_id,
@@ -214,6 +219,13 @@ export default function QuoteRequestPage({
   if (!data || !form || !bid) return null;
 
   const editable = data.may_edit && canEdit(data.status);
+  // The saved value: the picker writes through immediately rather than
+  // waiting for a form save, so this is current the moment it changes.
+  const currency = data.currency;
+  const changeCurrency = async (value: string) => {
+    const next = await setCurrency.run(value);
+    if (next) await mutate(next, { revalidate: false });
+  };
   const spec = QUOTE_STATUS[data.status];
   const openComments = (data.comments ?? []).filter((c) => c.is_open);
   const isBid = asBid || hasBidPack(data);
@@ -497,11 +509,11 @@ export default function QuoteRequestPage({
 
       {/* ── the numbers ── */}
       <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <StatBox label="Total" value={amount(data.total, data.currency)} />
+        <StatBox label="Total" value={amount(data.total, currency)} />
         {isBid && data.bid ? (
           <StatBox
             label="Landed cost"
-            value={amount(data.bid.landed.total, data.currency)}
+            value={amount(data.bid.landed.total, currency)}
             hint="What it costs to put the goods where the customer wants them. The build-up is on the costing tab."
           />
         ) : (
@@ -515,7 +527,7 @@ export default function QuoteRequestPage({
                 ? `${decimal(data.bid.gross_margin_percent, { min: 1 })}%`
                 : "—"
             }
-            hint={`${amount(data.bid.gross_margin, data.currency)} over the landed cost.`}
+            hint={`${amount(data.bid.gross_margin, currency)} over the landed cost.`}
           />
         ) : (
           <WinChance quote={data} />
@@ -547,7 +559,7 @@ export default function QuoteRequestPage({
           <div className="min-w-0 space-y-3.5">
             <LineEditor
               lines={lines}
-              currency={data.currency}
+              currency={currency}
               editable={editable}
               dirtyIds={dirtyLines}
               quote={data}
@@ -588,7 +600,7 @@ export default function QuoteRequestPage({
             {data.comparison && (
               <SupplierComparison
                 comparison={data.comparison}
-                currency={data.currency}
+                currency={currency}
                 selectedId={data.selected_supplier_quote_id}
                 hasEdits={dirtyLines.size > 0}
                 canChoose={editable}
@@ -604,11 +616,19 @@ export default function QuoteRequestPage({
           </div>
 
           <div className="min-w-0 space-y-3.5">
-            <Sidebar data={data} editable={editable} title={title} onTitle={setTitle} />
+            <Sidebar
+              data={data}
+              currency={currency}
+              editable={editable}
+              title={title}
+              onTitle={setTitle}
+            />
 
             <QuoteForm
               draft={form}
-              currency={data.currency}
+              currency={currency}
+              currencyEditable={data.may_set_currency}
+              onCurrency={changeCurrency}
               editable={editable}
               onChange={(patch) => setForm({ ...form, ...patch })}
               commentCounts={fieldComments(data)}
@@ -631,6 +651,9 @@ export default function QuoteRequestPage({
           draft={bid}
           editable={editable}
           onChange={(patch) => setBid({ ...bid, ...patch })}
+          currency={currency}
+          currencyEditable={data.may_set_currency}
+          onCurrency={changeCurrency}
           onOpenCompliance={() => setTab("compliance")}
         />
       )}
@@ -656,7 +679,7 @@ export default function QuoteRequestPage({
           bid={data.bid}
           draft={bid}
           rows={costs}
-          currency={data.currency}
+          currency={currency}
           editable={editable}
           onDraftChange={(patch) => setBid({ ...bid, ...patch })}
           onRowsChange={setCosts}
@@ -760,11 +783,13 @@ export default function QuoteRequestPage({
  */
 function Sidebar({
   data,
+  currency,
   editable,
   title,
   onTitle,
 }: {
   data: QuoteRequestOut;
+  currency: string;
   editable: boolean;
   title: string;
   onTitle: (value: string) => void;
@@ -774,7 +799,7 @@ function Sidebar({
       <Panel className="p-5">
         <dl className="grid grid-cols-2 gap-x-5 gap-y-4">
           <Meta label="Customer">{data.customer_name}</Meta>
-          <Meta label="Currency">{data.currency}</Meta>
+          <Meta label="Currency">{currency}</Meta>
           <Meta label="Bid closing">{data.cf_bcd ? date(data.cf_bcd) : "—"}</Meta>
           <Meta label="Valid until">
             {data.expiry_date ? date(data.expiry_date) : "—"}

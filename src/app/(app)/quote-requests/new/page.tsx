@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { api, withQuery } from "@/lib/api";
+import { CURRENCIES } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import type { QuoteLineIn, QuoteRequestOut } from "@/lib/types";
@@ -197,7 +198,7 @@ export default function NewQuoteRequestPage() {
             </Field>
             <Field label="Currency">
               <Select value={currency} onChange={(e) => setCurrency(e.target.value)}>
-                {["AED", "USD", "EUR", "GBP", "INR", "SAR"].map((code) => (
+                {CURRENCIES.map((code) => (
                   <option key={code} value={code}>
                     {code}
                   </option>
