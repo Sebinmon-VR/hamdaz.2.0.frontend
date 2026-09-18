@@ -22,6 +22,7 @@ const GROUPS: { key: CalcStepOut["group"]; title: string }[] = [
   { key: "lines", title: "Lines" },
   { key: "totals", title: "Totals" },
   { key: "tax", title: "Tax" },
+  { key: "base", title: "In AED, as Zoho reports it" },
   { key: "landed", title: "Landed cost" },
   { key: "bid", title: "Bid and margin" },
 ];

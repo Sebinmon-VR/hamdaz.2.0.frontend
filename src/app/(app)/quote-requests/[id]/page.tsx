@@ -540,7 +540,7 @@ export default function QuoteRequestPage({
                 ? `${decimal(data.bid.gross_margin_percent, { min: 1 })}%`
                 : "—"
             }
-            hint={`${amount(data.bid.gross_margin, currency)} over the landed cost.`}
+            hint={`${amount(data.bid.gross_margin, currency)} over the landed cost, before tax — the lines' margin column, as one figure.`}
           />
         ) : (
           <WinChance quote={data} />

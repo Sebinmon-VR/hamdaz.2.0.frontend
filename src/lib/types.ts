@@ -1237,7 +1237,10 @@ export interface QuoteLineOut {
    * supplier cost sits behind the line.
    */
   margin: string | null;
+  /** Zoho's three columns for a line: taxable amount, tax, amount. */
   line_total: string;
+  tax_amount: string;
+  total_incl_tax: string;
   source_supplier_quote_id: string | null;
 }
 
@@ -1285,6 +1288,8 @@ export interface QuoteLineDraft {
   cost_rate: string | null;
   source_supplier_quote_id: string | null;
   line_total: string | null;
+  tax_amount: string | null;
+  total_incl_tax: string | null;
   margin: string | null;
 }
 
@@ -1306,6 +1311,8 @@ export function toDraft(line: QuoteLineOut): QuoteLineDraft {
     cost_rate: line.cost_rate,
     source_supplier_quote_id: line.source_supplier_quote_id,
     line_total: line.line_total,
+    tax_amount: line.tax_amount,
+    total_incl_tax: line.total_incl_tax,
     margin: line.margin,
   };
 }
@@ -1477,7 +1484,7 @@ export interface FxQuoteOut {
 
 /** One line of the working behind a quote's figures. */
 export interface CalcStepOut {
-  group: "rate" | "lines" | "totals" | "tax" | "landed" | "bid";
+  group: "rate" | "lines" | "totals" | "tax" | "base" | "landed" | "bid";
   label: string;
   working: string;
   result: string;

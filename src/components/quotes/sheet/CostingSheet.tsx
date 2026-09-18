@@ -144,7 +144,7 @@ export function CostingSheet({
         <GridRow>
           <Td />
           <Td className="col-span-5" muted>
-            Gross margin, as a share of the sale
+            Gross margin, on the landed cost, before tax
           </Td>
           <Td align="right">
             <Num>

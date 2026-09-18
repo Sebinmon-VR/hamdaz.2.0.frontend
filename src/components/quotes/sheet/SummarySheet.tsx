@@ -274,7 +274,7 @@ export function SummarySheet({
             bid?.bid_total_is_suggested
               ? "This is the ladder's answer. Nobody has decided a price yet — type one on the costing sheet."
               : bid?.gross_margin_percent
-                ? `Margin ${decimal(bid.gross_margin_percent, { min: 1 })}% of the sale.`
+                ? `Margin ${decimal(bid.gross_margin_percent, { min: 1 })}% on the landed cost, before tax.`
                 : undefined
           }
         >

@@ -136,6 +136,8 @@ export function LineEditor({
         cost_rate: null,
         source_supplier_quote_id: null,
         line_total: null,
+        tax_amount: null,
+        total_incl_tax: null,
         margin: null,
         id: null,
       },
@@ -479,6 +481,14 @@ function LineRow({
               </>
             )}
           </span>
+          {/* Zoho's "Tax" and "Amount" columns, under the taxable amount, so a
+              line here reads the same as its line on the estimate. */}
+          {!dirty && line.tax_amount !== null && !isZero(line.tax_amount) && (
+            <span className="tnum mt-0.5 block text-[10.5px] text-ink-4">
+              + {amount(line.tax_amount, currency)} tax ={" "}
+              <span className="text-ink-2">{amount(line.total_incl_tax, currency)}</span>
+            </span>
+          )}
         </span>
 
         {editable && (
