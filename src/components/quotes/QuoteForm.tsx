@@ -137,7 +137,7 @@ export function QuoteForm({
             options={CURRENCIES}
             comments={commentCounts.currency ?? 0}
             onComment={() => onComment("currency", "Currency")}
-            hint="Saved on its own, so it can be corrected after the quote has gone up. Figures are not converted."
+            hint="Switching converts every figure at Zoho Books' rate, rounded to the cent, and saves at once."
           />
           <F {...field("place_of_supply", "Place of supply")} />
           <F {...field("payment_terms", "Payment terms")} placeholder="30 days net" />

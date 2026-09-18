@@ -1464,13 +1464,13 @@ export interface QuoteSubmissionFieldOut {
  */
 /** Zoho Books' rate between two currencies, with its working. */
 export interface FxQuoteOut {
-  from_currency: string;
-  to_currency: string;
-  /** Units of `to_currency` per unit of `from_currency` — the bid's `fx_rate`. */
+  quote_currency: string;
+  supplier_currency: string;
+  /** One unit of the quote's currency in the supplier's: "1 USD = 3.672501 AED" is "3.672501". */
   rate: string;
   base_currency: string;
-  from_in_base: string;
-  to_in_base: string;
+  quote_in_base: string;
+  supplier_in_base: string;
   effective_date: string | null;
   source: string;
 }
@@ -1782,11 +1782,6 @@ export interface QuoteRequestOut {
    * correctable for as long as the quote is theirs.
    */
   may_set_currency: boolean;
-  /**
-   * Whether the caller may re-price the quote at Zoho's rate — same people as
-   * the currency, in any state, once a supplier has been chosen.
-   */
-  may_reprice: boolean;
   may_submit: boolean;
   submit_reason: string | null;
   may_approve: boolean;

@@ -70,14 +70,14 @@ export function LandedCostSheet({
   // figure, so costing the bid at it is what makes the two documents agree.
   const [rateNote, setRateNote] = useState<string | null>(null);
   const zohoRate = useAction(async () =>
-    api.get<FxQuoteOut>("/quote-requests/fx-rate", { from: foreign, to: currency }),
+    api.get<FxQuoteOut>("/quote-requests/fx-rate", { quote: currency, supplier: foreign }),
   );
   async function useZohoRate() {
     const found = await zohoRate.run();
     if (!found) return;
     onDraftChange({ fx_rate: found.rate });
     setRateNote(
-      `Zoho Books: 1 ${found.from_currency} = ${found.rate} ${found.to_currency}` +
+      `Zoho Books: 1 ${found.quote_currency} = ${found.rate} ${found.supplier_currency}` +
         (found.effective_date ? `, effective ${date(found.effective_date)}` : "") +
         ". Save to keep it.",
     );
@@ -126,8 +126,8 @@ export function LandedCostSheet({
           </div>
         </Fact>
         <Fact
-          label={`${currency} per ${foreign || "unit"}`}
-          note="The rate the bid is costed at — mid-market plus a spread. The price stands for months; the money moves once."
+          label={`1 ${currency} in ${foreign || "…"}`}
+          note="As Zoho Books states it — 1 USD = 3.672501 AED. The rate the bid is costed at, and the one the estimate will be converted at."
         >
           <div className="flex flex-wrap items-center gap-2">
             <div className="w-32">
@@ -136,7 +136,7 @@ export function LandedCostSheet({
                 editable={editable}
                 onChange={set("fx_rate")}
                 numeric
-                placeholder="4.9500"
+                placeholder="3.672501"
               />
             </div>
             {editable && foreign.length === 3 && (

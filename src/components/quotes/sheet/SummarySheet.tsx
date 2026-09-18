@@ -173,9 +173,9 @@ export function SummarySheet({
           </div>
         </Fact>
         {/* The currency the whole bid is stated in — every figure on every
-            sheet, and the one the customer sees. Nothing is converted: picking
-            another code relabels these numbers, it does not restate them. */}
-        <Fact label="Bid currency" note="Everything on the bid is stated in it. Figures are not converted.">
+            sheet, and the one the customer sees. Switching it converts them
+            all at Zoho's rate and saves at once. */}
+        <Fact label="Bid currency" note="Switching converts every figure at Zoho Books' rate, to the cent.">
           <div className="w-28">
             <CellSelect
               value={currency}

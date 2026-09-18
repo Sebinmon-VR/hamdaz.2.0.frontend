@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { amount, decimal } from "@/lib/format";
 import type { CalcStepOut } from "@/lib/types";
 import { Panel, PanelHead } from "@/components/ui/primitives";
-import { Button } from "@/components/ui/controls";
 
 /**
  * The working behind every figure on the quote, from the server's own pass.
@@ -27,21 +26,9 @@ const GROUPS: { key: CalcStepOut["group"]; title: string }[] = [
   { key: "bid", title: "Bid and margin" },
 ];
 
-export function Calculations({
-  steps,
-  onReprice,
-  repricing,
-  repriceError,
-}: {
-  steps: CalcStepOut[];
-  /** Re-price from the chosen supplier at Zoho's rate. Absent when the caller
-      may not, or no supplier has been chosen. */
-  onReprice?: () => void;
-  repricing?: boolean;
-  repriceError?: string | null;
-}) {
+export function Calculations({ steps }: { steps: CalcStepOut[] }) {
   const [closed, setClosed] = useState<Set<string>>(() => new Set(["lines", "landed"]));
-  if (steps.length === 0 && !onReprice) return null;
+  if (steps.length === 0) return null;
 
   const toggle = (key: string) =>
     setClosed((prev) => {
@@ -57,22 +44,6 @@ export function Calculations({
         title="How the figures are worked out"
         hint="The server's own arithmetic, step by step. The total incl. tax is the figure everything else is measured against."
       />
-      {onReprice && (
-        <div className="mt-3 space-y-1.5">
-          {/* The correction, beside the figures it corrects. Zoho's rate
-              replaces whatever the bid held; the supplier, the lines and the
-              markup stay as they were. Allowed in any state on purpose. */}
-          <Button size="sm" icon={RefreshCw} onClick={onReprice} disabled={repricing}>
-            {repricing ? "Re-pricing…" : "Re-price at Zoho's rate"}
-          </Button>
-          <p className="text-[11.5px] leading-snug text-ink-4">
-            Converts the chosen supplier's prices at Zoho Books' current rate and rewrites the
-            lines at the same markup. Use it on a quote priced by hand, or when Zoho's rate has
-            moved.
-          </p>
-          {repriceError && <p className="text-[11.5px] text-danger">{repriceError}</p>}
-        </div>
-      )}
       <div className="mt-3 space-y-2">
         {GROUPS.map(({ key, title }) => {
           const rows = steps.filter((s) => s.group === key);
@@ -101,7 +72,7 @@ export function Calculations({
                             ? amount(step.result, step.currency)
                             : step.label === "Margin"
                               ? `${decimal(step.result, { min: 1 })}%`
-                              : step.result}
+                              : step.result.replace(/0+$/, "").replace(/\.$/, "")}
                         </span>
                       </div>
                       <p className="mt-0.5 text-[11.5px] leading-snug text-ink-4">{step.working}</p>

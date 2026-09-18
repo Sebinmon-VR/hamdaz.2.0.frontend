@@ -209,11 +209,6 @@ export default function QuoteRequestPage({
   const setCurrency = useAction(async (value: string) =>
     api.patch<QuoteRequestOut>(`/quote-requests/${id}/currency`, { currency: value }),
   );
-  // Re-price from the chosen supplier at Zoho's rate — its own route, allowed
-  // in any state, because it corrects the conversion without changing a decision.
-  const reprice = useAction(async () =>
-    api.post<QuoteRequestOut>(`/quote-requests/${id}/reprice`, {}),
-  );
   const choose = useAction(async (supplier_quote_id: string, markup_percent: string) =>
     api.post<QuoteRequestOut>(`/quote-requests/${id}/select-supplier`, {
       supplier_quote_id,
@@ -230,7 +225,14 @@ export default function QuoteRequestPage({
   const currency = data.currency;
   const changeCurrency = async (value: string) => {
     const next = await setCurrency.run(value);
-    if (next) await mutate(next, { revalidate: false });
+    if (!next) return;
+    await mutate(next, { revalidate: false });
+    // Every figure on the quote was converted server-side. Nothing typed here
+    // is newer than that, so the drafts are rebuilt from the answer.
+    setForm(draftOf(next));
+    setBid(bidDraftOf(next));
+    setLines(next.items.map(toDraft));
+    setDirtyLines(new Set());
   };
   const spec = QUOTE_STATUS[data.status];
   const openComments = (data.comments ?? []).filter((c) => c.is_open);
@@ -635,24 +637,7 @@ export default function QuoteRequestPage({
               onTitle={setTitle}
             />
 
-            <Calculations
-              steps={data.calculation}
-              onReprice={
-                data.may_reprice
-                  ? async () => {
-                      const next = await reprice.run();
-                      if (next) {
-                        await mutate(next, { revalidate: false });
-                        // The lines are the server's again; nothing local is newer.
-                        setLines(next.items.map(toDraft));
-                        setDirtyLines(new Set());
-                      }
-                    }
-                  : undefined
-              }
-              repricing={reprice.pending}
-              repriceError={reprice.error}
-            />
+            <Calculations steps={data.calculation} />
 
             <QuoteForm
               draft={form}
