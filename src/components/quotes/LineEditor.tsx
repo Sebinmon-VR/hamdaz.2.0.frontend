@@ -164,8 +164,11 @@ export function LineEditor({
     // the one combination the cell refuses (see `noBasis`): writing it would
     // silently zero a price somebody had typed by hand.
     const cost = line.cost_rate?.trim() ? line.cost_rate : "0";
+    // A selling price is quoted to the cent — the server rounds the same way
+    // when it prices from a supplier, and Zoho multiplies the rounded figure.
+    // Four places here gave 16.008, which no invoice can carry.
     const next =
-      mode === "percent" ? rateFromMarkup(cost, trimmed) : sumExact([cost, trimmed]);
+      mode === "percent" ? rateFromMarkup(cost, trimmed, 2) : sumExact([cost, trimmed]);
     if (next !== null) patch(line.key, { rate: next });
   }
 
