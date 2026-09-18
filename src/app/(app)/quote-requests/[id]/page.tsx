@@ -310,13 +310,17 @@ export default function QuoteRequestPage({
       discount: form!.discount.trim() || "0",
       shipping_charge: form!.shipping_charge.trim() || "0",
       adjustment: form!.adjustment.trim() || "0",
-      target_markup_percent: targetMarkup?.trim() || null,
       multiple_supplier_quotes: data!.multiple_supplier_quotes,
       items: lines.filter((line) => line.name.trim()).map(toLineIn),
       // The bid pack. Same rule as the lines: the lists are replaced whole, so
       // a row somebody started and abandoned is dropped rather than saved as a
       // blank, and every list goes every time.
       ...bidPatch(bid!),
+      // After the spread on purpose: the bid draft carries a markup too (the
+      // Summary sheet's cell), and the one typed in the header is the one that
+      // was just edited. Listed before the spread it was overwritten — and the
+      // build refused the duplicate key.
+      target_markup_percent: targetMarkup?.trim() || null,
       cost_lines: costs.filter((row) => row.label.trim()).map(costRowIn),
       compliance: rules.filter((row) => row.requirement.trim()).map(complianceRowIn),
       submission_fields: portal.filter((row) => row.label.trim()).map(portalRowIn),
