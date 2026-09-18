@@ -573,6 +573,7 @@ export default function QuoteRequestPage({
             <LineEditor
               lines={lines}
               currency={currency}
+              fxRate={data.fx_rate}
               editable={editable}
               dirtyIds={dirtyLines}
               quote={data}

@@ -15,6 +15,7 @@ import {
   isZero,
   markupOf,
   quantity,
+  priceViaSupplier,
   rateFromMarkup,
   sign,
   subExact,
@@ -68,6 +69,7 @@ export function LineEditor({
   editable,
   dirtyIds,
   quote,
+  fxRate,
   onChange,
   onComment,
 }: {
@@ -85,6 +87,10 @@ export function LineEditor({
     shipping_charge: string;
     adjustment: string;
   };
+  /** One unit of the quote's currency in the supplier's — "1 USD = 3.672501
+      AED" — or null when the quote has no rate. Lets a retyped margin rebuild
+      the price the way it was built: in the supplier's currency first. */
+  fxRate?: string | null;
   onChange: (lines: QuoteLineDraft[]) => void;
   onComment?: (line: QuoteLineDraft) => void;
 }) {
@@ -138,6 +144,8 @@ export function LineEditor({
         line_total: null,
         tax_amount: null,
         total_incl_tax: null,
+        supplier_unit_price: null,
+        supplier_currency: null,
         margin: null,
         id: null,
       },
@@ -166,11 +174,23 @@ export function LineEditor({
     // the one combination the cell refuses (see `noBasis`): writing it would
     // silently zero a price somebody had typed by hand.
     const cost = line.cost_rate?.trim() ? line.cost_rate : "0";
-    // A selling price is quoted to the cent — the server rounds the same way
-    // when it prices from a supplier, and Zoho multiplies the rounded figure.
-    // Four places here gave 16.008, which no invoice can carry.
+    // A price is built where Zoho builds it — on the supplier's own figure, in
+    // their currency, rounded there, then converted — whenever the line still
+    // knows that figure. Marking up the converted cost instead lands a cent a
+    // unit away from the estimate. A line typed by hand has no such figure and
+    // is marked up on its cost, to the cent.
+    const viaSupplier =
+      mode === "percent" && line.supplier_unit_price && line.supplier_currency
+        ? priceViaSupplier(
+            line.supplier_unit_price,
+            trimmed,
+            line.supplier_currency === currency ? "1" : (fxRate ?? ""),
+            line.supplier_currency,
+          )
+        : null;
     const next =
-      mode === "percent" ? rateFromMarkup(cost, trimmed, 2) : sumExact([cost, trimmed]);
+      viaSupplier ??
+      (mode === "percent" ? rateFromMarkup(cost, trimmed, 2) : sumExact([cost, trimmed]));
     if (next !== null) patch(line.key, { rate: next });
   }
 

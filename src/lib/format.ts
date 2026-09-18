@@ -413,6 +413,42 @@ export function rateFromMarkup(
   return fromUnits(divRound(numer, denom), places);
 }
 
+/** `a ÷ b` on scaled integers, rounded half-up to `places`. Null on a zero divisor. */
+export function divideExact(a: string, b: string, places = 2): string | null {
+  const x = parts(a);
+  const y = parts(b);
+  if (!x || !y) return null;
+  const yN = unitsOf(y);
+  if (yN === 0n) return null;
+  // (x / 10^sx) / (y / 10^sy) = x * 10^sy / (y * 10^sx), then scaled to `places`.
+  const numer = unitsOf(x) * 10n ** BigInt(y.frac.length + places);
+  const denom = yN * 10n ** BigInt(x.frac.length);
+  return fromUnits(divRound(numer, denom), places);
+}
+
+/**
+ * A selling price built the way Zoho Books builds one: the markup goes on in
+ * the supplier's currency, the price is rounded there — to the whole unit for
+ * AED, since that is how Zoho's item prices are set; to the cent otherwise —
+ * and only then converted at the rate, to the cent.
+ *
+ * AED 49 + 20% = 58.80 → 59 → ÷ 3.672501 = USD 16.07. Marking up the converted
+ * cost instead gives 16.01, and a quote a cent a unit away from its estimate.
+ * `fx` is one unit of the quote's currency in the supplier's; "1" when they
+ * are the same.
+ */
+export function priceViaSupplier(
+  supplierPrice: string,
+  percent: string,
+  fx: string,
+  supplierCurrency: string,
+): string | null {
+  const wholeUnits = supplierCurrency.toUpperCase() === "AED";
+  const theirs = rateFromMarkup(supplierPrice, percent, wholeUnits ? 0 : 2);
+  if (theirs === null) return null;
+  return divideExact(theirs, fx, 2);
+}
+
 /**
  * The markup on cost that a given sell rate represents, as a percentage.
  *

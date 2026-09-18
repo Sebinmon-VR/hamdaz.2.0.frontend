@@ -1241,6 +1241,13 @@ export interface QuoteLineOut {
   line_total: string;
   tax_amount: string;
   total_incl_tax: string;
+  /**
+   * The line's price on the supplier's own document, in their currency — what
+   * a markup is applied to before converting, Zoho's way. Null on a line typed
+   * by hand.
+   */
+  supplier_unit_price: string | null;
+  supplier_currency: string | null;
   source_supplier_quote_id: string | null;
 }
 
@@ -1290,6 +1297,8 @@ export interface QuoteLineDraft {
   line_total: string | null;
   tax_amount: string | null;
   total_incl_tax: string | null;
+  supplier_unit_price: string | null;
+  supplier_currency: string | null;
   margin: string | null;
 }
 
@@ -1313,6 +1322,8 @@ export function toDraft(line: QuoteLineOut): QuoteLineDraft {
     line_total: line.line_total,
     tax_amount: line.tax_amount,
     total_incl_tax: line.total_incl_tax,
+    supplier_unit_price: line.supplier_unit_price,
+    supplier_currency: line.supplier_currency,
     margin: line.margin,
   };
 }
