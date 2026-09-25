@@ -262,7 +262,7 @@ export function SummarySheet({
             <span className="text-ink-4">—</span>
           )}
         </Fact>
-        <Fact label="Recommended markup" note="On landed cost. Not the same number as the margin.">
+        <Fact label="Recommended margin" note="Share of the selling price: price = landed cost ÷ (1 − margin).">
           <div className="w-28">
             <CellInput {...cell("target_markup_percent")} numeric placeholder="45" />
           </div>

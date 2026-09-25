@@ -41,9 +41,15 @@ import {
  * The figure in our own currency is locked too on any row quoted in the
  * supplier's, because the rate above decides it. Storing one number twice is
  * exactly the failure this sheet exists to prevent.
+ *
+ * A row can be a *rate* instead of a figure — insurance at 1% of the goods,
+ * the bank at 3% — typed in the "Rate" column. Both amount cells then lock and
+ * show the server's arithmetic, so the row follows the goods when the
+ * supplier changes rather than sitting there at last month's 1%.
  */
 
-const COLUMNS = "44px minmax(0,1.3fr) minmax(0,0.9fr) 120px 130px minmax(0,0.85fr) 34px";
+const COLUMNS =
+  "44px minmax(0,1.3fr) minmax(0,0.8fr) 118px 112px 122px minmax(0,0.8fr) 34px";
 
 export function LandedCostSheet({
   bid,
@@ -64,7 +70,11 @@ export function LandedCostSheet({
 }) {
   const { landed } = bid;
   const foreign = draft.supplier_currency.trim();
-  const hasRate = Boolean(draft.fx_rate.trim()) && Boolean(foreign);
+  // A quote priced from a supplier takes the supplier's currency, so most
+  // quotes have no rate to state: "1 USD in USD" is not a rate, and a figure
+  // left over from before the switch must not be shown as one.
+  const sameCurrency = !foreign || foreign.toUpperCase() === currency.toUpperCase();
+  const hasRate = Boolean(draft.fx_rate.trim()) && Boolean(foreign) && !sameCurrency;
 
   // Zoho's rate, into the cell. The estimate will be converted at this exact
   // figure, so costing the bid at it is what makes the two documents agree.
@@ -125,8 +135,20 @@ export function LandedCostSheet({
             />
           </div>
         </Fact>
+        {sameCurrency ? (
+          <Fact
+            label="Exchange rate"
+            note="The quote takes the supplier's currency, so nothing on it needs converting."
+          >
+            <span className="text-[12px] text-ink-4">
+              {foreign
+                ? `Supplier and quote are both in ${currency} — no rate applies.`
+                : `Everything is in ${currency} — no rate applies.`}
+            </span>
+          </Fact>
+        ) : (
         <Fact
-          label={`1 ${currency} in ${foreign || "…"}`}
+          label={`1 ${currency} in ${foreign}`}
           note="As Zoho Books states it — 1 USD = 3.672501 AED. The rate the bid is costed at, and the one the estimate will be converted at."
         >
           <div className="flex flex-wrap items-center gap-2">
@@ -157,6 +179,7 @@ export function LandedCostSheet({
             )}
           </div>
         </Fact>
+        )}
         <Fact
           label="Import duty rate"
           note="Charged on the value at arrival — freight and insurance included, not the goods alone."
@@ -196,7 +219,10 @@ export function LandedCostSheet({
             />
           </div>
         </Fact>
-        <Fact label="Markup on landed cost" note="What the bid is built at. See the costing sheet.">
+        <Fact
+          label="Margin on the bid"
+          note="Share of the selling price: price = landed cost ÷ (1 − margin). See the costing sheet."
+        >
           <div className="w-24">
             <CellInput
               value={draft.target_markup_percent}
@@ -215,6 +241,7 @@ export function LandedCostSheet({
           <Th align="right">#</Th>
           <Th>Cost element</Th>
           <Th>Basis / source</Th>
+          <Th align="right">Rate</Th>
           <Th align="right">{foreign || "Quoted"}</Th>
           <Th align="right">{currency}</Th>
           <Th>Notes</Th>
@@ -224,6 +251,7 @@ export function LandedCostSheet({
         {landed.elements.map((element, index) => {
           const row = element.id ? byId.get(element.id) : undefined;
           const own = editable && Boolean(row);
+          const rated = Boolean(row?.percent.trim());
           const derivedBase =
             own &&
             hasRate &&
@@ -240,6 +268,7 @@ export function LandedCostSheet({
                 <GridRow strong>
                   <Td />
                   <Td className="col-span-2">Value on arrival — the duty base</Td>
+                  <Td />
                   <Td />
                   <Td align="right">
                     <Num strong>{amount(landed.cif_subtotal, currency)}</Num>
@@ -287,6 +316,21 @@ export function LandedCostSheet({
                 </Td>
                 <Td align="right">
                   {own ? (
+                    <RateCell
+                      row={row!}
+                      stage={element.stage}
+                      onChange={(change) => patch(row!.key, change)}
+                    />
+                  ) : element.percent ? (
+                    <Num muted>
+                      {decimal(element.percent, { min: 0 })}% of {element.percent_of ?? "goods"}
+                    </Num>
+                  ) : (
+                    <span className="text-ink-4">—</span>
+                  )}
+                </Td>
+                <Td align="right">
+                  {own && !rated ? (
                     <CellInput
                       value={row!.amount_source}
                       editable
@@ -302,7 +346,7 @@ export function LandedCostSheet({
                   )}
                 </Td>
                 <Td align="right">
-                  {own && !derivedBase ? (
+                  {own && !derivedBase && !rated ? (
                     <CellInput
                       value={row!.amount_base}
                       editable
@@ -313,11 +357,13 @@ export function LandedCostSheet({
                     />
                   ) : (
                     <span>
-                      <Num muted={element.computed || derivedBase}>
+                      <Num muted={element.computed || derivedBase || rated}>
                         {decimal(element.amount_base)}
                       </Num>
-                      {derivedBase && (
-                        <span className="ml-1 text-[10px] text-ink-4">at rate</span>
+                      {(derivedBase || rated) && (
+                        <span className="ml-1 text-[10px] text-ink-4">
+                          {rated ? "worked out" : "at rate"}
+                        </span>
                       )}
                     </span>
                   )}
@@ -375,17 +421,28 @@ export function LandedCostSheet({
               />
             </Td>
             <Td align="right">
-              <CellInput
-                value={row.amount_source}
-                editable={editable}
-                numeric
-                align="right"
-                onChange={(v) => patch(row.key, { amount_source: v })}
-                placeholder="0.00"
+              <RateCell
+                row={row}
+                stage={row.stage}
+                onChange={(change) => patch(row.key, change)}
               />
             </Td>
             <Td align="right">
-              {hasRate && row.amount_source.trim() ? (
+              {row.percent.trim() ? (
+                <span className="text-[10.5px] text-ink-4">on save</span>
+              ) : (
+                <CellInput
+                  value={row.amount_source}
+                  editable={editable}
+                  numeric
+                  align="right"
+                  onChange={(v) => patch(row.key, { amount_source: v })}
+                  placeholder="0.00"
+                />
+              )}
+            </Td>
+            <Td align="right">
+              {(hasRate && row.amount_source.trim()) || row.percent.trim() ? (
                 <span className="text-[10.5px] text-ink-4">on save</span>
               ) : (
                 <CellInput
@@ -419,7 +476,7 @@ export function LandedCostSheet({
 
         <GridRow strong>
           <Td />
-          <Td className="col-span-3">Total landed cost, delivered</Td>
+          <Td className="col-span-4">Total landed cost, delivered</Td>
           <Td align="right">
             <Num strong>{amount(landed.total, currency)}</Num>
           </Td>
@@ -430,7 +487,7 @@ export function LandedCostSheet({
         {landed.per_unit && (
           <GridRow>
             <Td />
-            <Td className="col-span-3" muted>
+            <Td className="col-span-4" muted>
               Landed cost per unit, over {decimal(landed.quantity ?? "0", { min: 0 })}
             </Td>
             <Td align="right">
@@ -467,5 +524,53 @@ export function LandedCostSheet({
 
       {editable && <YellowNote />}
     </Sheet>
+  );
+}
+
+/**
+ * The rate cell: a percentage, and what it is a percentage of.
+ *
+ * Before arrival a rate can only be over the goods — the CIF value is not
+ * known until those rows are summed. After it, the bank's cut is on what was
+ * paid and a clearance agent's on what arrived, so the basis is a choice.
+ */
+function RateCell({
+  row,
+  stage,
+  onChange,
+}: {
+  row: CostRow;
+  stage: string;
+  onChange: (change: Partial<CostRow>) => void;
+}) {
+  const afterArrival = stage === "destination";
+  return (
+    <span className="flex items-center justify-end gap-1">
+      <span className="w-14">
+        <CellInput
+          value={row.percent}
+          editable
+          numeric
+          align="right"
+          onChange={(v) => onChange({ percent: v })}
+          placeholder="%"
+        />
+      </span>
+      {row.percent.trim() && (
+        afterArrival ? (
+          <select
+            value={row.percent_of}
+            onChange={(e) => onChange({ percent_of: e.target.value as CostRow["percent_of"] })}
+            className="rounded-[4px] bg-warn-soft/70 px-1 py-1 text-[11px] text-ink outline-none"
+            aria-label="What the rate is charged on"
+          >
+            <option value="goods">of goods</option>
+            <option value="cif">of CIF</option>
+          </select>
+        ) : (
+          <span className="text-[10.5px] text-ink-4">of goods</span>
+        )
+      )}
+    </span>
   );
 }

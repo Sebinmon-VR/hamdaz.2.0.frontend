@@ -222,13 +222,21 @@ export function MessageTrail({
               <p className="micro mb-1 text-ink-4">
                 {message.action === "marked_negotiation"
                   ? "Ticked on the task"
-                  : "What it would have ticked. That setting is switched off."}
+                  : message.action === "marked_order"
+                    ? "Set on the task"
+                    : "What it would have set on the task. Nothing was written — that setting is off, or the task already said so."}
               </p>
               <Pairs record={flatten(message.would_update)} />
               {message.action === "marked_negotiation" && (
                 <p className="mt-1 text-[11px] leading-relaxed text-ink-4">
                   Any flow watching that column runs when this happens. It is only ticked
                   once per task, so a long email thread does not set it off repeatedly.
+                </p>
+              )}
+              {message.action === "marked_order" && (
+                <p className="mt-1 text-[11px] leading-relaxed text-ink-4">
+                  The task&rsquo;s Order status in the Proposals list now says this. It is set
+                  once per task, so the replies in an order thread do not rewrite it.
                 </p>
               )}
             </div>

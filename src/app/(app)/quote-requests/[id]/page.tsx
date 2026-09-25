@@ -1,6 +1,7 @@
 "use client";
 
-import { use, useState } from "react";
+import { type ReactNode, use, useState } from "react";
+import clsx from "clsx";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -8,6 +9,7 @@ import {
   Check,
   ClipboardList,
   ExternalLink,
+  FileText,
   Handshake,
   MessageSquare,
   RotateCcw,
@@ -15,10 +17,10 @@ import {
   Save,
   Send,
   Trash2,
-  X,
+  X, ChevronDown,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { amount, date, dateTime, decimal, decimalPercent, num, quotePreview, relative } from "@/lib/format";
+import { amount, date, dateTime, decimal, decimalPercent, quotePreview, relative, isZero, costTotal, divideExact } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
 import {
   toDraft,
@@ -28,9 +30,10 @@ import {
   type QuoteRequestOut,
   type ReviewAction,
   type SupplierQuoteFailure,
+  type TypedSupplierQuotesIn,
 } from "@/lib/types";
-import { Badge, Meta, PageHead, Panel, StatBox } from "@/components/ui/primitives";
-import { Button, Field, Input, PillRail, Select, Textarea } from "@/components/ui/controls";
+import { Badge, PageHead, Panel } from "@/components/ui/primitives";
+import { Button, Field, IconButton, Input, Select, Textarea } from "@/components/ui/controls";
 import { ErrorState, InlineNotice, Modal, PanelSkeleton } from "@/components/ui/feedback";
 import {
   canEdit,
@@ -41,11 +44,13 @@ import { QuoteForm, draftOf, type QuoteFormDraft } from "@/components/quotes/Quo
 import { Calculations } from "@/components/quotes/Calculations";
 import { LineEditor } from "@/components/quotes/LineEditor";
 import { SupplierComparison } from "@/components/quotes/SupplierComparison";
-import { SupplierUpload } from "@/components/quotes/SupplierUpload";
-import { Documents } from "@/components/quotes/Documents";
+import { UploadBox } from "@/components/quotes/UploadBox";
 import { DeleteQuoteDialog } from "@/components/quotes/DeleteQuote";
 import { History } from "@/components/quotes/History";
 import { Discussion, QUOTE_ANCHOR, type CommentAnchor } from "@/components/quotes/Discussion";
+import { CostingReport } from "@/components/quotes/CostingReport";
+import { ReportParticulars } from "@/components/quotes/ReportParticulars";
+import { PriceTerms } from "@/components/quotes/PriceTerms";
 import { SummarySheet } from "@/components/quotes/sheet/SummarySheet";
 import { ComplianceSheet } from "@/components/quotes/sheet/ComplianceSheet";
 import { LandedCostSheet } from "@/components/quotes/sheet/LandedCostSheet";
@@ -94,7 +99,7 @@ import {
  * should have to press a button to discover why it will not work.
  *
  * No money is calculated anywhere in this file. Every total, margin, landed
- * cost, markup rung and probability is the server's, rendered from the exact
+ * cost, ladder rung and probability is the server's, rendered from the exact
  * decimal string it sent.
  */
 
@@ -108,6 +113,7 @@ import {
  */
 type Tab =
   | "quote"
+  | "report"
   | "summary"
   | "compliance"
   | "landed"
@@ -141,7 +147,7 @@ export default function QuoteRequestPage({
   const [form, setForm] = useState<QuoteFormDraft | null>(null);
   const [bid, setBid] = useState<BidDraft | null>(null);
   const [lines, setLines] = useState<QuoteLineDraft[]>([]);
-  const [targetMarkup, setTargetMarkup] = useState<string | null>(null);
+  const [targetMargin, setTargetMargin] = useState<string | null>(null);
   const [costs, setCosts] = useState<CostRow[]>([]);
   const [rules, setRules] = useState<ComplianceRow[]>([]);
   const [portal, setPortal] = useState<PortalRow[]>([]);
@@ -149,6 +155,12 @@ export default function QuoteRequestPage({
   const [dirtyLines, setDirtyLines] = useState<Set<string>>(new Set());
   const [stamp, setStamp] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("quote");
+  // What is folded away below the lines, and the warnings on the status line.
+  const [showWarnings, setShowWarnings] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [showWorking, setShowWorking] = useState(false);
+  // Null until somebody toggles it: open while no supplier is chosen, folded after.
+  const [showAttachments, setShowAttachments] = useState<boolean | null>(null);
   // Turned on by hand for a quote that is becoming a tender before any of the
   // bid fields have been filled in. Never turned off: hiding a tab whose
   // section has something in it is how work disappears.
@@ -179,7 +191,7 @@ export default function QuoteRequestPage({
     setBid(bidDraftOf(data));
     setTitle(data.title);
     setLines(data.items.map(toDraft));
-    setTargetMarkup(data.target_markup_percent);
+    setTargetMargin(data.target_markup_percent);
     const lists = bidLists(data);
     setCosts(lists.costLines.map(costRowOf));
     setRules(lists.compliance.map(complianceRowOf));
@@ -202,6 +214,11 @@ export default function QuoteRequestPage({
   const exportBook = useAction(async () =>
     api.download(`/quote-requests/${id}/workbook`, "bid.xlsx"),
   );
+  // The selling & costing report — the page the approvers are mailed — as a
+  // PDF. Built by the server from the saved quote, never from the drafts here.
+  const exportReport = useAction(async () =>
+    api.download(`/quote-requests/${id}/report.pdf`, "costing-report.pdf"),
+  );
   const remove = useAction(async () => {
     await api.del(`/quote-requests/${id}`);
     return true as const;
@@ -216,6 +233,10 @@ export default function QuoteRequestPage({
       supplier_quote_id,
       markup_percent,
     }),
+  );
+  // One supplier's offer off the comparison, document and all.
+  const removeSupplier = useAction(async (supplierQuoteId: string) =>
+    api.del<QuoteRequestOut>(`/quote-requests/${id}/supplier-quotes/${supplierQuoteId}`),
   );
   if (error) return <ErrorState error={error} onRetry={() => mutate()} />;
   if (isLoading && !data) return <PanelSkeleton lines={10} />;
@@ -247,7 +268,7 @@ export default function QuoteRequestPage({
     title !== data.title ||
     lines.length !== data.items.length ||
     lines.some((line, i) => line.id !== data.items[i]?.id) ||
-    targetMarkup !== data.target_markup_percent ||
+    targetMargin !== data.target_markup_percent ||
     formChanged(form, draftOf(data)) ||
     bidChanged(bid, bidDraftOf(data)) ||
     listChanged(costs.map(costRowIn), lists.costLines.map((c) => costRowIn(costRowOf(c)))) ||
@@ -272,17 +293,29 @@ export default function QuoteRequestPage({
             quantity: line.quantity,
             rate: line.rate,
             discount: line.discount,
-            taxPercentage: line.tax_percentage,
             costRate: line.cost_rate,
           })),
         {
           discount: form.discount,
           shipping_charge: form.shipping_charge,
           adjustment: form.adjustment,
+          tax_name: form.tax_name.trim() || null,
+          tax_percentage: form.tax_percentage.trim() || null,
         },
       )
     : null;
   const displayedTotals = livePreview ?? data;
+  const chosenSupplier =
+    data.comparison?.suppliers?.find((s) => s.quote_id === data.selected_supplier_quote_id)
+      ?.supplier_name ?? null;
+  // What the lines cost us: live while editing, else from the saved lines.
+  const goodsCost = livePreview?.cost_total ?? costTotal(data.items);
+  // The landed factor a price is built on. The server sends it; a server
+  // older than that field does not, and then it is the landed total over the
+  // goods — the same ratio, from figures the server did send.
+  const landedUplift =
+    data.bid?.landed.uplift ??
+    (data.bid && !isZero(goodsCost) ? divideExact(data.bid.landed.total, goodsCost, 8) : null);
 
   function patchBody() {
     return {
@@ -310,17 +343,20 @@ export default function QuoteRequestPage({
       discount: form!.discount.trim() || "0",
       shipping_charge: form!.shipping_charge.trim() || "0",
       adjustment: form!.adjustment.trim() || "0",
+      tax_name: nullable(form!.tax_name),
+      tax_percentage: form!.tax_percentage.trim() || null,
       multiple_supplier_quotes: data!.multiple_supplier_quotes,
       items: lines.filter((line) => line.name.trim()).map(toLineIn),
       // The bid pack. Same rule as the lines: the lists are replaced whole, so
       // a row somebody started and abandoned is dropped rather than saved as a
       // blank, and every list goes every time.
       ...bidPatch(bid!),
-      // After the spread on purpose: the bid draft carries a markup too (the
+      // After the spread on purpose: the bid draft carries the margin too (the
       // Summary sheet's cell), and the one typed in the header is the one that
       // was just edited. Listed before the spread it was overwritten — and the
-      // build refused the duplicate key.
-      target_markup_percent: targetMarkup?.trim() || null,
+      // build refused the duplicate key. The wire field keeps its old name;
+      // the number is a margin, a share of the selling price.
+      target_markup_percent: targetMargin?.trim() || null,
       cost_lines: costs.filter((row) => row.label.trim()).map(costRowIn),
       compliance: rules.filter((row) => row.requirement.trim()).map(complianceRowIn),
       submission_fields: portal.filter((row) => row.label.trim()).map(portalRowIn),
@@ -344,6 +380,11 @@ export default function QuoteRequestPage({
   // spreadsheet knows where they are before they read anything.
   const tabs: { value: Tab; label: string; count?: number }[] = [
     { value: "quote", label: "Quote & lines", count: data.items.length || undefined },
+    // On every quote, not only a bid: the report is what goes to the
+    // approver, and every quote goes to one — and the landed cost sheet is
+    // where the freight, duty and charges behind its figures are typed.
+    { value: "report", label: "Costing report" },
+    { value: "landed", label: "Landed cost", count: lists.costLines.length || undefined },
     ...(isBid
       ? ([
           { value: "summary", label: "Summary" },
@@ -352,7 +393,6 @@ export default function QuoteRequestPage({
             label: "Compliance matrix",
             count: lists.compliance.length || undefined,
           },
-          { value: "landed", label: "Landed cost" },
           { value: "costing", label: "Costing sheet" },
           {
             value: "portal",
@@ -376,16 +416,16 @@ export default function QuoteRequestPage({
         meta={data.rfp_number ?? data.reference ?? undefined}
         actions={
           <>
+            {/* Save is an icon with a state: lit when there is something to
+                save, quiet once it is saved. The decisions stay as words. */}
             {editable && (
-              <Button
+              <IconButton
                 icon={Save}
-                variant={unsaved ? "solid" : undefined}
-                disabled={!unsaved}
-                loading={save.pending}
+                label={save.pending ? "Saving…" : unsaved ? "Save changes" : "Saved"}
+                tone={unsaved ? "solid" : "ghost"}
+                disabled={!unsaved || save.pending}
                 onClick={() => persist()}
-              >
-                {unsaved ? "Save changes" : "Saved"}
-              </Button>
+              />
             )}
 
             {editable && (
@@ -427,30 +467,48 @@ export default function QuoteRequestPage({
               </Button>
             )}
 
-            {/* Shown on a bid only. An ordinary estimate would export five
-                sheets of blanks, which is worse than no button. */}
-            {isBid && (
-              <Button
-                icon={Download}
-                loading={exportBook.pending}
-                onClick={() => exportBook.run()}
-              >
-                Export
-              </Button>
-            )}
-
-            <Button icon={MessageSquare} onClick={() => setDeciding("comment")}>
-              Comment
-            </Button>
-
-            {/* Last, and deliberately far from Approve. Super admin only —
-                `may_delete` is the server's answer, not a role check done
-                here. */}
-            {data.may_delete && (
-              <Button variant="danger" icon={Trash2} onClick={() => setDeleting(true)}>
-                Delete
-              </Button>
-            )}
+            {/* The report as the approver receives it. Of the saved quote —
+                the tooltip says so while there are edits it cannot see. The
+                workbook is shown on a bid only: an ordinary estimate would
+                export five sheets of blanks, which is worse than no button. */}
+            <div className="flex items-center gap-1">
+              <IconButton
+                icon={FileText}
+                label={
+                  exportReport.pending
+                    ? "Preparing the report PDF…"
+                    : unsaved
+                      ? "Report PDF — of the saved quote; save first to include your changes"
+                      : "Report PDF"
+                }
+                disabled={exportReport.pending}
+                onClick={() => exportReport.run()}
+              />
+              {isBid && (
+                <IconButton
+                  icon={Download}
+                  label={exportBook.pending ? "Preparing the workbook…" : "Workbook"}
+                  disabled={exportBook.pending}
+                  onClick={() => exportBook.run()}
+                />
+              )}
+              <IconButton
+                icon={MessageSquare}
+                label="Comment"
+                onClick={() => setDeciding("comment")}
+              />
+              {/* Last, and deliberately far from Approve. Super admin only —
+                  `may_delete` is the server's answer, not a role check done
+                  here. */}
+              {data.may_delete && (
+                <IconButton
+                  icon={Trash2}
+                  label="Delete this quote"
+                  tone="danger"
+                  onClick={() => setDeleting(true)}
+                />
+              )}
+            </div>
           </>
         }
       />
@@ -458,6 +516,9 @@ export default function QuoteRequestPage({
       {save.error && <InlineNotice tone="danger">{save.error}</InlineNotice>}
       {exportBook.error && (
         <InlineNotice tone="danger">{exportBook.error}</InlineNotice>
+      )}
+      {exportReport.error && (
+        <InlineNotice tone="danger">{exportReport.error}</InlineNotice>
       )}
       {submit.error && <InlineNotice tone="danger">{submit.error}</InlineNotice>}
 
@@ -493,8 +554,9 @@ export default function QuoteRequestPage({
       {/* What the bid pack wants somebody to know before this goes anywhere.
           Advisory by design — see `bidpack.warnings`. It takes no button away,
           because a system that refuses at four o'clock on the day of a deadline
-          has not prevented a bad bid, it has prevented a bid. */}
-      {data.bid && data.bid.warnings.length > 0 && (
+          has not prevented a bad bid, it has prevented a bid. Behind a toggle
+          on the status line, so it does not push the quote down the page. */}
+      {data.bid && data.bid.warnings.length > 0 && showWarnings && (
         <InlineNotice tone="warn">
           <span className="block font-medium">Before this is submitted</span>
           <ul className="mt-1.5 space-y-1">
@@ -507,17 +569,31 @@ export default function QuoteRequestPage({
         </InlineNotice>
       )}
 
-      {/* ── where it is ── */}
-      <Panel className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
+      {/* ── where it is, and the facts: one quiet strip ── */}
+      <Panel className="space-y-3 px-5 py-3.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <QuoteStatusBadge status={data.status} />
-        <span className="text-[13px] text-ink-2">{spec.hint}</span>
+        <span className="text-[12.5px] text-ink-2">{spec.hint}</span>
         {data.revision > 1 && <Badge tone="neutral">Pass {data.revision}</Badge>}
         {unsaved && <Badge tone="warn">Unsaved changes</Badge>}
         {blocking > 0 && (
-          <Badge tone="danger" title="Compliance rows that are non-compliant, open or awaiting a clarification.">
-            {blocking} to clear
-          </Badge>
+          <button type="button" onClick={() => setTab("compliance")} title="Compliance rows that are non-compliant, open or awaiting a clarification. Opens the matrix.">
+            <Badge tone="danger">{blocking} to clear</Badge>
+          </button>
         )}
+        {data.bid && data.bid.warnings.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowWarnings((v) => !v)}
+            aria-expanded={showWarnings}
+            title="What the bid pack wants checked before this is sent."
+          >
+            <Badge tone="warn">
+              {data.bid.warnings.length} to check {showWarnings ? "▴" : "▾"}
+            </Badge>
+          </button>
+        )}
+        {!isBid && <WinChance quote={data} />}
         <div className="flex-1" />
         {/* The reason lives beside the control it explains. */}
         {editable && submitBlocked && (
@@ -545,47 +621,57 @@ export default function QuoteRequestPage({
                 : ""}
           </span>
         )}
-      </Panel>
-
-      {/* ── the numbers ── */}
-      <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
-        <StatBox
-          label="Total incl. tax"
-          value={amount(displayedTotals.total, currency)}
-          hint={`${amount(displayedTotals.tax_total, currency)} of it is tax.${livePreview ? " Live preview — save to apply." : ""}`}
-        />
-        <StatBox label="Total before tax" value={amount(displayedTotals.total_excl_tax, currency)} />
-        {isBid && data.bid ? (
-          <StatBox
-            label="Landed cost"
-            value={amount(data.bid.landed.total, currency)}
-            hint="What it costs to put the goods where the customer wants them. The build-up is on the costing tab."
-          />
-        ) : (
-          <StatBox label="Lines" value={num(data.items.length)} />
-        )}
-        {isBid && data.bid ? (
-          <StatBox
-            label="Margin"
-            value={
-              data.bid.gross_margin_percent
-                ? `${decimal(data.bid.gross_margin_percent, { min: 1 })}%`
-                : "—"
-            }
-            hint={`${amount(data.bid.gross_margin, currency)} over the landed cost, before tax — the lines' margin column, as one figure.`}
-          />
-        ) : (
-          <WinChance quote={data} />
-        )}
-        <StatBox
-          label="Open comments"
-          value={num(openComments.length)}
-          tone={openComments.length > 0 ? "second" : undefined}
-        />
       </div>
 
+      <Facts data={data} currency={currency} />
+      </Panel>
+
+      {/* ── the numbers: the four terms behind the price, with this quote's
+          figures in them. Cost, selling price, gross profit, gross margin —
+          the server's numbers, so they agree with the report below. A quote
+          that is not a tender shows its chance of winning beside them. ── */}
+      {data.bid && (
+        <PriceTerms
+          bid={data.bid}
+          sellingPrice={displayedTotals.total_excl_tax}
+          totalInclTax={displayedTotals.total}
+          taxLabel={
+            data.tax_percentage && !isZero(data.tax_percentage)
+              ? `${data.tax_name || "tax"} ${decimal(data.tax_percentage, { min: 0 })}%`
+              : "no tax"
+          }
+          targetMargin={targetMargin}
+          currency={currency}
+        />
+      )}
       <div className="flex flex-wrap items-center gap-3">
-        <PillRail options={tabs} value={tab} onChange={setTab} className="min-w-0 flex-1" />
+        {/* Tabs proper: a segmented switch, the open section raised on its
+            own tile, the count beside the name. The sections are pages of one
+            document, and a switch says so better than a row of pills. */}
+        <nav
+          className="flex min-w-0 max-w-full gap-0.5 overflow-x-auto rounded-xl bg-panel-2 p-1"
+          aria-label="Sections"
+        >
+          {tabs.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setTab(option.value)}
+              aria-current={tab === option.value ? "page" : undefined}
+              className={clsx(
+                "flex shrink-0 items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[13px] transition",
+                tab === option.value
+                  ? "bg-panel font-semibold text-ink shadow-sm"
+                  : "text-ink-3 hover:text-ink",
+              )}
+            >
+              {option.label}
+              {option.count !== undefined && (
+                <span className="tnum text-[11px] text-ink-4">{option.count}</span>
+              )}
+            </button>
+          ))}
+        </nav>
         {!isBid && editable && (
           <Button
             icon={ClipboardList}
@@ -600,99 +686,171 @@ export default function QuoteRequestPage({
       </div>
 
       {tab === "quote" && (
-        <div className="grid gap-3.5 xl:grid-cols-[1.65fr_1fr]">
-          <div className="min-w-0 space-y-3.5">
+        <div className="space-y-3.5">
+          {/* The lines, and beside them the one place a file is dropped:
+              a supplier quotation by default, or any other document. */}
+          <div className="grid gap-3.5 xl:grid-cols-[minmax(0,1fr)_480px]">
             <LineEditor
               lines={lines}
               currency={currency}
               fxRate={data.fx_rate}
+              landedUplift={landedUplift}
+              landedElements={data.bid?.landed.elements ?? null}
+              costTotal={goodsCost}
+              landedTotal={data.bid?.landed.total ?? null}
+              grossProfit={data.bid?.gross_margin ?? null}
+              grossMarginPercent={data.bid?.gross_margin_percent ?? null}
               editable={editable}
               dirtyIds={dirtyLines}
               quote={displayedTotals}
               preview={livePreview}
-              targetMarkup={targetMarkup}
+              targetMargin={targetMargin}
               onChange={(next) => {
                 setLines(next);
                 setDirtyLines(dirtyAgainst(next, data.items));
               }}
-              onTargetMarkupChange={setTargetMarkup}
-              onComment={(line) =>
+              onTargetMarginChange={setTargetMargin}
+              onComment={(line) => {
                 setAnchor({
                   target_type: "item",
                   target_ref: line.id,
                   label: `the line “${line.name || "untitled"}”`,
-                })
-              }
+                });
+                // The thread is on the discussion tab; go there, or the click
+                // looks like nothing happened.
+                setTab("discussion");
+              }}
             />
 
-            <SupplierUpload
-              attached={data.comparison?.suppliers?.length ?? 0}
+            <UploadBox
+              quote={data}
               editable={editable}
+              currency={currency}
+              className="xl:h-full"
+              // Not wrapped in useAction: the dialog owns the error, and the
+              // server's own words about a refused line are what it shows.
+              onTyped={async (body: TypedSupplierQuotesIn) => {
+                const next = await api.post<QuoteRequestOut>(
+                  `/quote-requests/${id}/supplier-quotes/typed`,
+                  body,
+                );
+                await mutate(next, { revalidate: false });
+              }}
               // Deliberately not wrapped in useAction: the per-file failures are
-              // inside the ApiError's detail, and the panel below is the thing
-              // that knows how to read them. Catching here would lose the names.
-              onUpload={async (files) => {
+              // inside the ApiError's detail, and the panel is the thing that
+              // knows how to read them. Catching here would lose the names.
+              onSupplierUpload={async (files, offerCurrency) => {
                 const body = new FormData();
                 for (const file of files) body.append("files", file);
+                if (offerCurrency) body.append("currency", offerCurrency);
                 const result = await api.upload<
                   QuoteRequestOut & { failed?: SupplierQuoteFailure[] }
                 >(`/quote-requests/${id}/supplier-quotes`, body);
                 await mutate(result, { revalidate: false });
                 return result.failed ?? null;
               }}
+              onDocumentsChanged={(next) => mutate(next, { revalidate: false })}
             />
-
-            <Documents documents={data.documents ?? []} editable={editable} />
-
-            {/* The comparison lives here, not on a page of its own: it exists so
-                that somebody picks, and picking is what gives this quote lines. */}
-            {data.comparison && (
-              <SupplierComparison
-                comparison={data.comparison}
-                currency={currency}
-                selectedId={data.selected_supplier_quote_id}
-                hasEdits={dirtyLines.size > 0}
-                canChoose={editable}
-                pending={choose.pending}
-                error={choose.error}
-                onChoose={async (supplierId, markup) => {
-                  const next = await choose.run(supplierId, markup);
-                  if (next) await mutate(next, { revalidate: false });
-                  return next;
-                }}
-              />
-            )}
           </div>
 
-          <div className="min-w-0 space-y-3.5">
-            <Sidebar
-              data={data}
-              currency={currency}
-              editable={editable}
-              title={title}
-              onTitle={setTitle}
-            />
-
-            <Calculations steps={data.calculation} />
-
-            <QuoteForm
-              draft={form}
-              currency={currency}
-              currencyEditable={data.may_set_currency}
-              onCurrency={changeCurrency}
-              editable={editable}
-              onChange={(patch) => setForm({ ...form, ...patch })}
-              commentCounts={fieldComments(data)}
-              onComment={(fieldKey, label) =>
-                setAnchor({
-                  target_type: "field",
-                  target_ref: fieldKey,
-                  label: `the ${label.toLowerCase()} field`,
-                })
+          {/* The comparison lives here, not on a page of its own: it exists so
+              that somebody picks, and picking is what gives this quote lines.
+              Open until a supplier is chosen; folded once one is. */}
+          {data.comparison && (
+            <Section
+              title="Supplier comparison"
+              summary={[
+                `${data.comparison.suppliers.length} offer${data.comparison.suppliers.length === 1 ? "" : "s"}`,
+                chosenSupplier ? `priced from ${chosenSupplier}` : "none chosen yet",
+              ].join(" · ")}
+              open={showAttachments ?? !data.selected_supplier_quote_id}
+              onToggle={() =>
+                setShowAttachments((v) => !(v ?? !data.selected_supplier_quote_id))
               }
-            />
-          </div>
+            >
+              <SupplierComparison
+                    comparison={data.comparison}
+                    currency={currency}
+                    selectedId={data.selected_supplier_quote_id}
+                    hasEdits={dirtyLines.size > 0}
+                    canChoose={editable}
+                    pending={choose.pending}
+                    error={choose.error ?? removeSupplier.error}
+                    onChoose={async (supplierId, markup) => {
+                      const next = await choose.run(supplierId, markup);
+                      if (next) await mutate(next, { revalidate: false });
+                      return next;
+                    }}
+                    onRemove={async (supplierId) => {
+                      const next = await removeSupplier.run(supplierId);
+                      if (next) await mutate(next, { revalidate: false });
+                      return next;
+                    }}
+                  />
+            </Section>
+          )}
+
+          {/* The rest of the quote — its title, customer, dates, terms,
+              adjustments and tax — folded away. Filled in once, read rarely. */}
+          <Section
+            title="Quote details & report particulars"
+            summary={[
+              data.customer_name,
+              currency,
+              data.expiry_date ? `valid until ${date(data.expiry_date)}` : null,
+              data.payment_terms,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+            open={showDetails}
+            onToggle={() => setShowDetails((v) => !v)}
+          >
+            <Panel className="space-y-4 p-4">
+              <QuoteForm
+                embedded
+                title={title}
+                onTitle={setTitle}
+                draft={form}
+                currency={currency}
+                currencyEditable={data.may_set_currency}
+                onCurrency={changeCurrency}
+                editable={editable}
+                onChange={(patch) => setForm({ ...form, ...patch })}
+                commentCounts={fieldComments(data)}
+                onComment={(fieldKey, label) =>
+                  setAnchor({
+                    target_type: "field",
+                    target_ref: fieldKey,
+                    label: `the ${label.toLowerCase()} field`,
+                  })
+                }
+              />
+              {bid && (
+                <ReportParticulars
+                  embedded
+                  draft={bid}
+                  editable={editable}
+                  onChange={(patch) => setBid({ ...bid, ...patch })}
+                />
+              )}
+            </Panel>
+          </Section>
+
+          {/* Every sum, written out. For checking a figure, not for reading
+              every time. */}
+          <Section
+            title="How the figures are worked out"
+            summary="Every step, from the server's own arithmetic"
+            open={showWorking}
+            onToggle={() => setShowWorking((v) => !v)}
+          >
+            <Calculations steps={data.calculation} />
+          </Section>
         </div>
+      )}
+
+      {tab === "report" && (
+        <CostingReport quote={data} unsaved={unsaved} />
       )}
 
       {tab === "summary" && (
@@ -832,67 +990,98 @@ export default function QuoteRequestPage({
  * does not. A quote's title is edited here for the same reason — it belongs
  * beside the customer rather than in a panel of its own.
  */
-function Sidebar({
-  data,
-  currency,
-  editable,
+function Facts({ data, currency }: { data: QuoteRequestOut; currency: string }) {
+  const facts: [string, string][] = [
+    ["Customer", data.customer_name],
+    ["Currency", currency],
+    ...(data.cf_bcd ? ([["Bid closing", date(data.cf_bcd)]] as [string, string][]) : []),
+    ...(data.expiry_date
+      ? ([["Valid until", date(data.expiry_date)]] as [string, string][])
+      : []),
+    ...(data.rfp_number ? ([["RFP", data.rfp_number]] as [string, string][]) : []),
+    ...(data.line_item_ref ? ([["Line", data.line_item_ref]] as [string, string][]) : []),
+    ["Team", data.team_name ?? "—"],
+    ["Raised by", data.created_by_name ?? "—"],
+    ["Sent", data.submitted_at ? relative(data.submitted_at) : "not yet"],
+    ["Decided", data.decided_at ? relative(data.decided_at) : "not yet"],
+  ];
+  return (
+    <div className="flex flex-wrap items-end gap-x-7 gap-y-2 border-t border-line pt-3">
+      {facts.map(([label, value]) => (
+        <div key={label} className="min-w-0">
+          <span className="micro block text-ink-4">{label}</span>
+          <span className="block truncate text-[12.5px] text-ink">{value}</span>
+        </div>
+      ))}
+      {/* The quote's folder in the shared library, once something has been
+          filed there, and the enquiry it came from. Their own access decides
+          what they may open. */}
+      {(data.drive_folder_url || data.source_task_url) && (
+        <div className="ml-auto flex items-center gap-2">
+          {data.drive_folder_url && (
+            <a
+              href={data.drive_folder_url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-panel-2 px-2.5 py-1 text-[12px] text-ink-2 transition hover:text-ink"
+            >
+              <ExternalLink className="size-3.5" strokeWidth={1.8} />
+              Quote folder
+            </a>
+          )}
+          {data.source_task_url && (
+            <a
+              href={data.source_task_url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-panel-2 px-2.5 py-1 text-[12px] text-ink-2 transition hover:text-ink"
+            >
+              <ExternalLink className="size-3.5" strokeWidth={1.8} />
+              Enquiry
+            </a>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A section that is folded by default: one bar with the title and a
+ * summary of what is inside, the content beneath it when opened. The
+ * content keeps its own panels, so nothing is boxed inside a box.
+ */
+function Section({
   title,
-  onTitle,
+  summary,
+  open,
+  onToggle,
+  children,
 }: {
-  data: QuoteRequestOut;
-  currency: string;
-  editable: boolean;
   title: string;
-  onTitle: (value: string) => void;
+  summary?: string | null;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
 }) {
   return (
     <>
-      <Panel className="p-5">
-        <dl className="grid grid-cols-2 gap-x-5 gap-y-4">
-          <Meta label="Customer">{data.customer_name}</Meta>
-          <Meta label="Currency">{currency}</Meta>
-          <Meta label="Bid closing">{data.cf_bcd ? date(data.cf_bcd) : "—"}</Meta>
-          <Meta label="Valid until">
-            {data.expiry_date ? date(data.expiry_date) : "—"}
-          </Meta>
-          {data.rfp_number && <Meta label="RFP">{data.rfp_number}</Meta>}
-          {data.line_item_ref && <Meta label="Line">{data.line_item_ref}</Meta>}
-          <Meta label="Team">{data.team_name ?? "—"}</Meta>
-          <Meta label="Raised by">{data.created_by_name ?? "—"}</Meta>
-          <Meta label="Sent">
-            {data.submitted_at ? relative(data.submitted_at) : "not yet"}
-          </Meta>
-          <Meta label="Decided">
-            {data.decided_at ? relative(data.decided_at) : "not yet"}
-          </Meta>
-        </dl>
-
-        {/* Back to where the enquiry actually lives. SharePoint stays the
-            system of record for the bid itself. */}
-        {data.source_task_url && (
-          <a
-            href={data.source_task_url}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-4 inline-flex items-center gap-1.5 border-t border-line pt-4 text-[12px] text-ink-3 transition hover:text-ink"
-          >
-            <ExternalLink className="size-3.5" strokeWidth={1.8} />
-            Open the enquiry in SharePoint
-          </a>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 rounded-2xl bg-panel px-5 py-3 text-left transition hover:bg-panel-2"
+      >
+        <ChevronDown
+          className={clsx("size-4 shrink-0 text-ink-4 transition", open && "rotate-180")}
+          strokeWidth={2}
+        />
+        <span className="text-[14px] font-semibold">{title}</span>
+        {!open && summary && (
+          <span className="min-w-0 truncate text-[12px] text-ink-4">{summary}</span>
         )}
-      </Panel>
-
-      {editable && (
-        <Panel className="p-5">
-          <span className="mb-1.5 block text-[12px] text-ink-3">Title</span>
-          <input
-            value={title}
-            onChange={(e) => onTitle(e.target.value)}
-            className="w-full rounded-2xl border border-transparent bg-panel-2 px-4 py-2.5 text-[13px] outline-none transition focus:border-accent"
-            placeholder="What this quote is for"
-          />
-        </Panel>
-      )}
+      </button>
+      {open && children}
     </>
   );
 }
@@ -949,8 +1138,6 @@ function dirtyAgainst(lines: QuoteLineDraft[], items: QuoteLineOut[]): Set<strin
       line.quantity !== was.quantity ||
       line.rate !== was.rate ||
       line.discount !== was.discount ||
-      line.tax_name !== was.tax_name ||
-      line.tax_percentage !== was.tax_percentage ||
       line.cost_rate !== was.cost_rate;
     if (moved) dirty.add(line.key);
   }
@@ -978,28 +1165,26 @@ function WinChance({ quote }: { quote: QuoteRequestOut }) {
   const basis = quote.win_basis ? describeBasis(quote.win_basis) : null;
   if (quote.win_probability === null || !basis) {
     return (
-      <StatBox
-        label="Chance of winning"
-        value="—"
-        hint={
+      <span
+        className="text-[12px] text-ink-4"
+        title={
           quote.win_probability !== null
             ? "An estimate exists but the backend did not say what it came from, so it is not shown."
             : "Not estimated yet."
         }
-      />
+      >
+        Chance of winning —
+      </span>
     );
   }
   return (
-    <StatBox
-      label="Chance of winning"
-      value={
-        <span className="flex items-baseline gap-2">
-          {decimalPercent(quote.win_probability, { places: 0 })}
-          <span className="text-[11px] font-normal text-ink-4">{basis.short}</span>
-        </span>
-      }
-      hint={basis.full}
-    />
+    <span className="text-[12px] text-ink-3" title={basis.full}>
+      Chance of winning{" "}
+      <span className="tnum font-semibold text-ink-2">
+        {decimalPercent(quote.win_probability, { places: 0 })}
+      </span>{" "}
+      <span className="text-ink-4">{basis.short}</span>
+    </span>
   );
 }
 

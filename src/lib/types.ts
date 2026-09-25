@@ -1227,8 +1227,6 @@ export interface QuoteLineOut {
   quantity: string;
   rate: string;
   discount: string;
-  tax_name: string | null;
-  tax_percentage: string | null;
   /** What it costs us. Null when no supplier quote is behind the line. */
   cost_rate: string | null;
   /**
@@ -1237,13 +1235,14 @@ export interface QuoteLineOut {
    * supplier cost sits behind the line.
    */
   margin: string | null;
-  /** Zoho's three columns for a line: taxable amount, tax, amount. */
+  /**
+   * Quantity × rate, less the line's discount: the taxable amount. The tax is
+   * on the quote's total, not on the line.
+   */
   line_total: string;
-  tax_amount: string;
-  total_incl_tax: string;
   /**
    * The line's price on the supplier's own document, in their currency — what
-   * a markup is applied to before converting, Zoho's way. Null on a line typed
+   * the margin is put on before converting, Zoho's way. Null on a line typed
    * by hand.
    */
   supplier_unit_price: string | null;
@@ -1260,8 +1259,6 @@ export interface QuoteLineIn {
   quantity: number | string;
   rate: number | string;
   discount?: number | string;
-  tax_name?: string | null;
-  tax_percentage?: number | string | null;
   cost_rate?: number | string | null;
   source_supplier_quote_id?: string | null;
 }
@@ -1290,13 +1287,9 @@ export interface QuoteLineDraft {
   quantity: string;
   rate: string;
   discount: string;
-  tax_name: string | null;
-  tax_percentage: string | null;
   cost_rate: string | null;
   source_supplier_quote_id: string | null;
   line_total: string | null;
-  tax_amount: string | null;
-  total_incl_tax: string | null;
   supplier_unit_price: string | null;
   supplier_currency: string | null;
   margin: string | null;
@@ -1315,13 +1308,9 @@ export function toDraft(line: QuoteLineOut): QuoteLineDraft {
     quantity: line.quantity,
     rate: line.rate,
     discount: line.discount,
-    tax_name: line.tax_name,
-    tax_percentage: line.tax_percentage,
     cost_rate: line.cost_rate,
     source_supplier_quote_id: line.source_supplier_quote_id,
     line_total: line.line_total,
-    tax_amount: line.tax_amount,
-    total_incl_tax: line.total_incl_tax,
     supplier_unit_price: line.supplier_unit_price,
     supplier_currency: line.supplier_currency,
     margin: line.margin,
@@ -1346,11 +1335,6 @@ export function toLineIn(line: QuoteLineDraft): QuoteLineIn {
     quantity: line.quantity.trim() === "" ? "1" : line.quantity.trim(),
     rate: orZero(line.rate),
     discount: orZero(line.discount),
-    tax_name: line.tax_name,
-    tax_percentage:
-      line.tax_percentage === null || line.tax_percentage.trim() === ""
-        ? null
-        : line.tax_percentage.trim(),
     cost_rate:
       line.cost_rate === null || line.cost_rate.trim() === "" ? null : line.cost_rate.trim(),
     source_supplier_quote_id: line.source_supplier_quote_id,
@@ -1435,7 +1419,17 @@ export interface QuoteCostLineOut {
   is_principal: boolean;
   is_firm: boolean;
   notes: string | null;
+  /**
+   * A rate instead of a figure — insurance at 1% of the goods, bank charges
+   * at 3%. When set the amount is the server's arithmetic and the amounts
+   * above are ignored, so the row follows the goods when the supplier changes.
+   */
+  percent?: string | null;
+  percent_of?: PercentBasis | null;
 }
+
+/** What a rated cost row is charged on: the goods, or the CIF value. */
+export type PercentBasis = "goods" | "cif";
 
 export interface QuoteComplianceOut {
   id: string;
@@ -1516,6 +1510,9 @@ export interface CostElementOut {
   computed: boolean;
   notes: string | null;
   id: string | null;
+  /** Set on a row stated as a rate; the amount is then worked out. */
+  percent?: string | null;
+  percent_of?: string | null;
 }
 
 export interface LandedCostOut {
@@ -1533,18 +1530,26 @@ export interface LandedCostOut {
   per_unit_note: string | null;
   /** The share the supplier or forwarder has committed to; the rest is ours. */
   firm_percent: string;
+  /**
+   * Landed cost ÷ goods cost, to eight places. A line's landed cost is its
+   * cost × this, and its selling price is that ÷ (1 − margin) — so the margin
+   * typed is the gross margin, after freight, insurance, duty and bank charges.
+   */
+  uplift: string;
   principal_value: string;
 }
 
+/** One rung of the ladder: the landed cost priced at one margin. */
 export interface MarkupScenarioOut {
+  /**
+   * The markup on cost this rung amounts to — what was added, as a share of
+   * the cost. A buyer who sees the supplier's price sees this number. A 45%
+   * margin is an 82% markup.
+   */
   markup_percent: string;
   unit_sell: string | null;
   total_sell: string;
-  /**
-   * Margin as a share of the selling price — which is what "margin" means to
-   * everybody except the person who applied the markup. A 45% markup is a 31%
-   * margin, and reading one as the other underprices the bid.
-   */
+  /** The rung itself: the margin kept, as a share of the selling price. */
   margin_percent: string;
   is_target: boolean;
 }
@@ -1581,7 +1586,7 @@ export interface RedFlagOut {
 export interface BidPackOut {
   landed: LandedCostOut;
   scenarios: MarkupScenarioOut[];
-  /** The rung the bid is actually built at, when a markup is set. */
+  /** The rung the bid is actually built at, when a margin is set. */
   target: MarkupScenarioOut | null;
   bid_unit_price: string | null;
   bid_total: string;
@@ -1596,20 +1601,81 @@ export interface BidPackOut {
   warnings: string[];
 }
 
-/** One supplier document uploaded against a quote. */
+/**
+ * What a document uploaded against a quote is. The kind decides which reader
+ * pulls facts out of it and how it is named in the task's folder.
+ */
+export type DocumentKind =
+  | "supplier_quote"
+  | "customer_rfq"
+  | "end_user_po"
+  | "technical_spec"
+  | "compliance"
+  | "freight_quote"
+  | "costing_report"
+  | "other";
+
+/** The kinds a person uploads. Supplier quotes have their own panel. */
+export const UPLOAD_KINDS: { value: DocumentKind; label: string; hint: string }[] = [
+  { value: "customer_rfq", label: "Customer RFQ / enquiry", hint: "Gives the reference, closing date, delivery place and the items asked for." },
+  { value: "end_user_po", label: "End user PO", hint: "Gives the PO number, date and value." },
+  { value: "freight_quote", label: "Freight / courier quote", hint: "Gives a freight figure for the landed cost." },
+  { value: "technical_spec", label: "Technical spec / datasheet", hint: "Filed with the quote." },
+  { value: "compliance", label: "Compliance / certificate", hint: "Filed with the quote." },
+  { value: "other", label: "Other", hint: "Filed with the quote." },
+];
+
+/**
+ * One value a document proposes for a quote field. Never written by itself:
+ * a person applies it, and `applied` remembers that they did.
+ */
+export interface DocumentSuggestion {
+  label: string;
+  value: unknown;
+  /** "page 2", when the reader knows. */
+  source: string | null;
+  /** What the quote says now, so the person sees what would change. */
+  current: unknown;
+  applied: boolean;
+  currency?: string | null;
+  carrier?: string | null;
+  transit?: string | null;
+}
+
+/** One document uploaded against a quote, and where it was filed. */
 export interface QuoteDocumentOut {
-  supplier_quote_id: string;
-  supplier_name: string;
+  /** Null for a supplier quotation attached before documents had rows. */
+  id: string | null;
+  kind: DocumentKind;
+  kind_label: string;
   file_name: string | null;
-  file_type: string | null;
+  content_type: string | null;
+  size: number | null;
   /**
    * Where it was filed in the shared library. Opening it uses the viewer's own
    * SharePoint access, never the app's — so a link here is not a promise that
    * they can read it.
    */
   drive_url: string | null;
+  drive_path: string | null;
+  uploaded_by_name: string | null;
+  created_at: string | null;
+  notes: string | null;
+  /** For a supplier quotation: the comparison row it was read into. */
+  supplier_quote_id: string | null;
+  supplier_name: string | null;
   /** True for the offer this quote is actually priced from. */
   is_selected: boolean;
+  /** For the costing report: the pass it was rendered at. */
+  revision: number | null;
+  suggestions: Record<string, DocumentSuggestion> | null;
+}
+
+/** POST /{id}/documents/{doc}/apply. */
+export interface ApplySuggestionsIn {
+  fields: string[];
+  /** Write over a field somebody already typed. Off by default. */
+  overwrite: boolean;
 }
 
 export interface QuoteRequestSummaryOut {
@@ -1670,6 +1736,12 @@ export interface QuoteRequestOut {
   discount: string;
   shipping_charge: string;
   adjustment: string;
+  /**
+   * The tax on the quote, applied once to the total before tax — after the
+   * discount, shipping and adjustment — and rounded once. Null when none.
+   */
+  tax_name: string | null;
+  tax_percentage: string | null;
   sub_total: string;
   /** Before tax, and the tax on its own. `total` is what the customer pays. */
   total_excl_tax: string;
@@ -1706,11 +1778,33 @@ export interface QuoteRequestOut {
   customs_duty_percent: string;
   financing_rate_percent: string;
   cash_exposure_days: number;
+  /**
+   * The margin the bid is built at, as a share of the selling price: price =
+   * landed cost ÷ (1 − margin). Under 100. The field keeps its old name on
+   * the wire; the number in it is a margin.
+   */
   target_markup_percent: string | null;
   submission_unit_price: string | null;
   submission_total: string | null;
   /** The RFP makes the principal's quotation a mandatory attachment. */
   discloses_principal_price: boolean;
+
+  /* ── the selling & costing report's own facts ── */
+  /** The supplier as the report names them. Typed when no document was uploaded. */
+  supplier_name?: string | null;
+  /** "online purchase", "distributor", "OEM direct" — printed beside the name. */
+  supplier_basis?: string | null;
+  /** "Express courier to Abu Dhabi". Prose; the costed freight is a cost row. */
+  supplier_route?: string | null;
+  /** Who finally uses the goods, when that is not the customer invoiced. */
+  end_user_name?: string | null;
+  /** Margin of the selling price below which the quote needs approval. Null is the house default. */
+  walk_away_margin_percent?: string | null;
+  comfortable_margin_percent?: string | null;
+  /** What to say if the customer pushes back. Generated when blank. */
+  recommendation?: string | null;
+  /** Footnotes for the approver, one per line. */
+  report_notes?: string | null;
 
   multiple_supplier_quotes: boolean;
   /** Set once supplier quotes are attached — they are compared as a unit. */
@@ -1738,6 +1832,16 @@ export interface QuoteRequestOut {
    */
   approvers_notified_at: string | null;
   notify_error: string | null;
+
+  /**
+   * The folder in the shared library this quote's documents are filed in,
+   * once one has been, and what the last failed filing said. A report that
+   * could not be filed on submit lands in `filing_error` rather than stopping
+   * the submission.
+   */
+  drive_folder?: string | null;
+  drive_folder_url?: string | null;
+  filing_error?: string | null;
 
   /** The SharePoint enquiry this was raised from, when it came from one. */
   source_task_id: string | null;
@@ -1850,7 +1954,11 @@ export interface QuoteComparison extends Analysis {
 /** POST /{id}/select-supplier. `SupplierChoiceIn` on the wire. */
 export interface SupplierChoiceIn {
   supplier_quote_id: string;
-  /** Percent added to each supplier cost to get the sell rate. */
+  /**
+   * The margin each line keeps, as a share of its selling price: rate = the
+   * supplier's cost ÷ (1 − this). Under 100. Still `markup_percent` on the
+   * wire; the number is a margin.
+   */
   markup_percent: number | string;
 }
 
@@ -1894,8 +2002,136 @@ export interface QuoteRequestIn {
   discount?: number | string;
   shipping_charge?: number | string;
   adjustment?: number | string;
+  /** One rate on the total before tax. Null clears it. */
+  tax_name?: string | null;
+  tax_percentage?: number | string | null;
   multiple_supplier_quotes?: boolean;
   items?: QuoteLineIn[];
+  supplier_name?: string | null;
+  supplier_basis?: string | null;
+  supplier_route?: string | null;
+  end_user_name?: string | null;
+  walk_away_margin_percent?: string | null;
+  comfortable_margin_percent?: string | null;
+  recommendation?: string | null;
+  report_notes?: string | null;
+}
+
+/** POST /{id}/supplier-quotes/typed. The comparison module's own shape. */
+export interface TypedSupplierQuotesIn {
+  quotes: QuoteIn[];
+}
+
+/* ── the selling & costing report ────────────────────────────────────── */
+
+/**
+ * What an approver reads: the quoted price against the landed cost, the
+ * margin that leaves, the walk-away and what each discount step does to it.
+ *
+ * Computed by the server on every read from the quote's own rows, and never
+ * calculated here — the PDF, this screen and the approval mail are three
+ * renderings of one object, which is what keeps them from disagreeing.
+ *
+ * Margin throughout is a share of the *selling price*, the number a
+ * discount eats into — the same terms every line is priced in.
+ */
+export interface FigureOut {
+  amount: string;
+  /** In the base currency, when the report has a rate. Null otherwise. */
+  base: string | null;
+}
+
+/** Decided by the server from the walk-away and comfortable margins. */
+export type NegotiationStatus = "comfortable" | "acceptable" | "needs_approval" | "loss";
+
+export interface ReportLineOut {
+  position: number;
+  part_number: string | null;
+  description: string;
+  quantity: string;
+  unit: string | null;
+  supplier_amount: string | null;
+  supplier_currency: string | null;
+  landed: FigureOut | null;
+  selling: FigureOut;
+  margin: FigureOut | null;
+  margin_percent: string | null;
+}
+
+export interface ReportCostRowOut {
+  label: string;
+  amount: FigureOut;
+  /** Our estimate rather than a committed figure. Starred on the report. */
+  is_estimate: boolean;
+  computed: boolean;
+}
+
+export interface WalkAwayRungOut {
+  margin_percent: string;
+  price: FigureOut;
+  max_discount_percent: string | null;
+}
+
+export interface NegotiationStepOut {
+  discount_percent: string;
+  total_incl_tax: FigureOut;
+  selling: FigureOut;
+  margin: FigureOut;
+  margin_percent: string | null;
+  status: NegotiationStatus;
+}
+
+export interface CostingReportOut {
+  reference: string;
+  title: string;
+  prepared_on: string;
+  prepared_by: string | null;
+  /** From the review trail: who last decided, and who approved. Null until somebody has. */
+  reviewed_by: string | null;
+  approved_by: string | null;
+  currency: string;
+  base_currency: string;
+  /** One unit of `currency` in `base_currency`, or null for a single-currency report. */
+  base_rate: string | null;
+  rate_source: string | null;
+  customer: {
+    name: string;
+    end_user: string | null;
+    reference: string | null;
+    portal: string | null;
+    place_of_supply: string | null;
+    valid_from: string | null;
+    valid_until: string | null;
+  };
+  supplier: {
+    name: string | null;
+    basis: string | null;
+    route: string | null;
+    currency: string | null;
+    quote_number: string | null;
+    creator: string | null;
+  };
+  quoted_price: FigureOut;
+  landed_total: FigureOut;
+  gross_margin: FigureOut;
+  gross_margin_percent: string | null;
+  walk_away_margin_percent: string;
+  comfortable_margin_percent: string;
+  walk_away_price: FigureOut;
+  lines: ReportLineOut[];
+  total_quantity: string;
+  total_supplier_amount: string | null;
+  supplier_currency: string | null;
+  cost_rows: ReportCostRowOut[];
+  tax_label: string;
+  sub_total: FigureOut;
+  tax_total: FigureOut;
+  total_incl_tax: FigureOut;
+  walk_away_ladder: WalkAwayRungOut[];
+  negotiation: NegotiationStepOut[];
+  recommendation: string;
+  notes: string[];
+  warnings: string[];
 }
 
 // ── form templates ─────────────────────────────────────────────────────
@@ -4130,6 +4366,8 @@ export type IntakeAction =
    */
   | "marked_negotiation"
   | "order_notice"
+  /** The matched task's `OrderStatus` column was set. The same weight as the mark above. */
+  | "marked_order"
   | "duplicate";
 
 export interface IntakeSettingsOut {
@@ -4167,6 +4405,16 @@ export interface IntakeSettingsOut {
   update_negotiation: boolean;
   /** What to write there. A setting rather than a constant — a list's choices are the list's business. */
   negotiation_value: string;
+  /**
+   * The third write, and the third switch.
+   *
+   * When a purchase order matches a task, set that task's `OrderStatus`
+   * column — the one the team fills in by hand today to say an order came in.
+   * Off, the holder is still told; only the column is left alone.
+   */
+  update_order_status: boolean;
+  /** What to write there. The list offers Received and Awaited today. */
+  order_status_value: string;
   assign_team_id: string | null;
   /** 0–1. Below it, a match is not trusted and the message is treated as new work. */
   match_threshold: number;
@@ -4194,6 +4442,8 @@ export interface IntakeSettingsIn {
   create_in_sharepoint?: boolean;
   update_negotiation?: boolean;
   negotiation_value?: string;
+  update_order_status?: boolean;
+  order_status_value?: string;
   assign_team_id?: string | null;
   match_threshold?: number;
   classify_threshold?: number;

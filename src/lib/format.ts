@@ -351,10 +351,15 @@ export function sumExact(values: (string | null | undefined)[]): string | null {
  * produce is an *input* — the sell rate the user is about to type — not an
  * answer displayed as though the server had given it.
  *
- * Somebody pricing a job thinks "cost plus twenty percent", not "1200". Making
+ * Somebody pricing a job thinks "twenty percent margin", not "1250". Making
  * them do that arithmetic in their head and type the result is how a rate ends
- * up a few cents out. So the markup is the thing they type and the rate is
+ * up a few cents out. So the margin is the thing they type and the rate is
  * derived, exactly, and the server still has the last word on every total.
+ *
+ * A margin is a share of the selling price: rate = cost ÷ (1 − margin). Cost
+ * 100 at 20% is 125, of which a fifth — the 25 added — is margin. Marking up
+ * by 20% would give 120, which keeps only 16.67%, and that difference on every
+ * line is how a bid goes in cheaper than the number somebody typed.
  */
 
 /** Signed integer units for a parsed decimal, at its own scale. */
@@ -415,15 +420,12 @@ export interface QuotePreviewLineInput {
   quantity: string;
   rate: string;
   discount: string;
-  taxPercentage: string | null;
   costRate: string | null;
 }
 
 /** A calculated line for an on-screen preview. Nothing here has been saved. */
 export interface QuotePreviewLine {
   line_total: string;
-  tax_amount: string;
-  total_incl_tax: string;
   margin: string | null;
 }
 
@@ -437,6 +439,29 @@ export interface QuotePreview {
   discount: string;
   shipping_charge: string;
   adjustment: string;
+  tax_name: string | null;
+  tax_percentage: string | null;
+  /** What the costed lines cost us: Σ cost × quantity. "0" when none has a cost. */
+  cost_total: string;
+}
+
+/**
+ * What the lines cost us, before anything is moved: Σ cost × quantity over
+ * the lines that have a cost. Exact, so it agrees with the server's goods
+ * figure to the cent.
+ */
+export function costTotal(
+  lines: readonly { cost_rate: string | null; quantity: string }[],
+): string {
+  const costs: string[] = [];
+  for (const line of lines) {
+    const cost = line.cost_rate?.trim();
+    if (!cost || !parts(cost)) continue;
+    const qty = line.quantity.trim() || "1";
+    const extended = multiplyExact(cost, qty);
+    if (extended !== null) costs.push(extended);
+  }
+  return sumExact(costs) ?? "0";
 }
 
 function previewInput(value: string | null | undefined, fallback: string): string | null {
@@ -455,56 +480,56 @@ function previewInput(value: string | null | undefined, fallback: string): strin
  */
 export function quotePreview(
   lines: readonly QuotePreviewLineInput[],
-  adjustments: Pick<QuotePreview, "discount" | "shipping_charge" | "adjustment">,
+  adjustments: Pick<
+    QuotePreview,
+    "discount" | "shipping_charge" | "adjustment" | "tax_name" | "tax_percentage"
+  >,
 ): QuotePreview | null {
   const discount = previewInput(adjustments.discount, "0");
   const shipping = previewInput(adjustments.shipping_charge, "0");
   const adjustment = previewInput(adjustments.adjustment, "0");
+  // A blank rate is no tax. The tax is on the quote, once, on the total.
+  const taxPercentage = previewInput(adjustments.tax_percentage, "0");
   if (discount === null || shipping === null || adjustment === null) return null;
+  if (taxPercentage === null) return null;
 
   const calculated: Record<string, QuotePreviewLine> = {};
   const taxable: string[] = [];
-  const taxes: string[] = [];
+  const costs: string[] = [];
 
   for (const line of lines) {
     // These defaults are the same ones `toLineIn` sends when a numeric cell is
-    // blank. A blank quantity is one unit; blank money and tax are zero.
+    // blank. A blank quantity is one unit; blank money is zero.
     const quantity = previewInput(line.quantity, "1");
     const rate = previewInput(line.rate, "0");
     const lineDiscount = previewInput(line.discount, "0");
-    const taxPercentage = previewInput(line.taxPercentage, "0");
-    if (
-      quantity === null ||
-      rate === null ||
-      lineDiscount === null ||
-      taxPercentage === null
-    ) {
+    if (quantity === null || rate === null || lineDiscount === null) {
       return null;
     }
 
     const extended = multiplyExact(quantity, rate);
     const lineTotal = extended === null ? null : subExact(extended, lineDiscount);
-    const taxBase = lineTotal === null ? null : multiplyExact(lineTotal, taxPercentage);
-    const tax = taxBase === null ? null : divideExact(taxBase, "100", 2);
-    if (lineTotal === null || tax === null) return null;
+    if (lineTotal === null) return null;
 
     const cost = previewInput(line.costRate, "");
     const perUnitMargin = cost === null || cost === "" ? null : subExact(rate, cost);
     const margin = perUnitMargin === null ? null : multiplyExact(perUnitMargin, quantity);
-    calculated[line.key] = {
-      line_total: lineTotal,
-      tax_amount: tax,
-      total_incl_tax: sumExact([lineTotal, tax])!,
-      margin,
-    };
+    calculated[line.key] = { line_total: lineTotal, margin };
     taxable.push(lineTotal);
-    taxes.push(tax);
+    if (cost) {
+      const extended = multiplyExact(cost, quantity);
+      if (extended !== null) costs.push(extended);
+    }
   }
 
   const subTotal = sumExact(taxable) ?? "0";
-  const taxTotal = sumExact(taxes) ?? "0";
   const totalExclTax = sumExact([subTotal, negate(discount), shipping, adjustment]);
   if (totalExclTax === null) return null;
+  // Once, on the total before tax — the discount off and the shipping on
+  // first — and rounded once to the cent, as the server does it.
+  const taxBase = multiplyExact(totalExclTax, taxPercentage);
+  const taxTotal = taxBase === null ? null : divideExact(taxBase, "100", 2);
+  if (taxTotal === null) return null;
   const total = sumExact([totalExclTax, taxTotal]);
   if (total === null) return null;
 
@@ -516,17 +541,23 @@ export function quotePreview(
     total,
     discount,
     shipping_charge: shipping,
+    tax_name: adjustments.tax_name,
+    tax_percentage: adjustments.tax_percentage,
+    cost_total: sumExact(costs) ?? "0",
     adjustment,
   };
 }
 
 /**
- * The sell rate a markup on cost produces: cost × (100 + percent) ÷ 100.
+ * The sell rate that keeps `percent` of itself as margin: cost × 100 ÷ (100 −
+ * percent). Null when the margin is the whole price or more — there is no
+ * such price — or when either input is not a number.
  *
- * Computed on scaled integers, so 12.5% of a four-place cost is the rate the
- * server would have arrived at rather than a float's nearest neighbour.
+ * Computed on scaled integers, so a 12.5% margin on a four-place cost is the
+ * rate the server would have arrived at rather than a float's nearest
+ * neighbour.
  */
-export function rateFromMarkup(
+export function rateFromMargin(
   cost: string,
   percent: string,
   places = 4,
@@ -537,8 +568,10 @@ export function rateFromMarkup(
   const sc = c.frac.length;
   const sp = p.frac.length;
   const hundred = 100n * 10n ** BigInt(sp);
-  const numer = unitsOf(c) * (hundred + unitsOf(p)) * 10n ** BigInt(places);
-  const denom = 10n ** BigInt(sc + sp) * 100n;
+  const share = hundred - unitsOf(p);
+  if (share <= 0n) return null;
+  const numer = unitsOf(c) * hundred * 10n ** BigInt(places);
+  const denom = share * 10n ** BigInt(sc);
   return fromUnits(divRound(numer, denom), places);
 }
 
@@ -556,15 +589,15 @@ export function divideExact(a: string, b: string, places = 2): string | null {
 }
 
 /**
- * A selling price built the way Zoho Books builds one: the markup goes on in
+ * A selling price built the way Zoho Books builds one: the margin goes on in
  * the supplier's currency, the price is rounded there — to the whole unit for
  * AED, since that is how Zoho's item prices are set; to the cent otherwise —
  * and only then converted at the rate, to the cent.
  *
- * AED 49 + 20% = 58.80 → 59 → ÷ 3.672501 = USD 16.07. Marking up the converted
- * cost instead gives 16.01, and a quote a cent a unit away from its estimate.
- * `fx` is one unit of the quote's currency in the supplier's; "1" when they
- * are the same.
+ * AED 49 at a 20% margin = 61.25 → 61 → ÷ 3.672501 = USD 16.61. Pricing the
+ * converted cost instead lands a cent a unit away from the estimate. `fx` is
+ * one unit of the quote's currency in the supplier's; "1" when they are the
+ * same.
  */
 export function priceViaSupplier(
   supplierPrice: string,
@@ -573,25 +606,26 @@ export function priceViaSupplier(
   supplierCurrency: string,
 ): string | null {
   const wholeUnits = supplierCurrency.toUpperCase() === "AED";
-  const theirs = rateFromMarkup(supplierPrice, percent, wholeUnits ? 0 : 2);
+  const theirs = rateFromMargin(supplierPrice, percent, wholeUnits ? 0 : 2);
   if (theirs === null) return null;
   return divideExact(theirs, fx, 2);
 }
 
 /**
- * The markup on cost that a given sell rate represents, as a percentage.
+ * The margin a given sell rate keeps, as a share of itself: (rate − cost) ÷
+ * rate × 100.
  *
- * Null when the cost is zero — there is no percentage of nothing, and showing
- * a 0 there would read as "no margin" rather than "not a question".
+ * Null when the rate is zero — there is no share of nothing, and showing a 0
+ * there would read as "no margin" rather than "not a question".
  */
-export function markupOf(cost: string, rate: string, places = 2): string | null {
+export function marginOf(cost: string, rate: string, places = 2): string | null {
   const c = parts(cost);
   const r = parts(rate);
   if (!c || !r) return null;
   const scale = Math.max(c.frac.length, r.frac.length);
   const cN = unitsOf(c) * 10n ** BigInt(scale - c.frac.length);
   const rN = unitsOf(r) * 10n ** BigInt(scale - r.frac.length);
-  if (cN === 0n) return null;
+  if (rN === 0n) return null;
   const numer = (rN - cN) * 100n * 10n ** BigInt(places);
-  return fromUnits(divRound(numer, cN), places);
+  return fromUnits(divRound(numer, rN), places);
 }

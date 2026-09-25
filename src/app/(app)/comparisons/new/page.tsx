@@ -42,9 +42,9 @@ const CURRENCIES = ["AED", "USD", "EUR", "GBP", "SAR", "INR"];
  *
  * Three steps, in this order because each depends on the last being right:
  * read the documents, check what was read, then compare. The middle step is
- * not optional and not collapsible — the extractor is a model reading a PDF,
- * and a misread unit price is the one mistake that costs real money here.
- * Nothing is written until Save.
+ * not optional and not collapsible — the reader is a parser working from the
+ * document's own table, and a misread unit price is the one mistake that
+ * costs real money here. Nothing is written until Save.
  */
 export default function NewComparisonPage() {
   const router = useRouter();
@@ -246,7 +246,7 @@ export default function NewComparisonPage() {
             <Panel className="p-4">
               <PanelHead
                 title="2. Check what was read"
-                hint="The extractor is a model reading a document. Correct anything it got wrong before comparing."
+                hint="Read straight off each document's price table. Correct anything it got wrong before comparing — and type in anything that arrived as a photo."
               />
               <div className="mt-3 space-y-2">
                 {quotes.map((quote, index) => (
@@ -333,7 +333,7 @@ export default function NewComparisonPage() {
             <p className="mt-3 text-[13px] leading-relaxed text-ink-3">
               {quotes.length < 2
                 ? "At least two suppliers are needed before there is anything to compare."
-                : "Matching equivalent lines across suppliers is a judgement call, so this step asks the model to do it and takes a few seconds."}
+                : "Lines are matched across suppliers by part number, and by description where there is none — conservatively, so a doubtful match shows as two rows rather than one wrong price."}
             </p>
             <Button
               variant="accent"

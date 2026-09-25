@@ -88,20 +88,23 @@ export const ACTION_LABELS: Record<string, string> = {
   negotiation_notice: "Person told",
   marked_negotiation: "Task ticked, person told",
   order_notice: "Person told",
+  marked_order: "Order status set, person told",
   duplicate: "Already have it",
 };
 
 /**
- * The two outcomes that reached outside this system are the accented ones.
+ * The outcomes that reached outside this system are the accented ones.
  *
- * Raising a task and marking a task's Negotiation column are the only actions
- * that change something in SharePoint — and the second matters more than its
- * size suggests, because a flow watching that column fires on it. Telling
- * somebody in the app is a smaller thing and reads as one.
+ * Raising a task and marking a column on one — Negotiation, or Order status —
+ * are the only actions that change something in SharePoint, and the marks
+ * matter more than their size suggests, because a flow or a report reading
+ * that column acts on it. Telling somebody in the app is a smaller thing and
+ * reads as one.
  */
 export function ActionBadge({ value }: { value: string }) {
   if (value === "none") return null;
-  const reachedOut = value === "created_task" || value === "marked_negotiation";
+  const reachedOut =
+    value === "created_task" || value === "marked_negotiation" || value === "marked_order";
   return (
     <Badge tone={reachedOut ? "positive" : "neutral"}>{ACTION_LABELS[value] ?? value}</Badge>
   );

@@ -1,19 +1,39 @@
 "use client";
 
+import clsx from "clsx";
 import { useState } from "react";
-import { FileWarning, Paperclip } from "lucide-react";
+import { FileWarning, Keyboard, Paperclip } from "lucide-react";
 import { ApiError } from "@/lib/api";
-import type { SupplierQuoteFailure } from "@/lib/types";
+import type { SupplierQuoteFailure, TypedSupplierQuotesIn } from "@/lib/types";
 import { Panel, PanelHead } from "@/components/ui/primitives";
-import { FileDrop } from "@/components/ui/controls";
+import { Button, Select } from "@/components/ui/controls";
 import { InlineNotice } from "@/components/ui/feedback";
+import { TypedSupplierQuoteDialog } from "@/components/quotes/TypedSupplierQuote";
+import {
+  COMPACT_BUTTON,
+  COMPACT_NOTICE,
+  COMPACT_SELECT,
+  DropStrip,
+} from "@/components/quotes/Documents";
 
 /** What the endpoint takes, and how many at a time. */
 const ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv,.docx";
 const MAX_FILES = 12;
 
+/** The currencies suppliers quote this business in, most common first. */
+const OFFER_CURRENCIES = [
+  "AED", "USD", "EUR", "GBP", "SAR", "QAR", "OMR", "KWD", "BHD", "INR", "CNY", "JPY",
+] as const;
+
 /**
- * The drop zone for what suppliers sent back.
+ * The drop zone for what suppliers sent back — and, beside it, the way in for
+ * what cannot be dropped.
+ *
+ * Documents are read with no model behind them: a PDF, a spreadsheet or a
+ * Word file with a price table in it reads in a moment and costs nothing. A
+ * photograph or a screenshot has no text to read, so the endpoint declines it
+ * and says to type it in — and the typing happens here, in a dialog that
+ * produces exactly the shape a document is read into.
  *
  * The important behaviour here is that a failure is partial. The endpoint
  * reads twelve files at a time and keeps every one it could parse, naming the
@@ -29,45 +49,75 @@ const MAX_FILES = 12;
 export function SupplierUpload({
   attached,
   editable,
+  currency,
   onUpload,
+  onTyped,
+  embedded = false,
 }: {
   attached: number;
   editable: boolean;
+  /** Inside another panel: no panel or heading of its own. */
+  embedded?: boolean;
+  /** The quote's own currency, offered as the default when typing one in. */
+  currency: string;
+  /** Attaches a typed-in quote. Throws with the server's message on refusal. */
+  onTyped: (body: TypedSupplierQuotesIn) => Promise<unknown>;
   /**
    * Resolves to the failures the server reported, or throws. It has to throw
    * the original ApiError rather than a message about it — the per-file names
    * are in its `detail`, and a wrapper would flatten them into one sentence.
    */
-  onUpload: (files: File[]) => Promise<SupplierQuoteFailure[] | null>;
+  onUpload: (
+    files: File[],
+    /** The currency the offers are in, when the person says; null to read it off the document. */
+    currency: string | null,
+  ) => Promise<SupplierQuoteFailure[] | null>;
 }) {
+  // What currency the files are in. Blank means "whatever the document says",
+  // which is right for a quotation with a currency on every line and wrong
+  // for a screenshot or a scan that names it nowhere — that one used to be
+  // taken in the quote's own currency and priced as dirhams.
+  const [offerCurrency, setOfferCurrency] = useState("");
   const [failures, setFailures] = useState<SupplierQuoteFailure[]>([]);
   const [fatal, setFatal] = useState<string | null>(null);
   const [tooMany, setTooMany] = useState<number | null>(null);
   // Owned here rather than passed in, so the spinner is tied to the same call
   // whose error this component is the one to interpret.
   const [pending, setPending] = useState(false);
+  const [typing, setTyping] = useState(false);
 
-  return (
-    <Panel className="p-5">
-      <PanelHead
-        title="Supplier quotes"
-        count={attached || undefined}
-        hint={
-          attached === 0
-            ? "What the suppliers sent, read into lines you can compare."
-            : "Read and compared below. Choosing one is what prices this quote."
-        }
+  const body = (
+    <>
+      {!embedded && (
+        <PanelHead
+          title="Supplier quotes"
+          count={attached || undefined}
+          action={
+            editable ? (
+              <Button size="sm" icon={Keyboard} className={COMPACT_BUTTON} onClick={() => setTyping(true)}>
+                Type one in
+              </Button>
+            ) : undefined
+          }
+        />
+      )}
+
+      <TypedSupplierQuoteDialog
+        open={typing}
+        currency={currency}
+        onClose={() => setTyping(false)}
+        onSubmit={onTyped}
       />
 
       {tooMany !== null && (
-        <InlineNotice tone="warn" className="mt-4">
+        <InlineNotice tone="warn" className={COMPACT_NOTICE}>
           {tooMany} files is more than the {MAX_FILES} this reads at once. The first{" "}
           {MAX_FILES} were sent — drop the rest in afterwards.
         </InlineNotice>
       )}
 
       {fatal && (
-        <InlineNotice tone="danger" className="mt-4">
+        <InlineNotice tone="danger" className={COMPACT_NOTICE}>
           {fatal}
         </InlineNotice>
       )}
@@ -75,17 +125,17 @@ export function SupplierUpload({
       {/* Named, with the reason, and kept beside the drop zone so the retry is
           in the same place as the complaint. */}
       {failures.length > 0 && (
-        <div className="mt-4 rounded-[14px] border border-warn/40 bg-warn-soft/40 p-3.5">
-          <p className="flex items-center gap-2 text-[12.5px] font-semibold text-warn">
+        <div className="mt-2 rounded-[10px] border border-warn/40 bg-warn-soft/40 px-2.5 py-2">
+          <p
+            className="flex items-center gap-1.5 text-[11.5px] font-semibold text-warn"
+            title="Everything else was attached. Fix these and drop them in again."
+          >
             <FileWarning className="size-3.5 shrink-0" strokeWidth={2} />
             {failures.length} file{failures.length === 1 ? "" : "s"} could not be read
           </p>
-          <p className="mt-1 text-[11.5px] text-ink-3">
-            Everything else was attached. Fix these and drop them in again.
-          </p>
-          <ul className="mt-2.5 space-y-1.5">
+          <ul className="mt-1 space-y-0.5">
             {failures.map((failure, i) => (
-              <li key={`${failure.file_name}-${i}`} className="text-[12px] leading-relaxed">
+              <li key={`${failure.file_name}-${i}`} className="text-[11.5px] leading-snug">
                 <span className="font-medium">{failure.file_name}</span>
                 <span className="text-ink-3"> — {failure.error}</span>
               </li>
@@ -94,19 +144,54 @@ export function SupplierUpload({
         </div>
       )}
 
+      {editable && (
+        <div className="mt-3 flex items-center gap-2 text-[12.5px] text-ink-3">
+          <label className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="shrink-0">These offers are in</span>
+            <span className="min-w-0 flex-1">
+              <Select
+                value={offerCurrency}
+                onChange={(e) => setOfferCurrency(e.target.value)}
+                className={COMPACT_SELECT}
+                aria-label="The currency the uploaded offers are in"
+                title="The quote takes the supplier's currency. Leave it on “whatever the document says” for a quotation with a currency on every line; name it for a scan or a screenshot."
+              >
+                <option value="">whatever the document says</option>
+                {OFFER_CURRENCIES.map((code) => (
+                  <option key={code} value={code}>
+                    {code}
+                  </option>
+                ))}
+              </Select>
+            </span>
+          </label>
+          {embedded && (
+            <Button
+              size="sm"
+              icon={Keyboard}
+              className={clsx(COMPACT_BUTTON, "shrink-0")}
+              title="A photo or a screenshot has nothing to read; type its lines in instead"
+              onClick={() => setTyping(true)}
+            >
+              Type one in
+            </Button>
+          )}
+        </div>
+      )}
+
       {editable ? (
-        <FileDrop
-          className="mt-4"
+        <DropStrip
+          className="mt-1.5"
           accept={ACCEPT}
           busy={pending}
-          hint={`PDF, image, spreadsheet or Word. Up to ${MAX_FILES} at a time.`}
+          title={`PDF, spreadsheet or Word, read on the spot; up to ${MAX_FILES} at a time. A photo or a scan is read by OCR where that is installed; otherwise type it in.`}
           onFiles={async (files) => {
             setFailures([]);
             setFatal(null);
             setTooMany(files.length > MAX_FILES ? files.length : null);
             setPending(true);
             try {
-              const failed = await onUpload(files.slice(0, MAX_FILES));
+              const failed = await onUpload(files.slice(0, MAX_FILES), offerCurrency || null);
               if (failed?.length) setFailures(failed);
             } catch (caught) {
               // The backend writes its refusals for people to read, so the
@@ -127,14 +212,16 @@ export function SupplierUpload({
         />
       ) : (
         attached === 0 && (
-          <p className="mt-4 flex items-center gap-2 text-[13px] text-ink-3">
+          <p className="mt-2 flex items-center gap-1.5 text-[12px] text-ink-3">
             <Paperclip className="size-3.5 shrink-0 text-ink-4" strokeWidth={1.8} />
             Nothing attached, and this quote is no longer editable.
           </p>
         )
       )}
-    </Panel>
+    </>
   );
+
+  return embedded ? <div>{body}</div> : <Panel className="p-4">{body}</Panel>;
 }
 
 /**

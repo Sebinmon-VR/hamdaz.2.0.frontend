@@ -26,11 +26,11 @@ import {
  * What we are selling, at what, and what that leaves. Then the two blocks that
  * make this sheet worth having at all:
  *
- * **Markup sensitivity** — the same landed cost at the neighbouring positions,
+ * **Margin sensitivity** — the same landed cost at the neighbouring margins,
  * so the person deciding sees what a move is worth rather than asking for each
- * one. Markup and margin are shown side by side because they are not the same
- * number: a 45% markup is a 31% margin, and reading one as the other is how a
- * bid goes in cheaper than anybody intended.
+ * one. Each rung is priced as the lines are, cost ÷ (1 − margin), and the
+ * markup on cost it amounts to is shown beside it because a buyer who sees the
+ * supplier's price sees that number: a 45% margin is an 82% markup.
  *
  * **Price-disclosure exposure** — what the buyer will make of our price once
  * they can see the supplier's, which on these tenders they very often can.
@@ -195,7 +195,7 @@ export function CostingSheet({
           strong
           note={
             bid.bid_total_is_suggested
-              ? "Nobody has decided a price — this is the ladder's answer at the markup above."
+              ? "Nobody has decided a price — this is the ladder's answer at the margin above."
               : undefined
           }
         >
@@ -204,20 +204,20 @@ export function CostingSheet({
       </Facts>
 
       {/* ── the ladder ── */}
-      <Band>Markup sensitivity</Band>
+      <Band>Margin sensitivity</Band>
       <Grid columns={LADDER_COLUMNS}>
         <GridHead>
-          <Th align="right">Markup on cost</Th>
+          <Th align="right">Margin</Th>
           <Th align="right">Unit sell</Th>
           <Th align="right">Total sell</Th>
-          <Th align="right">Margin</Th>
+          <Th align="right">Markup on cost</Th>
           <Th />
         </GridHead>
         {bid.scenarios.map((scenario) => (
-          <GridRow key={scenario.markup_percent} tone={scenario.is_target ? "accent" : undefined}>
+          <GridRow key={scenario.margin_percent} tone={scenario.is_target ? "accent" : undefined}>
             <Td align="right">
               <Num strong={scenario.is_target}>
-                {decimal(scenario.markup_percent, { min: 0 })}%
+                {decimal(scenario.margin_percent, { min: 0 })}%
               </Num>
             </Td>
             <Td align="right">
@@ -229,10 +229,10 @@ export function CostingSheet({
               <Num strong={scenario.is_target}>{decimal(scenario.total_sell)}</Num>
             </Td>
             <Td align="right">
-              <Num muted>{decimal(scenario.margin_percent, { min: 1 })}%</Num>
+              <Num muted>{decimal(scenario.markup_percent, { min: 1 })}%</Num>
             </Td>
             <Td muted wrap>
-              {scenario.is_target ? "This bid — the markup set on the landed cost sheet." : ""}
+              {scenario.is_target ? "This bid — the margin set on the landed cost sheet." : ""}
             </Td>
           </GridRow>
         ))}

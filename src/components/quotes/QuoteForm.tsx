@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 import clsx from "clsx";
 import { CURRENCIES, amount, date } from "@/lib/format";
 import type { QuoteRequestOut } from "@/lib/types";
@@ -39,6 +41,9 @@ export interface QuoteFormDraft {
   discount: string;
   shipping_charge: string;
   adjustment: string;
+  /** One tax on the total before tax. Blank means none. */
+  tax_name: string;
+  tax_percentage: string;
 }
 
 export function draftOf(quote: QuoteRequestOut): QuoteFormDraft {
@@ -62,8 +67,25 @@ export function draftOf(quote: QuoteRequestOut): QuoteFormDraft {
     discount: quote.discount ?? "0",
     shipping_charge: quote.shipping_charge ?? "0",
     adjustment: quote.adjustment ?? "0",
+    tax_name: quote.tax_name ?? "",
+    tax_percentage: quote.tax_percentage ?? "",
   };
 }
+
+/*
+ * The dense box. The controls in `ui/controls` are 44px tall with 16px side
+ * padding, which is right for a form on its own and wrong for thirty fields
+ * in one card. There is no tailwind-merge here, so a plain `h-[30px]` beside
+ * the primitive's `h-11` would be decided by stylesheet order; the trailing
+ * `!` is what makes the compact size win regardless.
+ */
+const DENSE = "h-[30px]! rounded-[10px]! px-2.5! text-[12.5px]!";
+// The select keeps room on the right for the chevron the primitive draws there.
+const DENSE_SELECT = "h-[30px]! rounded-[10px]! px-2.5! pr-8! text-[12.5px]!";
+const DENSE_AREA = "min-h-0! rounded-[10px]! px-2.5! py-1! text-[12.5px]! leading-snug!";
+// A flowing row rather than a grid: fields fill each line edge to edge and
+// wrap, so a group of five is one full line rather than four and a hole.
+const GRID = "flex flex-wrap gap-x-3 gap-y-2";
 
 export function QuoteForm({
   draft,
@@ -74,9 +96,17 @@ export function QuoteForm({
   onChange,
   onComment,
   commentCounts,
+  embedded = false,
+  title,
+  onTitle,
 }: {
   draft: QuoteFormDraft;
   currency: string;
+  /** Inside one card with other things: groups under small headings, no panels. */
+  embedded?: boolean;
+  /** The quote's title, edited here beside the customer when embedded. */
+  title?: string;
+  onTitle?: (value: string) => void;
   /** Its own permission, and its own save. Submitting freezes the rest of the
       quote; the currency stays correctable because nothing here converts. */
   currencyEditable: boolean;
@@ -102,79 +132,129 @@ export function QuoteForm({
   });
 
   return (
-    <div className="space-y-3.5">
-      <Panel className="p-5">
-        <PanelHead title="Customer" />
-        <div className="mt-4 grid gap-x-5 gap-y-4 sm:grid-cols-2">
-          <F {...field("customer_name", "Customer")} required />
-          <F {...field("contact_person", "Contact person")} />
-          <F {...field("reference_number", "Their reference")} />
-          <F {...field("cf_portal", "Portal")} hint="Where the enquiry came from." />
-        </div>
-      </Panel>
-
-      <Panel className="p-5">
-        <PanelHead title="Dates and terms" />
-        <div className="mt-4 grid gap-x-5 gap-y-4 sm:grid-cols-2">
-          <F {...field("quote_date", "Quote date")} type="date" />
-          <F {...field("expiry_date", "Valid until")} type="date" />
-          {/* The deadline that actually matters — kept beside the other dates
-              rather than buried with the custom fields it technically is. */}
+    <div className={embedded ? "space-y-3.5" : "space-y-3"}>
+      <Group embedded={embedded} title="Customer">
+        {embedded && onTitle !== undefined && (
           <F
-            {...field("cf_bcd", "Bid closing date")}
-            type="date"
-            hint="The customer's deadline. This is the date the work is timed against."
+            label="Title"
+            value={title ?? ""}
+            editable={editable}
+            onChange={onTitle}
+            comments={0}
+            onComment={() => onComment("title", "Title")}
+            placeholder="What this quote is for"
+            required
           />
-          {/* The currency the whole quote is in — its lines, its adjustments
-              and the figure that reaches the customer. Changing it relabels
-              those figures and does not convert them, which is why it sits
-              with the terms rather than beside the totals. */}
-          <F
-            label="Currency"
-            value={currency}
-            editable={currencyEditable}
-            onChange={onCurrency}
-            options={CURRENCIES}
-            comments={commentCounts.currency ?? 0}
-            onComment={() => onComment("currency", "Currency")}
-            hint="Switching converts every figure at Zoho Books' rate, rounded to the cent, and saves at once."
-          />
-          <F {...field("place_of_supply", "Place of supply")} />
-          <F {...field("payment_terms", "Payment terms")} placeholder="30 days net" />
-          <F {...field("delivery_terms", "Delivery terms")} placeholder="4–6 weeks, DDP site" />
-        </div>
-      </Panel>
+        )}
+        <F {...field("customer_name", "Customer")} required />
+        <F {...field("contact_person", "Contact person")} />
+        <F {...field("reference_number", "Their reference")} />
+        <F {...field("cf_portal", "Portal")} hint="Where the enquiry came from." />
+      </Group>
 
-      <Panel className="p-5">
-        <PanelHead title="What it says" />
-        <div className="mt-4 space-y-4">
-          <F {...field("subject", "Subject")} placeholder="What the quote is for, in a line" />
-          <F {...field("notes", "Notes")} multiline hint="Shown to the customer." />
-          <F
-            {...field("terms", "Terms and conditions")}
-            multiline
-            hint="Printed at the foot of the estimate."
-          />
-        </div>
-      </Panel>
-
-      <Panel className="p-5">
-        <PanelHead
-          title="Adjustments"
-          hint="Applied by the server to the line totals — the figures below the lines are its answer, not this screen's."
+      <Group embedded={embedded} title="Dates and terms">
+        <F {...field("quote_date", "Quote date")} type="date" />
+        <F {...field("expiry_date", "Valid until")} type="date" />
+        {/* The deadline that actually matters — kept beside the other dates
+            rather than buried with the custom fields it technically is. */}
+        <F
+          {...field("cf_bcd", "Bid closing date")}
+          type="date"
+          hint="The customer's deadline. This is the date the work is timed against."
         />
-        <div className="mt-4 grid gap-x-5 gap-y-4 sm:grid-cols-3">
-          <F {...field("discount", "Discount")} numeric suffix="%" />
-          <F {...field("shipping_charge", "Shipping")} numeric suffix={currency} />
-          <F
-            {...field("adjustment", "Adjustment")}
-            numeric
-            suffix={currency}
-            hint="Negative to take money off."
-          />
-        </div>
-      </Panel>
+        {/* The currency the whole quote is in — its lines, its adjustments
+            and the figure that reaches the customer. Changing it converts and
+            saves at once, which is the one hint that stays visible: it changes
+            what somebody does with the picker. */}
+        <F
+          label="Currency"
+          value={currency}
+          editable={currencyEditable}
+          onChange={onCurrency}
+          options={CURRENCIES}
+          comments={commentCounts.currency ?? 0}
+          onComment={() => onComment("currency", "Currency")}
+          warn="Switching converts every figure at Zoho Books' rate and saves at once."
+        />
+        <F {...field("place_of_supply", "Place of supply")} />
+        <F {...field("payment_terms", "Payment terms")} placeholder="30 days net" />
+        <F {...field("delivery_terms", "Delivery terms")} placeholder="4–6 weeks, DDP site" />
+      </Group>
+
+      <Group embedded={embedded} title="What it says">
+        <F {...field("subject", "Subject")} placeholder="What the quote is for, in a line" wide />
+        <F {...field("notes", "Notes")} multiline hint="Shown to the customer." />
+        <F
+          {...field("terms", "Terms and conditions")}
+          multiline
+          hint="Printed at the foot of the estimate."
+        />
+      </Group>
+
+      <Group
+        embedded={embedded}
+        title="Adjustments and tax"
+        hint="Applied by the server to the line totals. The tax goes on once, on the total before tax."
+      >
+        <F {...field("discount", "Discount")} numeric suffix="%" />
+        <F {...field("shipping_charge", "Shipping")} numeric suffix={currency} />
+        <F
+          {...field("adjustment", "Adjustment")}
+          numeric
+          suffix={currency}
+          hint="Negative to take money off."
+        />
+        <F
+          {...field("tax_name", "Tax")}
+          placeholder="VAT"
+          hint="Applied once to the total before tax — after the discount, shipping and adjustment. Not per line."
+        />
+        <F
+          {...field("tax_percentage", "Tax rate")}
+          numeric
+          suffix="%"
+          hint="Blank for no tax. Filled in at the house rate when a supplier is chosen."
+        />
+      </Group>
     </div>
+  );
+}
+
+/* ── one group of fields ─────────────────────────────────────────────── */
+
+/**
+ * One card or several: the same groups either way. Embedded, a group is a
+ * small heading over its fields; on its own, a panel with a head. A group's
+ * hint is a tooltip on the heading, not a line of type under it.
+ *
+ * At module scope on purpose: a component defined inside the form's render
+ * is a new type every render, so React would unmount and remount every
+ * field in it on each keystroke — and the field being typed in would lose
+ * focus after one character.
+ */
+function Group({
+  embedded,
+  title: heading,
+  hint,
+  children,
+}: {
+  embedded: boolean;
+  title: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return embedded ? (
+    <section>
+      <span className="micro block text-ink-4" title={hint}>
+        {heading}
+      </span>
+      <div className={clsx("mt-1.5", GRID)}>{children}</div>
+    </section>
+  ) : (
+    <Panel className="p-4">
+      <PanelHead title={heading} hint={hint} />
+      <div className={clsx("mt-3", GRID)}>{children}</div>
+    </Panel>
   );
 }
 
@@ -189,11 +269,13 @@ function F({
   comments,
   type,
   hint,
+  warn,
   placeholder,
   multiline,
   numeric,
   suffix,
   required,
+  wide,
   options,
 }: {
   label: string;
@@ -203,30 +285,52 @@ function F({
   onComment: () => void;
   comments: number;
   type?: string;
+  /** What the field is for. A tooltip on the label, not a line under the box. */
   hint?: string;
+  /** The one kind of hint that stays visible: it changes what the control does. */
+  warn?: string;
   placeholder?: string;
   multiline?: boolean;
   numeric?: boolean;
   suffix?: string;
   required?: boolean;
+  /** Two columns wide, like a multiline field. */
+  wide?: boolean;
   /** A fixed set of values. Renders a picker instead of a free text box. */
   options?: readonly string[];
 }) {
+  // The comment button appears when the pointer is over the field, or stays
+  // when somebody has already commented — a discussed field should say so
+  // without being hovered.
   const head = (
-    <span className="mb-1.5 flex items-center gap-1 text-[12px] text-ink-3">
+    <span
+      className="mb-0.5 flex h-4 items-center gap-1 text-[11.5px] text-ink-3"
+      title={[hint, warn].filter(Boolean).join(" ")}
+    >
       {label}
       {required && <span className="text-danger">*</span>}
-      <CommentOn count={comments} onClick={onComment} className="ml-auto" />
+      <CommentOn
+        count={comments}
+        onClick={onComment}
+        className={clsx(
+          "ml-auto",
+          !comments && "opacity-0 focus-visible:opacity-100 group-hover:opacity-100",
+        )}
+      />
     </span>
+  );
+  const box = clsx(
+    "group min-w-0 grow",
+    multiline || wide ? "basis-[380px] grow-[3]" : "basis-[170px]",
   );
 
   if (!editable) {
     return (
-      <div className={clsx(multiline && "sm:col-span-2")}>
+      <div className={box}>
         {head}
         <p
           className={clsx(
-            "text-[13px] leading-relaxed",
+            "text-[13px] leading-snug",
             value ? "text-ink" : "text-ink-4",
             multiline && "whitespace-pre-wrap",
           )}
@@ -246,10 +350,14 @@ function F({
   }
 
   return (
-    <div className={clsx(multiline && "sm:col-span-2")}>
+    <div className={box}>
       {head}
       {options ? (
-        <Select value={value} onChange={(e) => onChange(e.target.value)}>
+        <Select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={DENSE_SELECT}
+        >
           {options.map((option) => (
             <option key={option} value={option}>
               {option}
@@ -259,8 +367,10 @@ function F({
       ) : multiline ? (
         <Textarea
           value={value}
+          rows={2}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
+          className={DENSE_AREA}
         />
       ) : (
         <div className="relative">
@@ -270,16 +380,16 @@ function F({
             inputMode={numeric ? "decimal" : undefined}
             onChange={(e) => onChange(e.target.value)}
             placeholder={placeholder}
-            className={clsx(numeric && "tnum pr-14", suffix && !numeric && "pr-14")}
+            className={clsx(DENSE, numeric && "tnum", suffix && "pr-12!")}
           />
           {suffix && (
-            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[12px] text-ink-4">
+            <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-ink-4">
               {suffix}
             </span>
           )}
         </div>
       )}
-      {hint && <span className="mt-1.5 block text-[11.5px] text-ink-4">{hint}</span>}
+      {warn && <span className="sr-only">{warn}</span>}
     </div>
   );
 }

@@ -114,28 +114,28 @@ export default function IntakePage() {
               <Badge tone={settings.data.enabled ? "positive" : "neutral"}>
                 {settings.data.enabled ? "Watching" : "Off"}
               </Badge>
-              {/* Two separate writes, so three states rather than two. Calling
+              {/* Three separate writes, so three states rather than two. Calling
                   it "simulating" while it is marking columns in SharePoint
                   would be the badge telling an administrator something untrue. */}
               <Badge
                 tone={
                   settings.data.create_in_sharepoint
                     ? "warn"
-                    : settings.data.update_negotiation
+                    : settings.data.update_negotiation || settings.data.update_order_status
                       ? "second"
                       : "info"
                 }
                 title={
                   settings.data.create_in_sharepoint
                     ? "Raises real tasks, and may mark existing ones."
-                    : settings.data.update_negotiation
-                      ? "Raises nothing, but marks matched tasks — which a flow can trigger on."
+                    : settings.data.update_negotiation || settings.data.update_order_status
+                      ? "Raises nothing, but marks matched tasks — one column on a row that already exists."
                       : "Decides everything and writes nothing."
                 }
               >
                 {settings.data.create_in_sharepoint
                   ? "Writing"
-                  : settings.data.update_negotiation
+                  : settings.data.update_negotiation || settings.data.update_order_status
                     ? "Marking only"
                     : "Simulating"}
               </Badge>
@@ -679,6 +679,8 @@ function Settings({
       create_in_sharepoint: draft.create_in_sharepoint,
       update_negotiation: draft.update_negotiation,
       negotiation_value: draft.negotiation_value,
+      update_order_status: draft.update_order_status,
+      order_status_value: draft.order_status_value,
       assign_team_id: draft.assign_team_id,
       match_threshold: draft.match_threshold,
       classify_threshold: draft.classify_threshold,
@@ -705,8 +707,16 @@ function Settings({
               checked={draft.enabled}
               onChange={(value) => set("enabled", value)}
               label="Read the mailbox"
-              hint="Off means no mail is read and nothing happens at all."
+              hint="Off means no mail is read and nothing happens at all. Turning it on starts from that moment."
             />
+
+            {draft.enabled && !settings.enabled && (
+              <InlineNotice tone="info">
+                It starts from the moment you save. Mail that arrived before that is not
+                read, and anything it recorded earlier but never got to is set aside in the
+                log rather than run now. The log itself is kept.
+              </InlineNotice>
+            )}
 
             <Field
               label="Which inbox"
@@ -764,7 +774,7 @@ function Settings({
           <Panel className="p-5">
             <PanelHead
               title="What it is allowed to change"
-              hint="Both of these write into SharePoint. Both are off to begin with."
+              hint="All three of these write into SharePoint. All are off to begin with."
             />
             <div className="mt-5 space-y-5">
               <Toggle
@@ -813,6 +823,40 @@ function Settings({
                   Any flow watching that column will start running from the next matching
                   email. It is only ticked once per task, so a long email thread will not
                   set the flow off again and again.
+                </InlineNotice>
+              )}
+
+              {/* The third write. A purchase order is the same shape as a
+                  negotiation — the task exists, the holder is told — and the
+                  list has its own column for it, which the team fills in by
+                  hand today. */}
+              <Toggle
+                checked={draft.update_order_status}
+                onChange={(value) => set("update_order_status", value)}
+                label="Set “Order status” on the matching task"
+                hint="When a purchase order or order confirmation arrives, it finds the task it is for — even when the email calls it something else — and sets that task's Order status. Whoever holds the task is told either way."
+              />
+
+              {draft.update_order_status && (
+                <Field
+                  label="Value to write"
+                  hint="Whatever the Order status column in your list expects. Usually Received."
+                >
+                  <Input
+                    value={draft.order_status_value}
+                    placeholder="Received"
+                    maxLength={80}
+                    onChange={(event) => set("order_status_value", event.target.value)}
+                  />
+                </Field>
+              )}
+
+              {draft.update_order_status && !settings.update_order_status && (
+                <InlineNotice tone="warn">
+                  From the next matching email it will change the Order status column on
+                  real tasks in the Proposals list. It is set once per task, so the replies
+                  in an order thread do not rewrite it. Check a few order emails in the log
+                  first — each shows the change it would have made.
                 </InlineNotice>
               )}
 

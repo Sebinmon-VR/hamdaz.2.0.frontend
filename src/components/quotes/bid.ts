@@ -2,6 +2,7 @@ import type {
   ComplianceArea,
   ComplianceStatus,
   CostStage,
+  PercentBasis,
   QuoteComplianceOut,
   QuoteCostLineOut,
   QuoteRequestOut,
@@ -57,6 +58,15 @@ export interface BidDraft {
   submission_unit_price: string;
   submission_total: string;
   discloses_principal_price: boolean;
+  /* The selling & costing report's own facts. See the report tab. */
+  supplier_name: string;
+  supplier_basis: string;
+  supplier_route: string;
+  end_user_name: string;
+  walk_away_margin_percent: string;
+  comfortable_margin_percent: string;
+  recommendation: string;
+  report_notes: string;
 }
 
 export function bidDraftOf(quote: QuoteRequestOut): BidDraft {
@@ -91,6 +101,14 @@ export function bidDraftOf(quote: QuoteRequestOut): BidDraft {
     submission_unit_price: quote.submission_unit_price ?? "",
     submission_total: quote.submission_total ?? "",
     discloses_principal_price: quote.discloses_principal_price ?? false,
+    supplier_name: quote.supplier_name ?? "",
+    supplier_basis: quote.supplier_basis ?? "",
+    supplier_route: quote.supplier_route ?? "",
+    end_user_name: quote.end_user_name ?? "",
+    walk_away_margin_percent: quote.walk_away_margin_percent ?? "",
+    comfortable_margin_percent: quote.comfortable_margin_percent ?? "",
+    recommendation: quote.recommendation ?? "",
+    report_notes: quote.report_notes ?? "",
   };
 }
 
@@ -137,6 +155,15 @@ export function bidPatch(draft: BidDraft) {
     submission_unit_price: optionalNumber(draft.submission_unit_price),
     submission_total: optionalNumber(draft.submission_total),
     discloses_principal_price: draft.discloses_principal_price,
+    supplier_name: nullable(draft.supplier_name),
+    supplier_basis: nullable(draft.supplier_basis),
+    supplier_route: nullable(draft.supplier_route),
+    end_user_name: nullable(draft.end_user_name),
+    // Blank means the house default, which the server knows and this does not.
+    walk_away_margin_percent: optionalNumber(draft.walk_away_margin_percent),
+    comfortable_margin_percent: optionalNumber(draft.comfortable_margin_percent),
+    recommendation: nullable(draft.recommendation),
+    report_notes: nullable(draft.report_notes),
   };
 }
 
@@ -160,6 +187,9 @@ export interface CostRow {
   amount_base: string;
   is_firm: boolean;
   notes: string;
+  /** A rate instead of a figure. Blank means the amounts above are the row. */
+  percent: string;
+  percent_of: PercentBasis;
 }
 
 export interface ComplianceRow {
@@ -208,6 +238,8 @@ export function costRowOf(row: QuoteCostLineOut): CostRow {
     amount_base: row.amount_base,
     is_firm: row.is_firm,
     notes: row.notes ?? "",
+    percent: row.percent ?? "",
+    percent_of: row.percent_of ?? "goods",
   };
 }
 
@@ -223,6 +255,8 @@ export function blankCostRow(stage: CostStage, sourceCurrency: string): CostRow 
     amount_base: "",
     is_firm: false,
     notes: "",
+    percent: "",
+    percent_of: "goods",
   };
 }
 
@@ -240,6 +274,10 @@ export function costRowIn(row: CostRow) {
     is_principal: false,
     is_firm: row.is_firm,
     notes: nullable(row.notes),
+    percent: optionalNumber(row.percent),
+    // Only meaningful with a rate; sent as null otherwise so a stale basis is
+    // never stored on a row that has stopped being a rate.
+    percent_of: row.percent.trim() ? row.percent_of : null,
   };
 }
 
