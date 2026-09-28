@@ -22,6 +22,7 @@ import { Empty, ErrorState, InlineNotice, PanelSkeleton, RowsSkeleton } from "@/
 import { RecipientList } from "@/components/reports/RecipientList";
 import { FollowupStatusBadge } from "@/components/followups/FollowupBits";
 import { DueToday } from "@/components/followups/DueToday";
+import { DigestPanel } from "@/components/followups/DigestPanel";
 
 /**
  * Tasks that went past their due date, and the reasons given.
@@ -131,6 +132,7 @@ export default function FollowupsPage() {
 
       {session.roles.is_super_admin && <TryPanel />}
       {session.roles.is_super_admin && <SettingsPanel />}
+      {session.roles.is_super_admin && <DigestPanel />}
     </div>
   );
 }

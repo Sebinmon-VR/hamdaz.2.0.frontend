@@ -5354,7 +5354,13 @@ export interface TaskRunsOut {
 
 /* ── overdue-task follow-ups ─────────────────────────────────────────── */
 
-export type FollowupStatus = "pending" | "answered" | "false_positive" | "resolved";
+export type FollowupStatus =
+  | "pending"
+  | "answered"
+  | "false_positive"
+  | "resolved"
+  /** Still unanswered at the end of the day; can still be answered. */
+  | "no_response";
 
 /** One question about one missed deadline, and what came back. */
 export interface FollowupOut {
@@ -5401,9 +5407,33 @@ export interface FollowupSettingsOut {
   ask_from_user_id: string | null;
   ask_from_email: string | null;
   notify_managers_by_email: boolean;
+  /* The end-of-day report. */
+  digest_enabled: boolean;
+  /** "HH:MM" on `digest_timezone`'s clock. */
+  digest_time: string;
+  digest_timezone: string;
+  digest_recipients: string[];
+  digest_include_ceo: boolean;
+  digest_formats: ("pdf" | "xlsx")[];
+  digest_sender_email: string | null;
+  digest_last_sent_on: string | null;
+  digest_last_error: string | null;
+  /** Who it would go to right now, CEO role holders included. */
+  digest_to: string[];
   last_run_at: string | null;
   last_error: string | null;
   updated_at: string;
+}
+
+export interface FollowupDigestOut {
+  day: string;
+  lines: number;
+  submitted: number;
+  not_submitted: number;
+  not_responded: number;
+  recipients: string[];
+  sent: boolean;
+  error: string | null;
 }
 
 export interface FollowupSweepOut {

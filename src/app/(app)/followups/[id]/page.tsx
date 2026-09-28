@@ -71,6 +71,12 @@ export default function FollowupPage({ params }: { params: Promise<{ id: string 
                     title="Why is it not finished?"
                     hint="Your team's manager reads this."
                   />
+                  {data.status === "no_response" && (
+                    <InlineNotice tone="warn" className="mt-3">
+                      This was reported to the CEO as not responded at the end of the day. You
+                      can still give the reason.
+                    </InlineNotice>
+                  )}
                   <p className="mt-2 text-[12.5px] leading-relaxed text-ink-3">
                     This task went past its due date and its bid is not marked submitted on the
                     Proposals list. A sentence or two is enough — what is holding it up, and when

@@ -8,6 +8,7 @@ const STATUS: Record<FollowupStatus, { label: string; tone: Tone }> = {
   answered: { label: "Reason given", tone: "info" },
   false_positive: { label: "False positive", tone: "positive" },
   resolved: { label: "Closed", tone: "neutral" },
+  no_response: { label: "Not responded", tone: "danger" },
 };
 
 export function FollowupStatusBadge({ status }: { status: FollowupStatus }) {
