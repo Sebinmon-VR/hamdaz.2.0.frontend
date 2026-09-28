@@ -82,7 +82,11 @@ export default function FollowupPage({ params }: { params: Promise<{ id: string 
               <>
                 <Panel className="p-5">
                   <PanelHead
-                    title="Why is it not finished?"
+                    title={
+                      data.status_at_ask
+                        ? "Why is it not submitted?"
+                        : "Submission status not set — was the bid missed?"
+                    }
                     hint="Your team's manager reads this."
                   />
                   {data.status === "no_response" && (
@@ -92,9 +96,9 @@ export default function FollowupPage({ params }: { params: Promise<{ id: string 
                     </InlineNotice>
                   )}
                   <p className="mt-2 text-[12.5px] leading-relaxed text-ink-3">
-                    This task went past its due date and its bid is not marked submitted on the
-                    Proposals list. A sentence or two is enough — what is holding it up, and when
-                    you expect to submit.
+                    {data.status_at_ask
+                      ? "This task went past its due date and its bid is not marked submitted on the Proposals list. A sentence or two is enough — what is holding it up, and when you expect to submit."
+                      : "The bid closing time has passed and no Submission Status is set on the Proposals list. If the bid was submitted, set it to Submitted in SharePoint and press Already Updated below. If it was missed, set it to Not Submitted and give the reason here."}
                   </p>
                   {send.error && (
                     <InlineNotice tone="danger" className="mt-3">
