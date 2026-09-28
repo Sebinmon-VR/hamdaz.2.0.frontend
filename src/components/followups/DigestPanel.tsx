@@ -187,14 +187,17 @@ export function DigestPanel() {
           </div>
         </div>
         <div className="space-y-4">
-          <Field label="Send to" hint="Sebin while it is being tried out.">
+          <Field
+            label="Send to"
+            hint="Gets the reports, and every reason as it is given. Sebin while it is being tried out."
+          >
             <RecipientList addresses={to} onChange={setTo} />
           </Field>
           <Toggle
             checked={ceo}
             onChange={setCeo}
             label="Also send to the CEO"
-            hint="Whoever holds the CEO role — Jishad. Leave off until the trial is done."
+            hint="Whoever holds the CEO role — Jishad: the reports, and each reason with the managers and approvers. Leave off until the trial is done."
           />
           <p className="text-[12px] text-ink-3">
             Goes to: <b>{data.digest_to.length ? data.digest_to.join(", ") : "nobody yet"}</b>
