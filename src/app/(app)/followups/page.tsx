@@ -16,7 +16,7 @@ import type {
   MyTasksOut,
   TeamOut,
 } from "@/lib/types";
-import { PageHead, Panel, PanelHead } from "@/components/ui/primitives";
+import { Badge, PageHead, Panel, PanelHead } from "@/components/ui/primitives";
 import { Button, Field, Input, PillRail, Select, Toggle } from "@/components/ui/controls";
 import { Empty, ErrorState, InlineNotice, PanelSkeleton, RowsSkeleton } from "@/components/ui/feedback";
 import { RecipientList } from "@/components/reports/RecipientList";
@@ -106,7 +106,21 @@ export default function FollowupsPage() {
                         .join(" · ")}
                     </p>
                   </div>
-                  <span className="text-[11.5px] text-ink-4">{relative(row.created_at)}</span>
+                  <span className="text-[11.5px] text-ink-4">asked {relative(row.created_at)}</span>
+                  <Badge
+                    tone={row.asked_at ? "info" : "warn"}
+                    title={row.asked_at ? `Emailed ${dateTime(row.asked_at)}` : (row.ask_error ?? "Not emailed")}
+                  >
+                    {row.asked_at ? "Mailed" : "Mail failed"}
+                  </Badge>
+                  {row.status === "answered" && (
+                    <Badge
+                      tone={row.forwarded_at ? "positive" : "warn"}
+                      title={row.forwarded_at ? `Sent to the managers ${dateTime(row.forwarded_at)}` : (row.forward_error ?? "Not sent to the managers")}
+                    >
+                      {row.forwarded_at ? "Managers told" : "Managers not mailed"}
+                    </Badge>
+                  )}
                   <FollowupStatusBadge status={row.status} />
                 </Panel>
               </Link>

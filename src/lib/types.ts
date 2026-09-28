@@ -5432,6 +5432,11 @@ export interface DueTodayTaskOut {
   ask_at: string;
   followup_id: string | null;
   followup_status: FollowupStatus | null;
+  /** The question's email went out. */
+  mailed?: boolean;
+  mail_error?: string | null;
+  /** Why this task will never be asked about under the current settings; null when watched. */
+  not_watched?: string | null;
 }
 
 export interface DueTodayOut {

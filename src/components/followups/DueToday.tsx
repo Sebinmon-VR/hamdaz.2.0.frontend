@@ -112,22 +112,36 @@ function Row({ task, showWho }: { task: DueTodayTaskOut; showWho: boolean }) {
         </a>
       )}
       {task.followup_id && task.followup_status ? (
-        // Asked already: what matters now is whether it was answered.
-        <Link href={`/followups/${task.followup_id}`}>
-          <FollowupStatusBadge status={task.followup_status} />
-        </Link>
+        // Asked already: whether the mail went, and whether it was answered.
+        <>
+          <Badge
+            tone={task.mailed ? "info" : "warn"}
+            title={task.mailed ? "The email went out." : (task.mail_error ?? "The email did not go out; the in-app notice and banner stand.")}
+          >
+            {task.mailed ? "Mailed" : "Mail failed"}
+          </Badge>
+          <Link href={`/followups/${task.followup_id}`}>
+            <FollowupStatusBadge status={task.followup_status} />
+          </Link>
+        </>
       ) : task.finished ? (
         <Badge tone="positive">Submitted</Badge>
+      ) : (task.reason_now || passed) && task.not_watched ? (
+        // Qualifies, but the settings keep it from being asked — say so, or
+        // "Reason needed" reads as a question that went out and was ignored.
+        <Badge tone="neutral" title={task.not_watched}>
+          Not asked · outside the trial
+        </Badge>
       ) : task.reason_now || passed ? (
         <Badge
           tone="danger"
           title={
             task.reason_now
-              ? "Marked Not Submitted, so the reason is asked for now."
-              : "Past its due time and not submitted; the reason is asked for."
+              ? "Marked Not Submitted: the question goes out at the next check, within two minutes."
+              : "Past its due time and not submitted: the question goes out once the grace is over."
           }
         >
-          Reason needed
+          Asking now…
         </Badge>
       ) : (
         <Badge
