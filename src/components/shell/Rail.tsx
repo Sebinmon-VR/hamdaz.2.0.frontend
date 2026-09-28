@@ -77,12 +77,15 @@ export function Rail() {
           <Link
             href="/dashboard"
             aria-label="Hamdaz"
-            className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-[18px] font-extrabold text-accent-ink transition hover:bg-accent-hover"
+            // The company's own logo, on white in every theme — its cyan and
+            // pink bars disappear against the accent and against dark panels.
+            className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-white p-1 ring-1 ring-line transition hover:ring-line-strong"
           >
-            h
+            {/* eslint-disable-next-line @next/next/no-img-element -- a fixed 36px mark; nothing to optimise */}
+            <img src="/hamdaz-logo.png" alt="" className="size-full object-contain" />
           </Link>
           <span className="min-w-0 flex-1 truncate text-[15px] font-bold tracking-tight opacity-0 transition-opacity group-hover/rail:opacity-100 group-focus-within/rail:opacity-100 group-data-[pinned]/rail:opacity-100">
-            hamdaz
+            Hamdaz
           </span>
           <button
             onClick={togglePin}

@@ -29,8 +29,8 @@ export function Wordmark({
         <Bars />
       </span>
       {!compact && (
-        <span className="text-[17px] font-semibold tracking-[-0.025em] lowercase">
-          hamdaz
+        <span className="text-[17px] font-semibold tracking-[-0.025em]">
+          Hamdaz
         </span>
       )}
     </Link>
