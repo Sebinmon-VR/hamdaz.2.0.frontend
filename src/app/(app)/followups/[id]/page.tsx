@@ -3,14 +3,14 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { CheckCircle2, ExternalLink, Send } from "lucide-react";
+import { AlarmClock, CheckCircle2, ExternalLink, Send } from "lucide-react";
 import { api } from "@/lib/api";
 import { dateTime, relative } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
 import type { FollowupOut } from "@/lib/types";
 import { Badge, Meta, PageHead, Panel, PanelHead } from "@/components/ui/primitives";
-import { Button, Field, Textarea } from "@/components/ui/controls";
-import { ErrorState, InlineNotice, PanelSkeleton } from "@/components/ui/feedback";
+import { Button, Field, LinkButton, Textarea } from "@/components/ui/controls";
+import { Empty, ErrorState, InlineNotice, PanelSkeleton } from "@/components/ui/feedback";
 import { FollowupStatusBadge } from "@/components/followups/FollowupBits";
 
 /**
@@ -23,11 +23,18 @@ import { FollowupStatusBadge } from "@/components/followups/FollowupBits";
  *
  * Their manager and lead read the same page, without the buttons.
  */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default function FollowupPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { data, error, isLoading, mutate } = useSWR<FollowupOut>(`/followups/${id}`, {
-    revalidateOnFocus: false,
-  });
+  // A link that lost its id — pasted from a message, cut short by a mail
+  // client — is not asked of the server, which would answer in validation
+  // jargon. It gets a plain page and the way to the list instead.
+  const valid = UUID.test(id);
+  const { data, error, isLoading, mutate } = useSWR<FollowupOut>(
+    valid ? `/followups/${id}` : null,
+    { revalidateOnFocus: false },
+  );
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
   // The mail's "Mark as false positive" button lands here with
@@ -57,7 +64,14 @@ export default function FollowupPage({ params }: { params: Promise<{ id: string 
         actions={data ? <FollowupStatusBadge status={data.status} /> : undefined}
       />
 
-      {error ? (
+      {!valid ? (
+        <Empty
+          icon={AlarmClock}
+          title="This link is incomplete"
+          body="It does not point at a follow-up. Open the list of overdue tasks to find the one you want."
+          action={<LinkButton href="/followups">Open Overdue Tasks</LinkButton>}
+        />
+      ) : error ? (
         <ErrorState error={error} onRetry={() => mutate()} />
       ) : isLoading || !data ? (
         <PanelSkeleton lines={6} />
