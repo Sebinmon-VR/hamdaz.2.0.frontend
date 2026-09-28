@@ -13,6 +13,7 @@
 
 import {
   Activity,
+  AlarmClock,
   Bell,
   Briefcase,
   Building2,
@@ -225,6 +226,14 @@ export function buildNav(session: Session): Nav {
       href: "/meetings",
       icon: CalendarRange,
       match: "/meetings",
+    },
+    // Everybody's, like the bell: the API answers each person with the
+    // follow-ups sent to them, and a team's only to its managers and leads.
+    {
+      label: "Overdue tasks",
+      href: "/followups",
+      icon: AlarmClock,
+      match: "/followups",
     },
   ];
   if (can("directory")) {

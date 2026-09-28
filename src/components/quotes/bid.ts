@@ -40,6 +40,13 @@ export interface BidDraft {
   manufacturer_class_no: string;
   incoterm_required: string;
   incoterm_place: string;
+  /** "import" | "export" | "local", or "" for "the documents decide". */
+  trade_direction: string;
+  /* The freight form. Blank charges mean "not entered here". */
+  freight_currency: string;
+  freight_charges: string;
+  documentation_charges: string;
+  duty_charges: string;
   ship_to: string;
   requested_delivery_date: string;
   delivery_days: string;
@@ -79,6 +86,11 @@ export function bidDraftOf(quote: QuoteRequestOut): BidDraft {
     manufacturer_class_no: quote.manufacturer_class_no ?? "",
     incoterm_required: quote.incoterm_required ?? "",
     incoterm_place: quote.incoterm_place ?? "",
+    trade_direction: quote.trade_direction ?? "",
+    freight_currency: quote.freight_currency ?? "",
+    freight_charges: quote.freight_charges ?? "",
+    documentation_charges: quote.documentation_charges ?? "",
+    duty_charges: quote.duty_charges ?? "",
     ship_to: quote.ship_to ?? "",
     // The API sends dates as YYYY-MM-DD, which is what <input type="date">
     // wants, so an ISO timestamp is trimmed rather than round-tripped through
@@ -132,6 +144,15 @@ export function bidPatch(draft: BidDraft) {
     manufacturer_class_no: nullable(draft.manufacturer_class_no),
     incoterm_required: nullable(draft.incoterm_required),
     incoterm_place: nullable(draft.incoterm_place),
+    // Blank is "let the documents decide", and is sent as null so a cleared
+    // box clears the stored answer rather than storing an empty word.
+    trade_direction: nullable(draft.trade_direction),
+    // Blank is "not entered", not zero: an emptied freight box hands the
+    // freight back to the supplier's own quotation.
+    freight_currency: nullable(draft.freight_currency),
+    freight_charges: optionalNumber(draft.freight_charges),
+    documentation_charges: optionalNumber(draft.documentation_charges),
+    duty_charges: optionalNumber(draft.duty_charges),
     ship_to: nullable(draft.ship_to),
     requested_delivery_date: nullable(draft.requested_delivery_date),
     delivery_days: optionalNumber(draft.delivery_days),

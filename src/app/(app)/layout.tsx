@@ -15,6 +15,7 @@ import { RouteProgress } from "@/components/shell/RouteProgress";
 import { Rail } from "@/components/shell/Rail";
 import { TabStrip } from "@/components/shell/TabStrip";
 import { Wordmark } from "@/components/shell/Wordmark";
+import { OverdueBanner } from "@/components/followups/OverdueBanner";
 import { ErrorState, Skeleton } from "@/components/ui/feedback";
 
 /**
@@ -113,6 +114,8 @@ function Shell({ children }: { children: React.ReactNode }) {
                 them a surface of their own made them compete with the command
                 bar directly underneath. */}
             <TabStrip />
+            {/* A late task's reason is mandatory: this stays until it is given. */}
+            <OverdueBanner />
             {/* One scroll container — the rail and the tab chips stay put
                 while a long list moves under them.
 

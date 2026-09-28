@@ -1709,6 +1709,15 @@ export interface QuoteRequestSummaryOut {
   created_at: string;
 }
 
+/** Which way the goods cross the border, if they cross one at all. */
+export type TradeDirection = "import" | "export" | "local";
+
+export const TRADE_DIRECTIONS: { value: TradeDirection; label: string; hint: string }[] = [
+  { value: "import", label: "Import", hint: "Bought abroad and brought in. Duty and insurance are real costs." },
+  { value: "export", label: "Export", hint: "Sold to a customer abroad. The goods leave the country." },
+  { value: "local", label: "Local", hint: "Bought and delivered in the country. Nothing crosses a border." },
+];
+
 export interface QuoteRequestOut {
   id: string;
   reference: string | null;
@@ -1760,6 +1769,29 @@ export interface QuoteRequestOut {
   /** The Incoterm the RFP demands, and the place it names. */
   incoterm_required: string | null;
   incoterm_place: string | null;
+  /**
+   * Import, export or local, as a person said it — the column as stored.
+   * Null means nobody has said and the documents decide.
+   */
+  trade_direction: TradeDirection | null;
+  /**
+   * What the documents were read as, and why, in a sentence. Worked out on
+   * every read from the chosen offer's Incoterm and the route; never stored.
+   * Null when they say nothing either way.
+   */
+  trade_direction_detected?: TradeDirection | null;
+  trade_direction_reason?: string | null;
+  /** The one the costing uses: the person's word, else the reading. */
+  trade_direction_effective?: TradeDirection | null;
+  /**
+   * The freight form. Charges are in `freight_currency` (null: the quote's
+   * own). Null on a charge means "not entered here" — the automatic figure
+   * stands: freight from the supplier's quotation, duty at the rate.
+   */
+  freight_currency?: string | null;
+  freight_charges?: string | null;
+  documentation_charges?: string | null;
+  duty_charges?: string | null;
   ship_to: string | null;
   requested_delivery_date: string | null;
   /** What we will commit to, in calendar days from the order. */
@@ -5318,4 +5350,95 @@ export interface WorkflowRunOut extends WorkflowRunSummaryOut {
 export interface TaskRunsOut {
   workflows: WorkflowOut[];
   runs: WorkflowRunSummaryOut[];
+}
+
+/* ── overdue-task follow-ups ─────────────────────────────────────────── */
+
+export type FollowupStatus = "pending" | "answered" | "false_positive" | "resolved";
+
+/** One question about one missed deadline, and what came back. */
+export interface FollowupOut {
+  id: string;
+  task_id: string;
+  task_title: string;
+  task_url: string | null;
+  end_user: string | null;
+  /** The Submission Status the row had when the question was asked. */
+  status_at_ask: string | null;
+  due_at: string;
+  task_modified_at: string | null;
+  team_id: string | null;
+  team_name: string | null;
+  assignee_id: string;
+  assignee_email: string;
+  assignee_name: string | null;
+  asked_at: string | null;
+  ask_error: string | null;
+  asked_from_email: string | null;
+  status: FollowupStatus;
+  reason: string | null;
+  answered_at: string | null;
+  forwarded_at: string | null;
+  forward_error: string | null;
+  resolved_note: string | null;
+  created_at: string;
+  /** The viewer is the person asked, and it still wants an answer. */
+  may_answer: boolean;
+}
+
+export interface FollowupSettingsOut {
+  enabled: boolean;
+  team_id: string | null;
+  team_name: string | null;
+  /** Empty means the whole team. */
+  only_emails: string[];
+  /** Blank means every task. */
+  only_title_contains: string;
+  grace_minutes: number;
+  poll_seconds: number;
+  /** Nothing due before this is asked about. Set when it is switched on. */
+  watch_from: string | null;
+  ask_from_user_id: string | null;
+  ask_from_email: string | null;
+  notify_managers_by_email: boolean;
+  last_run_at: string | null;
+  last_error: string | null;
+  updated_at: string;
+}
+
+export interface FollowupSweepOut {
+  people: number;
+  tasks_read: number;
+  asked: number;
+  resolved: number;
+  errors: string[];
+}
+
+export interface DueTodayTaskOut {
+  task_id: string;
+  title: string;
+  task_url: string | null;
+  end_user: string | null;
+  status: string | null;
+  submission_status: string | null;
+  /** The bid is marked submitted — what "done" means to the follow-up. */
+  finished: boolean;
+  /** Marked "Not Submitted" outright: the reason is asked for now, not at the due time. */
+  reason_now?: boolean;
+  assignee_name: string;
+  assignee_email: string;
+  due_at: string;
+  /** When the "why is it late" question goes out if it is still unfinished. */
+  ask_at: string;
+  followup_id: string | null;
+  followup_status: FollowupStatus | null;
+}
+
+export interface DueTodayOut {
+  team_name: string | null;
+  /** "team" for a manager, lead or admin; "mine" for everybody else. */
+  scope: "team" | "mine";
+  grace_minutes: number;
+  generated_at: string;
+  tasks: DueTodayTaskOut[];
 }

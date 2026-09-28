@@ -45,6 +45,7 @@ import { Calculations } from "@/components/quotes/Calculations";
 import { LineEditor } from "@/components/quotes/LineEditor";
 import { SupplierComparison } from "@/components/quotes/SupplierComparison";
 import { UploadBox } from "@/components/quotes/UploadBox";
+import { FreightCard } from "@/components/quotes/FreightCard";
 import { DeleteQuoteDialog } from "@/components/quotes/DeleteQuote";
 import { History } from "@/components/quotes/History";
 import { Discussion, QUOTE_ANCHOR, type CommentAnchor } from "@/components/quotes/Discussion";
@@ -722,11 +723,20 @@ export default function QuoteRequestPage({
               }}
             />
 
+            {/* The upload card and the freight form share one column, and
+                the column is as tall as the lines beside it — the height the
+                upload card has always had. On wide screens it is laid over its
+                cell rather than in it, so neither card can push the row taller:
+                the freight form keeps its size and the upload card's list of
+                filed documents scrolls in what is left. The minimum only
+                matters when there are very few lines. */}
+            <div className="relative xl:min-h-[640px]">
+              <div className="flex flex-col gap-3.5 xl:absolute xl:inset-0">
             <UploadBox
               quote={data}
               editable={editable}
               currency={currency}
-              className="xl:h-full"
+              className="min-h-0 xl:flex-1"
               // Not wrapped in useAction: the dialog owns the error, and the
               // server's own words about a refused line are what it shows.
               onTyped={async (body: TypedSupplierQuotesIn) => {
@@ -751,6 +761,17 @@ export default function QuoteRequestPage({
               }}
               onDocumentsChanged={(next) => mutate(next, { revalidate: false })}
             />
+                {bid && (
+                  <FreightCard
+                    quote={data}
+                    draft={bid}
+                    editable={editable}
+                    currency={currency}
+                    onChange={(patch) => setBid({ ...bid, ...patch })}
+                  />
+                )}
+              </div>
+            </div>
           </div>
 
           {/* The comparison lives here, not on a page of its own: it exists so

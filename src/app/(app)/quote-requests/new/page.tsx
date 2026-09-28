@@ -8,7 +8,7 @@ import { api, withQuery } from "@/lib/api";
 import { CURRENCIES } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
-import type { QuoteLineIn, QuoteRequestOut } from "@/lib/types";
+import { TRADE_DIRECTIONS, type QuoteLineIn, type QuoteRequestOut } from "@/lib/types";
 import { PageHead, Panel, PanelHead, StatBox } from "@/components/ui/primitives";
 import { Button, Field, Input, Select, Textarea, Toggle } from "@/components/ui/controls";
 import { Empty, InlineNotice } from "@/components/ui/feedback";
@@ -43,6 +43,10 @@ export default function NewQuoteRequestPage() {
   const [customer, setCustomer] = useState("");
   const [contact, setContact] = useState("");
   const [currency, setCurrency] = useState("AED");
+  // Import, export or local. Blank leaves it to the documents — the chosen
+  // supplier's Incoterm, the route — which is right for a quote raised before
+  // any supplier has answered, and wrong the moment the person knows better.
+  const [direction, setDirection] = useState("");
   const [expiry, setExpiry] = useState("");
   const [subject, setSubject] = useState("");
   const [notes, setNotes] = useState("");
@@ -78,6 +82,7 @@ export default function NewQuoteRequestPage() {
         customer_name: customer.trim(),
         contact_person: contact.trim() || null,
         currency,
+        trade_direction: direction || null,
         expiry_date: expiry || null,
         subject: subject.trim() || null,
         notes: notes.trim() || null,
@@ -201,6 +206,19 @@ export default function NewQuoteRequestPage() {
                 {CURRENCIES.map((code) => (
                   <option key={code} value={code}>
                     {code}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field
+              label="Import / export"
+              hint="Leave on automatic and the supplier's offer decides once one is attached. Set it here when you already know."
+            >
+              <Select value={direction} onChange={(e) => setDirection(e.target.value)}>
+                <option value="">Automatic — from the documents</option>
+                {TRADE_DIRECTIONS.map((d) => (
+                  <option key={d.value} value={d.value} title={d.hint}>
+                    {d.label}
                   </option>
                 ))}
               </Select>
