@@ -20,7 +20,7 @@ import { Badge, PageHead, Panel, PanelHead } from "@/components/ui/primitives";
 import { Button, Field, Input, PillRail, Select, Toggle } from "@/components/ui/controls";
 import { Empty, ErrorState, InlineNotice, PanelSkeleton, RowsSkeleton } from "@/components/ui/feedback";
 import { RecipientList } from "@/components/reports/RecipientList";
-import { FollowupStatusBadge } from "@/components/followups/FollowupBits";
+import { FollowupStatusBadge, uaeDateTime } from "@/components/followups/FollowupBits";
 import { DueToday } from "@/components/followups/DueToday";
 import { DigestPanel } from "@/components/followups/DigestPanel";
 
@@ -99,7 +99,7 @@ export default function FollowupsPage() {
                     <p className="mt-0.5 truncate text-[12px] text-ink-4">
                       {[
                         teamSlug ? (row.assignee_name ?? row.assignee_email) : null,
-                        `due ${dateTime(row.due_at)}`,
+                        `due ${uaeDateTime(row.due_at)}`,
                         row.status_at_ask ?? "not submitted",
                         row.reason ? `“${row.reason}”` : null,
                       ]

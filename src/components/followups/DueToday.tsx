@@ -129,8 +129,8 @@ function Row({ task, showWho }: { task: DueTodayTaskOut; showWho: boolean }) {
       ) : (task.reason_now || passed) && task.not_watched ? (
         // Qualifies, but the settings keep it from being asked — say so, or
         // "Reason needed" reads as a question that went out and was ignored.
-        <Badge tone="neutral" title={task.not_watched}>
-          Not asked · outside the trial
+        <Badge tone="neutral" title={task.not_watched.split(" — ").slice(1).join(" — ") || task.not_watched}>
+          Not asked · {task.not_watched.split(" — ")[0].toLowerCase()}
         </Badge>
       ) : task.reason_now || passed ? (
         <Badge

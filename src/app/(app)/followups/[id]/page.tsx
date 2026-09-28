@@ -11,7 +11,7 @@ import type { FollowupOut } from "@/lib/types";
 import { Badge, Meta, PageHead, Panel, PanelHead } from "@/components/ui/primitives";
 import { Button, Field, LinkButton, Textarea } from "@/components/ui/controls";
 import { Empty, ErrorState, InlineNotice, PanelSkeleton } from "@/components/ui/feedback";
-import { FollowupStatusBadge } from "@/components/followups/FollowupBits";
+import { FollowupStatusBadge, uaeDateTime } from "@/components/followups/FollowupBits";
 
 /**
  * The form a person lands on from the "past its due date" mail.
@@ -198,7 +198,7 @@ export default function FollowupPage({ params }: { params: Promise<{ id: string 
             <PanelHead title="The task" />
             <Meta label="Held by">{data.assignee_name ?? data.assignee_email}</Meta>
             {data.end_user && <Meta label="End user">{data.end_user}</Meta>}
-            <Meta label="Was due">{dateTime(data.due_at)}</Meta>
+            <Meta label="Was due">{uaeDateTime(data.due_at)}</Meta>
             <Meta label="Submission status when asked">{data.status_at_ask ?? "Not set"}</Meta>
             {data.team_name && <Meta label="Team">{data.team_name}</Meta>}
             <Meta label="Asked">
