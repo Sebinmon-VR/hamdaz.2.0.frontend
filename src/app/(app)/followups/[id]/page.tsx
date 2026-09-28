@@ -103,13 +103,13 @@ export default function FollowupPage({ params }: { params: Promise<{ id: string 
                       disabled={reason.trim().length < 3}
                       onClick={() => void send.run()}
                     >
-                      Send to my manager
+                      Submit Reason
                     </Button>
                   </div>
                 </Panel>
 
                 <Panel tone="inset" className="p-5">
-                  <PanelHead title="Already updated this task?" />
+                  <PanelHead title="Already updated?" />
                   <p className="mt-2 text-[12.5px] leading-relaxed text-ink-3">
                     If you have submitted it or updated its submission status, you can ignore the
                     email — or
@@ -138,14 +138,14 @@ export default function FollowupPage({ params }: { params: Promise<{ id: string 
                           loading={dismiss.pending}
                           onClick={() => void dismiss.run()}
                         >
-                          Mark as false positive
+                          Confirm
                         </Button>
                       </div>
                     </>
                   ) : (
                     <div className="mt-4">
                       <Button icon={CheckCircle2} onClick={() => setClaiming(true)}>
-                        It is already updated — false positive
+                        Already Updated
                       </Button>
                     </div>
                   )}

@@ -158,13 +158,13 @@ export function DigestPanel() {
 
       <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-line pt-4">
         <Button icon={Download} loading={download.pending} onClick={() => void download.run("pdf")}>
-          Today&apos;s PDF
+          Download PDF
         </Button>
         <Button icon={FileSpreadsheet} loading={download.pending} onClick={() => void download.run("xlsx")}>
-          Today&apos;s Excel
+          Download Excel
         </Button>
         <Button icon={Send} loading={send.pending} onClick={() => void send.run()}>
-          Send today&apos;s report now
+          Send Report
         </Button>
         <span className="ml-auto text-[11.5px] text-ink-4">
           {data.digest_last_sent_on

@@ -195,7 +195,7 @@ function SettingsPanel() {
         action={
           <>
             <Button icon={Play} loading={run.pending} onClick={() => void run.run()}>
-              Check now
+              Run Check
             </Button>
             <Button variant="accent" icon={Save} loading={save.pending} onClick={() => void save.run()}>
               Save
@@ -339,7 +339,7 @@ function TryPanel() {
           disabled={!taskId}
           onClick={() => void go.run()}
         >
-          Ask me now
+          Send Test
         </Button>
       </div>
       <p className="mt-3 text-[11.5px] text-ink-4">

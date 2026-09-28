@@ -38,7 +38,7 @@ export function OverdueBanner() {
           ? `“${first.task_title}” is past its due date and not submitted. Give the reason, or mark it a false positive if you have already updated it.`
           : `${waiting.length} of your tasks are past their due date and need a reason.`}
       </span>
-      <span className="shrink-0 font-semibold">Answer now</span>
+      <span className="shrink-0 font-semibold">Submit Reason</span>
     </Link>
   );
 }
