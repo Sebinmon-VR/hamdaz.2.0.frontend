@@ -4,10 +4,9 @@ import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { Download, FileSpreadsheet, Save, Send } from "lucide-react";
 import { api } from "@/lib/api";
-import { dateTime } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
 import type { FollowupDigestOut, FollowupSettingsOut } from "@/lib/types";
-import { Panel, PanelHead } from "@/components/ui/primitives";
+import { Badge, Panel, PanelHead } from "@/components/ui/primitives";
 import { Button, Field, Input, Select, Toggle } from "@/components/ui/controls";
 import { InlineNotice, PanelSkeleton } from "@/components/ui/feedback";
 import { RecipientList } from "@/components/reports/RecipientList";
@@ -17,21 +16,26 @@ const ZONES = [
   { value: "Asia/Dubai", label: "UAE time" },
 ];
 
+const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+type Period = "day" | "week";
+
 /**
- * The end-of-day report, for a super admin.
+ * The daily and weekly reports, for a super admin.
  *
- * Once a day at the closing time the day's tasks — submitted and not — and
- * every reason asked for go to the CEO as one mail with a PDF and an Excel
- * file. Anybody still unanswered by then is marked "not responded". While it
- * is tried out it goes to the named addresses only; the CEO switch adds
- * whoever holds the CEO role.
+ * Each has its own on/off switch in plain sight. Both go at the closing time
+ * to the same people, with the same PDF and Excel: the daily one covers the
+ * day and marks anybody still unanswered as "not responded"; the weekly one
+ * covers the seven days to the chosen weekday and adds a per-person summary.
  */
 export function DigestPanel() {
   const { data, error, mutate } = useSWR<FollowupSettingsOut>("/followups/settings", {
     revalidateOnFocus: false,
   });
 
-  const [enabled, setEnabled] = useState(true);
+  const [daily, setDaily] = useState(true);
+  const [weekly, setWeekly] = useState(true);
+  const [weekday, setWeekday] = useState(4);
   const [time, setTime] = useState("18:00");
   const [zone, setZone] = useState("Asia/Kolkata");
   const [to, setTo] = useState<string[]>([]);
@@ -42,7 +46,9 @@ export function DigestPanel() {
 
   useEffect(() => {
     if (!data) return;
-    setEnabled(data.digest_enabled);
+    setDaily(data.digest_enabled);
+    setWeekly(data.weekly_enabled);
+    setWeekday(data.weekly_day);
     setTime(data.digest_time);
     setZone(data.digest_timezone);
     setTo(data.digest_recipients);
@@ -51,25 +57,30 @@ export function DigestPanel() {
     setXlsx(data.digest_formats.includes("xlsx"));
   }, [data]);
 
-  const save = useAction(async () => {
-    const next = await api.patch<FollowupSettingsOut>("/followups/settings", {
-      digest_enabled: enabled,
-      digest_time: time,
-      digest_timezone: zone,
-      digest_recipients: to,
-      digest_include_ceo: ceo,
-      digest_formats: [...(pdf ? ["pdf"] : []), ...(xlsx ? ["xlsx"] : [])],
-    });
+  const save = useAction(async (patch?: Partial<FollowupSettingsOut>) => {
+    const next = await api.patch<FollowupSettingsOut>(
+      "/followups/settings",
+      patch ?? {
+        digest_enabled: daily,
+        weekly_enabled: weekly,
+        weekly_day: weekday,
+        digest_time: time,
+        digest_timezone: zone,
+        digest_recipients: to,
+        digest_include_ceo: ceo,
+        digest_formats: [...(pdf ? ["pdf"] : []), ...(xlsx ? ["xlsx"] : [])],
+      },
+    );
     await mutate(next, { revalidate: false });
   });
-  const send = useAction(async () => {
-    setSent(await api.post<FollowupDigestOut>("/followups/digest/send"));
+  const send = useAction(async (period: Period) => {
+    setSent(await api.post<FollowupDigestOut>(`/followups/digest/send?period=${period}`));
     await mutate();
   });
-  const download = useAction(async (format: "pdf" | "xlsx") => {
+  const download = useAction(async (format: "pdf" | "xlsx", period: Period) => {
     await api.download(
-      `/followups/digest/file?format=${format}`,
-      `end-of-day-report.${format}`,
+      `/followups/digest/file?format=${format}&period=${period}`,
+      `${period === "week" ? "weekly" : "end-of-day"}-report.${format}`,
     );
   });
 
@@ -78,11 +89,18 @@ export function DigestPanel() {
 
   const zoneLabel = ZONES.find((z) => z.value === data.digest_timezone)?.label ?? data.digest_timezone;
 
+  /** The on/off switch, saved the moment it is flipped — no Save needed. */
+  function flip(key: "digest_enabled" | "weekly_enabled", next: boolean) {
+    if (key === "digest_enabled") setDaily(next);
+    else setWeekly(next);
+    void save.run({ [key]: next } as Partial<FollowupSettingsOut>);
+  }
+
   return (
     <Panel className="p-5">
       <PanelHead
-        title="End-of-day report"
-        hint="One mail to the CEO with the day's tasks and reasons, as PDF and Excel. Super admin only."
+        title="Reports"
+        hint="The day's and the week's tasks and reasons, as PDF and Excel. Super admin only."
         action={
           <Button
             variant="accent"
@@ -108,21 +126,49 @@ export function DigestPanel() {
       {sent && (
         <InlineNotice tone={sent.sent ? "positive" : "warn"} className="mt-3">
           {sent.sent
-            ? `Sent to ${sent.recipients.join(", ")}: ${sent.submitted} submitted, ${sent.not_submitted} not submitted, ${sent.lines} reasons asked. Nobody was marked "not responded" — that happens only at the closing time.`
+            ? `${sent.period === "week" ? "Weekly" : "Daily"} report sent to ${sent.recipients.join(", ")}: ${sent.submitted} submitted, ${sent.not_submitted} not submitted. A test send marks nobody as "not responded".`
             : (sent.error ?? "Not sent.")}
         </InlineNotice>
       )}
 
+      {/* The two reports side by side, each with its switch where it is seen. */}
+      <div className="mt-5 grid gap-3 md:grid-cols-2">
+        <ReportCard
+          title="End-of-day report"
+          on={daily}
+          onToggle={(next) => flip("digest_enabled", next)}
+          when={`Every day at ${data.digest_time} ${zoneLabel}`}
+          last={data.digest_last_sent_on}
+          busy={download.pending || send.pending}
+          onDownload={(format) => void download.run(format, "day")}
+          onSend={() => void send.run("day")}
+        />
+        <ReportCard
+          title="Weekly report"
+          on={weekly}
+          onToggle={(next) => flip("weekly_enabled", next)}
+          when={`Every ${WEEKDAYS[data.weekly_day] ?? "Friday"} at ${data.digest_time} ${zoneLabel}, for the 7 days to then`}
+          last={data.weekly_last_sent_on}
+          busy={download.pending || send.pending}
+          onDownload={(format) => void download.run(format, "week")}
+          onSend={() => void send.run("week")}
+        >
+          <Field label="Sent on">
+            <Select value={String(weekday)} onChange={(e) => setWeekday(Number(e.target.value))}>
+              {WEEKDAYS.map((name, i) => (
+                <option key={name} value={i}>
+                  {name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </ReportCard>
+      </div>
+
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <div className="space-y-4">
-          <Toggle
-            checked={enabled}
-            onChange={setEnabled}
-            label="Send the report every day"
-            hint={`At the closing time, anybody who has not given a reason is marked "not responded".`}
-          />
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Closing time">
+            <Field label="Closing time" hint="For both reports.">
               <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
             </Field>
             <Field label="Timezone">
@@ -155,24 +201,56 @@ export function DigestPanel() {
           </p>
         </div>
       </div>
+    </Panel>
+  );
+}
 
-      <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-line pt-4">
-        <Button icon={Download} loading={download.pending} onClick={() => void download.run("pdf")}>
+function ReportCard({
+  title,
+  on,
+  onToggle,
+  when,
+  last,
+  busy,
+  onDownload,
+  onSend,
+  children,
+}: {
+  title: string;
+  on: boolean;
+  onToggle: (next: boolean) => void;
+  when: string;
+  last: string | null;
+  busy: boolean;
+  onDownload: (format: "pdf" | "xlsx") => void;
+  onSend: () => void;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-[16px] border border-line p-4">
+      <div className="flex items-center gap-2">
+        <span className="text-[14px] font-semibold">{title}</span>
+        <Badge tone={on ? "positive" : "neutral"}>{on ? "On" : "Off"}</Badge>
+        <div className="ml-auto">
+          <Toggle checked={on} onChange={onToggle} label="" />
+        </div>
+      </div>
+      <p className="mt-1.5 text-[12px] text-ink-3">
+        {on ? when : "Switched off — nothing is sent."}
+        {last ? ` Last sent for ${last}.` : ""}
+      </p>
+      {children && <div className="mt-3">{children}</div>}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button size="sm" icon={Download} disabled={busy} onClick={() => onDownload("pdf")}>
           Download PDF
         </Button>
-        <Button icon={FileSpreadsheet} loading={download.pending} onClick={() => void download.run("xlsx")}>
+        <Button size="sm" icon={FileSpreadsheet} disabled={busy} onClick={() => onDownload("xlsx")}>
           Download Excel
         </Button>
-        <Button icon={Send} loading={send.pending} onClick={() => void send.run()}>
-          Send Report
+        <Button size="sm" icon={Send} disabled={busy} onClick={onSend}>
+          Send Test
         </Button>
-        <span className="ml-auto text-[11.5px] text-ink-4">
-          {data.digest_last_sent_on
-            ? `Last sent for ${data.digest_last_sent_on}. Next at ${data.digest_time} ${zoneLabel}.`
-            : `First report at ${data.digest_time} ${zoneLabel}.`}
-          {data.last_run_at ? ` Checked ${dateTime(data.last_run_at)}.` : ""}
-        </span>
       </div>
-    </Panel>
+    </div>
   );
 }

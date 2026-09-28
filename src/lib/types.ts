@@ -5418,6 +5418,11 @@ export interface FollowupSettingsOut {
   digest_sender_email: string | null;
   digest_last_sent_on: string | null;
   digest_last_error: string | null;
+  /* The weekly report: the same content over seven days. */
+  weekly_enabled: boolean;
+  /** 0 Monday … 6 Sunday. */
+  weekly_day: number;
+  weekly_last_sent_on: string | null;
   /** Who it would go to right now, CEO role holders included. */
   digest_to: string[];
   last_run_at: string | null;
@@ -5427,6 +5432,7 @@ export interface FollowupSettingsOut {
 
 export interface FollowupDigestOut {
   day: string;
+  period: "day" | "week";
   lines: number;
   submitted: number;
   not_submitted: number;
