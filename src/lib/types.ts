@@ -5372,6 +5372,8 @@ export interface FollowupOut {
   /** The Submission Status the row had when the question was asked. */
   status_at_ask: string | null;
   due_at: string;
+  /** Asked in a daily batch about a task due the day before. */
+  carried_over: boolean;
   task_modified_at: string | null;
   team_id: string | null;
   team_name: string | null;
@@ -5402,6 +5404,12 @@ export interface FollowupSettingsOut {
   only_title_contains: string;
   grace_minutes: number;
   poll_seconds: number;
+  /** "daily": once a day at ask_time. "after_due": grace_minutes after each due time. */
+  ask_mode: "after_due" | "daily";
+  ask_time: string;
+  ask_last_run_on: string | null;
+  /** While set, every follow-up email goes here instead. */
+  test_mail_to: string | null;
   /** Nothing due before this is asked about. Set when it is switched on. */
   watch_from: string | null;
   ask_from_user_id: string | null;

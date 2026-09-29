@@ -393,6 +393,14 @@ export function buildNav(session: Session): Nav {
       match: "/admin/intake",
       badge: "admin",
     });
+    // The overdue follow-up's settings, apart from the list people answer on.
+    admin.push({
+      label: "Follow-up settings",
+      href: "/admin/followups",
+      icon: AlarmClock,
+      match: "/admin/followups",
+      badge: "admin",
+    });
     // The Ariba reader's switch: stop it here if anything goes wrong.
     admin.push({
       label: "Ariba reader",
