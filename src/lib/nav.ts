@@ -393,6 +393,14 @@ export function buildNav(session: Session): Nav {
       match: "/admin/intake",
       badge: "admin",
     });
+    // The Ariba reader's switch: stop it here if anything goes wrong.
+    admin.push({
+      label: "Ariba reader",
+      href: "/admin/ariba",
+      icon: Gavel,
+      match: "/admin/ariba",
+      badge: "admin",
+    });
     // Deliberately not `match`ed on "/admin/permissions" alone as a prefix of
     // anything else: the assistant has its own permissions screen and the two
     // would light up together.

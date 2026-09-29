@@ -5516,8 +5516,16 @@ export interface AribaReaderStatusOut {
   last_login_at: string | null;
   last_result: string | null;
   last_error: string | null;
-  paused_until: string | null;
+  /** Set when a sign-in failed; nothing signs in until a super admin resumes. */
+  /** Set when a super admin stopped the reader from the admin page. */
+  stopped_at: string | null;
+  stopped_by: string | null;
+  blocked_at: string | null;
+  blocked_reason: string | null;
   visits_today: number;
+  /** Sign-ins today, counted apart from visits — shared by everyone. */
+  logins_today: number;
+  max_logins_per_day: number;
   watermark: string | null;
   has_session: boolean;
 }

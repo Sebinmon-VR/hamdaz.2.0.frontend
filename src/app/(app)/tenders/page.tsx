@@ -2,15 +2,13 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import { Gavel, RefreshCw, TriangleAlert } from "lucide-react";
-import { api, withQuery } from "@/lib/api";
-import { relative } from "@/lib/format";
-import { useAction } from "@/lib/hooks";
+import { Gavel, Settings2, TriangleAlert } from "lucide-react";
+import { withQuery } from "@/lib/api";
 import { useSession } from "@/lib/session";
-import type { AribaBcdOut, AribaEventOut, AribaReaderStatusOut } from "@/lib/types";
-import { Badge, PageHead, Panel, PanelHead } from "@/components/ui/primitives";
-import { Button, PillRail } from "@/components/ui/controls";
-import { Empty, ErrorState, InlineNotice, PanelSkeleton, RowsSkeleton } from "@/components/ui/feedback";
+import type { AribaEventOut } from "@/lib/types";
+import { Badge, PageHead, Panel } from "@/components/ui/primitives";
+import { LinkButton, PillRail } from "@/components/ui/controls";
+import { Empty, ErrorState, InlineNotice, RowsSkeleton } from "@/components/ui/feedback";
 import { uaeDateTime } from "@/components/followups/FollowupBits";
 import { Countdown } from "@/components/ui/Countdown";
 
@@ -20,8 +18,8 @@ type View = "Open" | "Closed" | "all";
  * Tenders read from the Ariba supplier portal: title, due date, status.
  *
  * The list is the backend's copy, never the portal itself — the portal is
- * visited only when a new tender reaches the Proposals list. A super admin
- * sees what the reader last did at the foot, and can ask for a visit now.
+ * visited only when a new tender reaches the Proposals list. What the reader
+ * last did, and its switch, are on /admin/ariba for a super admin.
  */
 export default function TendersPage() {
   const session = useSession();
@@ -38,6 +36,13 @@ export default function TendersPage() {
         title="Ariba tenders"
         count={data?.length}
         lead="Open events on the Ariba supplier portal, soonest due first."
+        actions={
+          session.roles.is_super_admin ? (
+            <LinkButton href="/admin/ariba" icon={Settings2}>
+              Reader settings
+            </LinkButton>
+          ) : undefined
+        }
       />
 
       <NotReceived rows={data} />
@@ -72,8 +77,6 @@ export default function TendersPage() {
         </ul>
       )}
 
-      {session.roles.is_super_admin && <ReaderPanel onVisited={() => mutate()} />}
-      {session.roles.is_super_admin && <BcdPanel />}
     </div>
   );
 }
@@ -158,159 +161,6 @@ function TenderRow({ row }: { row: AribaEventOut }) {
       >
         {open ? "Open on Ariba" : "Closed on Ariba"}
       </Badge>
-    </Panel>
-  );
-}
-
-/* ── the reader, for a super admin ───────────────────────────────────── */
-
-function ReaderPanel({ onVisited }: { onVisited: () => void }) {
-  const { data, error, isLoading, mutate } = useSWR<AribaReaderStatusOut>("/ariba/status", {
-    revalidateOnFocus: false,
-  });
-  const [result, setResult] = useState<string | null>(null);
-  const visit = useAction(async () => {
-    const out = await api.post<{ result: string }>("/ariba/visit");
-    setResult(out.result);
-    await mutate();
-    onVisited();
-  });
-
-  return (
-    <Panel className="space-y-3 p-4">
-      <PanelHead
-        title="Ariba reader"
-        action={
-          <Button icon={RefreshCw} loading={visit.pending} onClick={() => visit.run()}>
-            Visit now
-          </Button>
-        }
-      />
-      {error ? (
-        <ErrorState error={error} onRetry={() => mutate()} />
-      ) : isLoading && !data ? (
-        <PanelSkeleton lines={3} />
-      ) : data ? (
-        <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-2">
-          <Fact label="Last visit" value={data.last_visit_at ? relative(data.last_visit_at) : "Never"} />
-          <Fact label="Last found" value={data.last_result ?? "—"} />
-          <Fact label="Last sign-in" value={data.last_login_at ? relative(data.last_login_at) : "Never"} />
-          <Fact label="Visits today" value={String(data.visits_today)} />
-          <Fact label="Saved session" value={data.has_session ? "Yes, reused" : "None"} />
-        </dl>
-      ) : null}
-      {data?.paused_until && (
-        <InlineNotice tone="danger">
-          Sign-in was refused, so the reader will not sign in again until {uaeDateTime(data.paused_until)}.
-          Check the Ariba login in the server settings.
-        </InlineNotice>
-      )}
-      {data?.last_error && !data.paused_until && (
-        <InlineNotice tone="warn">Last visit failed: {data.last_error}</InlineNotice>
-      )}
-      {visit.error && <InlineNotice tone="danger">{visit.error}</InlineNotice>}
-      {result && <InlineNotice tone="info">{result}</InlineNotice>}
-      <p className="text-[11.5px] text-ink-4">
-        The reader visits Ariba only when a new tender reaches the Proposals list — at most once
-        every 30 minutes and 12 times a day. Visit now is still held to the daily limit.
-      </p>
-    </Panel>
-  );
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex gap-2">
-      <dt className="w-28 shrink-0 text-ink-4">{label}</dt>
-      <dd className="min-w-0 truncate">{value}</dd>
-    </div>
-  );
-}
-
-/* ── BCD against Ariba, for a super admin ────────────────────────────── */
-
-/**
- * SharePoint holds BCD as the UAE time typed into a site set to another zone,
- * so the value is read back in that zone — which is what the list shows.
- */
-function asListShows(iso: string | null, zone: string): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("en-GB", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: zone,
-  });
-}
-
-function BcdPanel() {
-  const { data, error, isLoading, mutate } = useSWR<AribaBcdOut>("/ariba/bcd", {
-    revalidateOnFocus: false,
-  });
-  const [result, setResult] = useState<string | null>(null);
-  const check = useAction(async () => {
-    const out = await api.post<{ result: string }>("/ariba/bcd/check");
-    setResult(out.result);
-    await mutate();
-  });
-
-  return (
-    <Panel className="space-y-3 p-4">
-      <PanelHead
-        title="BCD against Ariba"
-        hint={data ? (data.writing ? "Correcting the list" : "Preview only — nothing is written") : undefined}
-        action={
-          <Button icon={RefreshCw} loading={check.pending} onClick={() => check.run()}>
-            Check now
-          </Button>
-        }
-      />
-      {error ? (
-        <ErrorState error={error} onRetry={() => mutate()} />
-      ) : isLoading && !data ? (
-        <PanelSkeleton lines={3} />
-      ) : !data || data.rows.length === 0 ? (
-        <p className="text-[12.5px] text-ink-4">
-          No differences recorded. Every matched Proposals row agrees with Ariba, or no check has run yet.
-        </p>
-      ) : (
-        <ul className="space-y-1.5">
-          {data.rows.map((r) => (
-            <li
-              key={r.id}
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[12px] bg-panel-2 px-3 py-2 text-[12.5px]"
-            >
-              <span className="min-w-0 flex-1 truncate" title={r.task_title}>
-                <span className="font-medium">{r.reference}</span>{" "}
-                <span className="text-ink-4">{r.task_title}</span>
-              </span>
-              <span className="tnum">
-                <span className="text-ink-4 line-through">{asListShows(r.old_bcd, data.site_timezone)}</span>
-                {" → "}
-                <span className="font-medium">{asListShows(r.new_bcd, data.site_timezone)}</span>
-              </span>
-              {r.applied ? (
-                <Badge tone="positive" title={`Written ${relative(r.created_at)}`}>
-                  Corrected
-                </Badge>
-              ) : r.error ? (
-                <Badge tone="warn" title={r.error}>
-                  Not changed
-                </Badge>
-              ) : (
-                <Badge tone="neutral">Would correct</Badge>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      {check.error && <InlineNotice tone="danger">{check.error}</InlineNotice>}
-      {result && <InlineNotice tone="info">{result}</InlineNotice>}
-      <p className="text-[11.5px] text-ink-4">
-        Times are UAE time, as the BCD column shows them. Checked after every Ariba visit; only the BCD
-        column of a row whose time differs is changed, and only while writing is turned on.
-      </p>
     </Panel>
   );
 }
