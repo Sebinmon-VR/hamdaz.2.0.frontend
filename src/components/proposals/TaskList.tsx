@@ -11,6 +11,7 @@ import { Badge, Panel, Meta } from "@/components/ui/primitives";
 import { LinkButton, PillRail, SearchInput, Select } from "@/components/ui/controls";
 import { Empty, Modal } from "@/components/ui/feedback";
 import { DueChip } from "@/components/widgets";
+import { Countdown, bcdInstant } from "@/components/ui/Countdown";
 import { AttachmentMark, TaskAttachments } from "@/components/proposals/TaskAttachments";
 import { TaskWorkflow } from "@/components/proposals/TaskWorkflow";
 
@@ -244,6 +245,15 @@ export function TaskList({
                       <Badge tone={/high|urgent/i.test(task.priority) ? "danger" : "neutral"}>
                         {task.priority}
                       </Badge>
+                    )}
+                    {/* Live, to the minute the bid closes — BCD read as the UAE
+                        time it was typed as. Gone once it passes; the due
+                        chip beside it then says how late. */}
+                    {task.is_open && (
+                      <Countdown
+                        to={bcdInstant(task.bid_closing_date)}
+                        title="Time left until the bid closes (BCD, UAE time)"
+                      />
                     )}
                     <DueChip due={task.deadline ?? task.due_date} />
                   </div>

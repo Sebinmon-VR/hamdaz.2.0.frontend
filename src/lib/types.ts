@@ -5483,3 +5483,64 @@ export interface DueTodayOut {
   generated_at: string;
   tasks: DueTodayTaskOut[];
 }
+
+/* ── Ariba tenders ───────────────────────────────────────────────────── */
+
+export type AribaStatus = "Open" | "Closed";
+
+/** One event from the Ariba Events list — GET /ariba/events. */
+export interface AribaEventOut {
+  doc_id: string;
+  /** The tender number found in the title, e.g. "6000151811". */
+  reference: string | null;
+  title: string;
+  /** The End Time column: when the tender closes. */
+  end_time: string | null;
+  status: AribaStatus;
+  /** Ariba's Participated column as of the last visit; null when unread. */
+  participated: boolean | null;
+  first_seen_at: string;
+  last_seen_at: string;
+  /** The Proposals row with the same tender number, if there is one. */
+  proposal_item_id: string | null;
+  proposal_title: string | null;
+  /** The matched task's SubmissionStatus. */
+  submission_status: string | null;
+  /** The task says Submitted, Ariba shows no response, the tender is open. */
+  not_received: boolean;
+}
+
+/** What the reader last did — GET /ariba/status, super admin only. */
+export interface AribaReaderStatusOut {
+  last_visit_at: string | null;
+  last_login_at: string | null;
+  last_result: string | null;
+  last_error: string | null;
+  paused_until: string | null;
+  visits_today: number;
+  watermark: string | null;
+  has_session: boolean;
+}
+
+/** A Proposals row whose BCD disagreed with Ariba — GET /ariba/bcd. */
+export interface AribaBcdFixOut {
+  id: string;
+  item_id: string;
+  doc_id: string;
+  reference: string;
+  task_title: string;
+  /** As SharePoint holds it: UTC, read in the site's zone to show UAE time. */
+  old_bcd: string | null;
+  new_bcd: string;
+  ariba_end_time: string;
+  /** False: a preview (writing is off), or the write failed — see `error`. */
+  applied: boolean;
+  error: string | null;
+  created_at: string;
+}
+
+export interface AribaBcdOut {
+  writing: boolean;
+  site_timezone: string;
+  rows: AribaBcdFixOut[];
+}

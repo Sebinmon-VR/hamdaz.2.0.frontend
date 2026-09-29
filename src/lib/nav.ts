@@ -24,6 +24,7 @@ import {
   FolderKanban,
   FolderLock,
   GaugeCircle,
+  Gavel,
   IdCard,
   KeyRound,
   LayoutList,
@@ -159,6 +160,15 @@ export function buildNav(session: Session): Nav {
   });
 
   const more: NavGroup[] = [];
+
+  // Tenders read from the Ariba supplier portal. Beside Proposals rather than
+  // a pill of its own: people look at it when a tender comes in, not daily.
+  if (can("proposals", "my_tasks")) {
+    more.push({
+      label: "Tenders",
+      items: [{ label: "Ariba tenders", href: "/tenders", icon: Gavel, match: "/tenders" }],
+    });
+  }
 
   // The reading side of projects. The board is the pill above; these are the
   // three views nobody needs every day — everything the team runs, the
