@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { FileText, Plus, Trash2 } from "lucide-react";
+import { FileText, Plus, Settings, Trash2 } from "lucide-react";
 import { api, withQuery } from "@/lib/api";
 import { useAction } from "@/lib/hooks";
 import { amount, decimalPercent, num } from "@/lib/format";
@@ -17,10 +17,11 @@ import {
   RowHead,
   StatBox,
 } from "@/components/ui/primitives";
-import { LinkButton, PillRail, SearchInput, Toggle } from "@/components/ui/controls";
+import { Button, LinkButton, PillRail, SearchInput, Toggle } from "@/components/ui/controls";
 import { Empty, ErrorState, RowsSkeleton } from "@/components/ui/feedback";
 import { QuoteStatusBadge } from "@/components/quotes/QuoteRequestBits";
 import { DeleteQuoteDialog } from "@/components/quotes/DeleteQuote";
+import { ApprovalSettingsDialog } from "@/components/quotes/ApprovalSettingsDialog";
 
 /**
  * Customer quotes we are putting together, and where each one has got to.
@@ -38,6 +39,8 @@ export default function QuoteRequestsPage() {
   const [status, setStatus] = useState<QuoteStatus | "open" | "all">("open");
   const [mine, setMine] = useState(false);
   const [search, setSearch] = useState("");
+  // Who is emailed an approval request. A super admin's setting.
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // `status` takes one value, so "everything still moving" is filtered here
   // rather than asked for — the alternative is five requests and a merge.
@@ -91,6 +94,15 @@ export default function QuoteRequestsPage() {
         actions={
           <>
             <Toggle checked={mine} onChange={setMine} label="Mine" />
+            {session.roles.is_super_admin && (
+              <Button
+                icon={Settings}
+                onClick={() => setSettingsOpen(true)}
+                title="Who is emailed when a quote is sent for approval"
+              >
+                Settings
+              </Button>
+            )}
             <LinkButton href="/quote-requests/new" variant="accent" icon={Plus}>
               New quote
             </LinkButton>
@@ -262,6 +274,7 @@ export default function QuoteRequestsPage() {
           }
         }}
       />
+      <ApprovalSettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
   );
 }

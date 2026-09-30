@@ -1690,6 +1690,23 @@ export interface SupplierEmailSummary {
   attachments: string[];
 }
 
+/** PUT /quote-requests/approval-settings: who is emailed an approval request. */
+export interface ApprovalSettingsIn {
+  notify_team_approvers: boolean;
+  notify_team_managers: boolean;
+  notify_managers: boolean;
+  notify_ceo: boolean;
+  notify_super_admins: boolean;
+  extra_emails: string[];
+}
+
+export interface ApprovalSettingsOut extends ApprovalSettingsIn {
+  updated_at: string | null;
+  updated_by_name: string | null;
+  /** Per team: who the request would go to now. */
+  preview: { team_id: string; team_name: string; recipients: string[] }[];
+}
+
 /** One offer's supplier, as GET /quote-requests/{id}/supplier-details has it. */
 export interface SupplierDetailsOut {
   supplier_quote_id: string;
@@ -2198,6 +2215,10 @@ export interface CostingReportOut {
     currency: string | null;
     quote_number: string | null;
     creator: string | null;
+    /** The basics from the supplier details: [label, value]. */
+    details?: [string, string][];
+    /** Which of the basics are still blank. */
+    missing?: string[];
   };
   quoted_price: FigureOut;
   landed_total: FigureOut;

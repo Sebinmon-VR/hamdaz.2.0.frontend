@@ -187,6 +187,14 @@ function Report({
             {report.supplier.creator && `Creator: ${report.supplier.creator}`}
           </span>
           {report.supplier.quote_number && <span>Their ref: {report.supplier.quote_number}</span>}
+          {(report.supplier.details ?? []).map(([label, value]) => (
+            <span key={label}>
+              {label}: <span className="text-ink-2">{value}</span>
+            </span>
+          ))}
+          {(report.supplier.missing ?? []).length > 0 && (
+            <span className="text-warn">Not given: {report.supplier.missing!.join(", ")}</span>
+          )}
         </Party>
       </div>
 
