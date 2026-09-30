@@ -1612,11 +1612,13 @@ export type DocumentKind =
   | "technical_spec"
   | "compliance"
   | "freight_quote"
+  | "supplier_email"
   | "costing_report"
   | "other";
 
 /** The kinds a person uploads. Supplier quotes have their own panel. */
 export const UPLOAD_KINDS: { value: DocumentKind; label: string; hint: string }[] = [
+  { value: "supplier_email", label: "Supplier email (.eml / .msg)", hint: "Saved from Outlook. Sent to the approvers with the approval request, formatted and attached." },
   { value: "customer_rfq", label: "Customer RFQ / enquiry", hint: "Gives the reference, closing date, delivery place and the items asked for." },
   { value: "end_user_po", label: "End user PO", hint: "Gives the PO number, date and value." },
   { value: "freight_quote", label: "Freight / courier quote", hint: "Gives a freight figure for the landed cost." },
@@ -1669,6 +1671,54 @@ export interface QuoteDocumentOut {
   /** For the costing report: the pass it was rendered at. */
   revision: number | null;
   suggestions: Record<string, DocumentSuggestion> | null;
+  /** For a supplier email: who sent it, when, the subject and the text. */
+  email?: SupplierEmailSummary | null;
+}
+
+export interface EmailPerson {
+  name: string;
+  address: string;
+}
+
+export interface SupplierEmailSummary {
+  subject: string;
+  from: EmailPerson;
+  to: EmailPerson[];
+  cc: EmailPerson[];
+  sent: string | null;
+  body: string;
+  attachments: string[];
+}
+
+/** One offer's supplier, as GET /quote-requests/{id}/supplier-details has it. */
+export interface SupplierDetailsOut {
+  supplier_quote_id: string;
+  supplier_name: string;
+  /** The offer this quote is priced from. */
+  is_selected: boolean;
+  details: Record<string, string | string[] | null>;
+  /** Only for blank or different fields: the value and where it was read. */
+  suggestions: Record<string, { value: string | string[]; source: string }>;
+  /** Labels of the blank fields, in the form's order. */
+  missing: string[];
+  may_edit: boolean;
+}
+
+export interface SupplierDetailsFormOut {
+  groups: { title: string; fields: { key: string; label: string }[] }[];
+  supplier_types: string[];
+  suppliers: SupplierDetailsOut[];
+}
+
+/** GET /quote-requests/{id}/mailbox: one message in your own mailbox. */
+export interface MailboxMessageOut {
+  id: string;
+  subject: string;
+  from_name: string | null;
+  from_address: string | null;
+  received: string | null;
+  preview: string;
+  has_attachments: boolean;
 }
 
 /** POST /{id}/documents/{doc}/apply. */
@@ -1936,6 +1986,12 @@ export interface QuoteRequestOut {
    * correctable for as long as the quote is theirs.
    */
   may_set_currency: boolean;
+  /**
+   * Whether the caller may file more supporting documents. Stays true after
+   * the quote is sent: a datasheet or an RFQ addendum moves no figure.
+   * Supplier quotations still need `may_edit`, because they reprice it.
+   */
+  may_add_documents?: boolean;
   may_submit: boolean;
   submit_reason: string | null;
   may_approve: boolean;

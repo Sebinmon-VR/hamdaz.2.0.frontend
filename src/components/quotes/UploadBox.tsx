@@ -2,9 +2,11 @@
 
 import clsx from "clsx";
 import { useState } from "react";
-import { Select } from "@/components/ui/controls";
+import { Mail, Plus } from "lucide-react";
+import { Button, Select } from "@/components/ui/controls";
 import { Panel } from "@/components/ui/primitives";
-import { COMPACT_SELECT, Documents } from "@/components/quotes/Documents";
+import { COMPACT_BUTTON, COMPACT_SELECT, Documents } from "@/components/quotes/Documents";
+import { SupplierEmailPicker } from "@/components/quotes/SupplierEmailPicker";
 import { SupplierUpload } from "@/components/quotes/SupplierUpload";
 import {
   UPLOAD_KINDS,
@@ -25,6 +27,11 @@ type What = "supplier_quote" | DocumentKind;
  * reader, with the currency choice and "Type one in"; anything else through
  * the documents filing, read for what it can tell the quote. Under the box,
  * everything filed so far, with what each document suggests.
+ *
+ * Once the quote is sent it is frozen, but supporting documents are not:
+ * "Add more files" files an addendum, a datasheet or a certificate without
+ * pulling the quote back. Supplier quotations are not offered there, because
+ * they reprice what the approvers are deciding.
  */
 export function UploadBox({
   quote,
@@ -47,6 +54,9 @@ export function UploadBox({
   className?: string;
 }) {
   const [what, setWhat] = useState<What>("supplier_quote");
+  const [adding, setAdding] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const mayAdd = !editable && Boolean(quote.may_add_documents);
   const offers = quote.comparison?.suppliers?.length ?? 0;
   const filed = quote.documents?.length ?? 0;
   // What the chosen kind does with the file. On the select's title rather than
@@ -88,7 +98,53 @@ export function UploadBox({
         </label>
       )}
 
-      {what === "supplier_quote" ? (
+      {(editable || mayAdd) && (
+        <>
+          <Button
+            size="sm"
+            icon={Mail}
+            className={clsx(COMPACT_BUTTON, "mt-3 self-start")}
+            title="Pick the supplier's email from your own mailbox. It goes to the approvers with the approval request."
+            onClick={() => setPicking(true)}
+          >
+            Attach supplier email
+          </Button>
+          <SupplierEmailPicker
+            quote={quote}
+            open={picking}
+            onClose={() => setPicking(false)}
+            onChanged={onDocumentsChanged}
+          />
+        </>
+      )}
+
+      {mayAdd &&
+        (adding ? (
+          <div className="mt-2">
+            <Documents
+              embedded
+              showList={false}
+              quote={quote}
+              editable
+              onChanged={onDocumentsChanged}
+            />
+            <p className="mt-1.5 text-[11.5px] text-ink-4">
+              Filed with the task. It changes nothing on the quote the approvers are deciding.
+            </p>
+          </div>
+        ) : (
+          <Button
+            size="sm"
+            icon={Plus}
+            className={clsx(COMPACT_BUTTON, "mt-3 self-start")}
+            title="File another document with this quote: an RFQ addendum, a datasheet, a certificate. Supplier quotations need the quote to be editable."
+            onClick={() => setAdding(true)}
+          >
+            Add more files
+          </Button>
+        ))}
+
+      {mayAdd ? null : what === "supplier_quote" ? (
         <SupplierUpload
           embedded
           attached={offers}

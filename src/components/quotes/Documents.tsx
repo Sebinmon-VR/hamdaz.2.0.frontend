@@ -35,7 +35,7 @@ export const COMPACT_NOTICE = "mt-2 rounded-[10px]! px-3! py-2! text-[11.5px]! l
 /** The 28px button, over the primitives' 32px "sm". */
 export const COMPACT_BUTTON = "h-7! px-2.5! text-[11.5px]!";
 
-const ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv,.docx";
+const ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv,.docx,.eml,.msg";
 
 /**
  * Every document behind a quote, filed with the task in the shared library.
@@ -343,6 +343,7 @@ const KIND_TONE: Partial<
   customer_rfq: "info",
   end_user_po: "second",
   freight_quote: "info",
+  supplier_email: "second",
   costing_report: "positive",
 };
 
@@ -376,8 +377,9 @@ function DocumentRow({
   const [open, setOpen] = useState(pending.length > 0);
 
   // The second line of the old row, now the tooltip and the expanded detail.
+  const sender = doc.email ? doc.email.from.name || doc.email.from.address : null;
   const meta = [
-    doc.supplier_name ?? doc.kind_label,
+    sender ? `from ${sender}` : (doc.supplier_name ?? doc.kind_label),
     doc.revision ? `pass ${doc.revision}` : null,
     doc.size ? bytes(doc.size) : null,
     doc.uploaded_by_name,
@@ -510,6 +512,15 @@ function DocumentRow({
           </p>
           {doc.notes && (
             <p className="mt-0.5 text-[11.5px] leading-snug text-ink-3">{doc.notes}</p>
+          )}
+          {doc.email && (
+            <div className="mt-1 rounded-[10px] bg-panel-2 px-2.5 py-2 text-[11.5px] leading-snug">
+              <p className="font-medium text-ink-2">{doc.email.subject || "(no subject)"}</p>
+              <p className="line-clamp-4 whitespace-pre-line text-ink-3">{doc.email.body}</p>
+              {doc.email.attachments.length > 0 && (
+                <p className="mt-1 text-ink-4">Attachments: {doc.email.attachments.join(", ")}</p>
+              )}
+            </div>
           )}
           {doc.id && pending.length > 0 && (
             <Suggestions

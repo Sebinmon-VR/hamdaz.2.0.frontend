@@ -44,6 +44,7 @@ import { QuoteForm, draftOf, type QuoteFormDraft } from "@/components/quotes/Quo
 import { Calculations } from "@/components/quotes/Calculations";
 import { LineEditor } from "@/components/quotes/LineEditor";
 import { SupplierComparison } from "@/components/quotes/SupplierComparison";
+import { SupplierDetailsForm } from "@/components/quotes/SupplierDetailsForm";
 import { UploadBox } from "@/components/quotes/UploadBox";
 import { FreightCard } from "@/components/quotes/FreightCard";
 import { DeleteQuoteDialog } from "@/components/quotes/DeleteQuote";
@@ -386,9 +387,11 @@ export default function QuoteRequestPage({
     // where the freight, duty and charges behind its figures are typed.
     { value: "report", label: "Costing report" },
     { value: "landed", label: "Landed cost", count: lists.costLines.length || undefined },
+    // On every quote too: it holds who the supplier is, and every approver
+    // is deciding on an offer from somebody. A tender adds its bid summary.
+    { value: "summary", label: "Summary" },
     ...(isBid
       ? ([
-          { value: "summary", label: "Summary" },
           {
             value: "compliance",
             label: "Compliance matrix",
@@ -874,7 +877,7 @@ export default function QuoteRequestPage({
         <CostingReport quote={data} unsaved={unsaved} />
       )}
 
-      {tab === "summary" && (
+      {tab === "summary" && isBid && (
         <SummarySheet
           quote={data}
           bid={data.bid}
@@ -887,6 +890,7 @@ export default function QuoteRequestPage({
           onOpenCompliance={() => setTab("compliance")}
         />
       )}
+      {tab === "summary" && <SupplierDetailsForm quoteId={data.id} />}
 
       {tab === "compliance" && (
         <ComplianceSheet rows={rules} editable={editable} onChange={setRules} />
