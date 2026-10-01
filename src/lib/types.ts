@@ -5469,6 +5469,9 @@ export interface FollowupOut {
   created_at: string;
   /** The viewer is the person asked, and it still wants an answer. */
   may_answer: boolean;
+  /** The task's Remarks and Working notes on the Proposals list, read as the form opened. */
+  task_remarks?: string | null;
+  task_working_notes?: string | null;
 }
 
 export interface FollowupSettingsOut {

@@ -9,7 +9,7 @@ import { dateTime, relative } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
 import type { FollowupOut } from "@/lib/types";
 import { Badge, Meta, PageHead, Panel, PanelHead } from "@/components/ui/primitives";
-import { Button, Field, LinkButton, Textarea } from "@/components/ui/controls";
+import { Button, Field, LinkButton, Textarea, Toggle } from "@/components/ui/controls";
 import { Empty, ErrorState, InlineNotice, PanelSkeleton } from "@/components/ui/feedback";
 import { FollowupStatusBadge, uaeDateTime } from "@/components/followups/FollowupBits";
 
@@ -36,6 +36,11 @@ export default function FollowupPage({ params }: { params: Promise<{ id: string 
     { revalidateOnFocus: false },
   );
   const [reason, setReason] = useState("");
+  // Answer with the task's Remarks and Working notes — on by default when it
+  // has some, since that is usually where the person already wrote why.
+  const [useRemarks, setUseRemarks] = useState<boolean | null>(null);
+  const hasNotes = Boolean(data?.task_remarks || data?.task_working_notes);
+  const withRemarks = hasNotes && useRemarks !== false;
   const [note, setNote] = useState("");
   // The mail's "Mark as false positive" button lands here with
   // ?false-positive=1, and the form opens at that step rather than at the
@@ -46,7 +51,10 @@ export default function FollowupPage({ params }: { params: Promise<{ id: string 
   }, []);
 
   const send = useAction(async () => {
-    const next = await api.post<FollowupOut>(`/followups/${id}/reason`, { reason: reason.trim() });
+    const next = await api.post<FollowupOut>(`/followups/${id}/reason`, {
+      reason: reason.trim(),
+      use_remarks: withRemarks,
+    });
     await mutate(next, { revalidate: false });
   });
   const dismiss = useAction(async () => {
@@ -105,12 +113,35 @@ export default function FollowupPage({ params }: { params: Promise<{ id: string 
                       {send.error}
                     </InlineNotice>
                   )}
-                  <Field label="Reason" className="mt-4">
+                  {/* Always both boxes, blank when the column is: what the task
+                      says on the list now. Read-only — they are changed there. */}
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <TaskNote label="Remarks" text={data.task_remarks} />
+                    <TaskNote label="Working notes" text={data.task_working_notes} />
+                  </div>
+                  {hasNotes && (
+                    <div className="mt-4 rounded-[14px] bg-panel-2 px-4 py-3">
+                      <Toggle
+                        checked={withRemarks}
+                        onChange={setUseRemarks}
+                        label="Answer with the task's notes"
+                        hint="Your reason will be the Remarks and Working notes above, with anything you add below."
+                      />
+                    </div>
+                  )}
+                  <Field
+                    label={withRemarks ? "Anything else (optional)" : "Reason"}
+                    className="mt-4"
+                  >
                     <Textarea
                       value={reason}
                       onChange={(e) => setReason(e.target.value)}
-                      rows={5}
-                      placeholder="Waiting on the supplier's revised price; expected Thursday."
+                      rows={withRemarks ? 3 : 5}
+                      placeholder={
+                        withRemarks
+                          ? "Anything the notes don't say — e.g. extension asked for 2 days."
+                          : "Waiting on the supplier's revised price; expected Thursday."
+                      }
                     />
                   </Field>
                   <div className="mt-4 flex justify-end">
@@ -118,7 +149,7 @@ export default function FollowupPage({ params }: { params: Promise<{ id: string 
                       variant="accent"
                       icon={Send}
                       loading={send.pending}
-                      disabled={reason.trim().length < 3}
+                      disabled={!withRemarks && reason.trim().length < 3}
                       onClick={() => void send.run()}
                     >
                       Submit Reason
@@ -227,6 +258,21 @@ export default function FollowupPage({ params }: { params: Promise<{ id: string 
         </div>
       )}
     </div>
+  );
+}
+
+/** One of the task's notes columns, as the form shows it: a read-only box,
+ * blank when the column is. */
+function TaskNote({ label, text }: { label: string; text?: string | null }) {
+  return (
+    <Field label={`${label} (from the Proposals list)`}>
+      <Textarea
+        value={text ?? ""}
+        readOnly
+        rows={4}
+        className="cursor-default bg-panel-2 text-ink-2 focus:ring-0"
+      />
+    </Field>
   );
 }
 
