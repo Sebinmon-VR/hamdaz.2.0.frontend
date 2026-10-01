@@ -44,6 +44,11 @@ export interface QuoteFormDraft {
   /** One tax on the total before tax. Blank means none. */
   tax_name: string;
   tax_percentage: string;
+  /** Our own reference for the quote, and who is selling it. */
+  reference: string;
+  salesperson_name: string;
+  /** "Yes" when several suppliers quote the same requirement. */
+  multiple_supplier_quotes: string;
 }
 
 export function draftOf(quote: QuoteRequestOut): QuoteFormDraft {
@@ -69,6 +74,9 @@ export function draftOf(quote: QuoteRequestOut): QuoteFormDraft {
     adjustment: quote.adjustment ?? "0",
     tax_name: quote.tax_name ?? "",
     tax_percentage: quote.tax_percentage ?? "",
+    reference: quote.reference ?? "",
+    salesperson_name: quote.salesperson_name ?? "",
+    multiple_supplier_quotes: quote.multiple_supplier_quotes ? "Yes" : "No",
   };
 }
 
@@ -149,7 +157,14 @@ export function QuoteForm({
         <F {...field("customer_name", "Customer")} required />
         <F {...field("contact_person", "Contact person")} />
         <F {...field("reference_number", "Their reference")} />
+        <F {...field("reference", "Our reference")} />
+        <F {...field("salesperson_name", "Salesperson")} />
         <F {...field("cf_portal", "Portal")} hint="Where the enquiry came from." />
+        <F
+          {...field("multiple_supplier_quotes", "Several supplier quotes")}
+          options={["No", "Yes"]}
+          hint="Yes: a supplier has to be chosen from the comparison before sending."
+        />
       </Group>
 
       <Group embedded={embedded} title="Dates and terms">

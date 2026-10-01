@@ -893,9 +893,61 @@ export interface QuoteIn {
   tax?: string | null;
   quoted_total?: string | null;
   items?: ItemIn[];
+  /** What the supplier puts on top of their lines. See app/comparison/charges.py. */
+  charges?: SupplierChargeIn[];
   source?: QuoteSource;
   file_name?: string | null;
   extraction_note?: string | null;
+}
+
+/** A charge on top of a supplier's lines: an amount, a percent, or included in their price. */
+export interface SupplierChargeIn {
+  kind: string;
+  label?: string;
+  amount?: string | null;
+  percent?: string | null;
+  percent_of?: string;
+  included?: boolean;
+}
+
+/** A stored supplier quote line, as the offer editor opens it. */
+export interface SupplierQuoteLine {
+  id: string;
+  position: number;
+  description: string | null;
+  part_number: string | null;
+  brand: string | null;
+  unit: string | null;
+  quantity: string | null;
+  unit_price: string | null;
+  line_total: string | null;
+  lead_time: string | null;
+}
+
+/** A supplier quote as stored on a quote request — every field. */
+export interface SupplierQuoteRow {
+  id: string;
+  supplier_name: string;
+  quote_number: string | null;
+  quote_date: string | null;
+  currency: string;
+  fx_rate: string;
+  validity: string | null;
+  delivery_time: string | null;
+  payment_terms: string | null;
+  warranty: string | null;
+  incoterms: string | null;
+  contact: string | null;
+  notes: string | null;
+  discount: string | null;
+  freight: string | null;
+  tax: string | null;
+  quoted_total: string | null;
+  charges: { kind: string; label?: string; amount?: string | number | null; percent?: string | number | null; percent_of?: string; included?: boolean }[] | null;
+  source: string;
+  file_name: string | null;
+  extraction_note: string | null;
+  items: SupplierQuoteLine[];
 }
 
 export interface ComparisonQuoteOut extends Required<Omit<QuoteIn, "items" | "source">> {
@@ -1986,6 +2038,8 @@ export interface QuoteRequestOut {
    * screen the user has to come back from.
    */
   comparison: QuoteComparison | null;
+  /** Each supplier quote as stored, every field and line — what the offer editor opens on. */
+  supplier_quotes?: SupplierQuoteRow[];
   /** Finished rounds, oldest first. The current pass is not in here. */
   revisions: QuoteRevisionOut[];
 

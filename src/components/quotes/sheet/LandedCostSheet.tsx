@@ -370,12 +370,24 @@ export function LandedCostSheet({
                 </Td>
                 <Td wrap muted>
                   {own ? (
-                    <CellInput
-                      value={row!.notes}
-                      editable
-                      onChange={(v) => patch(row!.key, { notes: v })}
-                      placeholder=""
-                    />
+                    <div className="w-full space-y-1">
+                      <CellInput
+                        value={row!.notes}
+                        editable
+                        onChange={(v) => patch(row!.key, { notes: v })}
+                        placeholder=""
+                      />
+                      {/* Committed — a price the supplier or forwarder gave —
+                          rather than our estimate. Counts toward "committed". */}
+                      <label className="flex items-center gap-1.5 text-[11px] text-ink-4">
+                        <input
+                          type="checkbox"
+                          checked={row!.is_firm}
+                          onChange={(e) => patch(row!.key, { is_firm: e.target.checked })}
+                        />
+                        Firm price
+                      </label>
+                    </div>
                   ) : (
                     element.notes ?? ""
                   )}

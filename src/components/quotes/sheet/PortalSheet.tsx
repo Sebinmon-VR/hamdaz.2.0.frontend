@@ -113,12 +113,26 @@ export function PortalSheet({
                   />
                 </Td>
                 <Td wrap>
-                  <CellInput
-                    value={row.label}
-                    editable={editable}
-                    onChange={(v) => patch(row.key, { label: v })}
-                    placeholder="What the portal calls it"
-                  />
+                  <div className="w-full space-y-1">
+                    <CellInput
+                      value={row.label}
+                      editable={editable}
+                      onChange={(v) => patch(row.key, { label: v })}
+                      placeholder="What the portal calls it"
+                    />
+                    {editable ? (
+                      <label className="flex items-center gap-1.5 text-[11px] text-ink-4">
+                        <input
+                          type="checkbox"
+                          checked={row.is_mandatory}
+                          onChange={(e) => patch(row.key, { is_mandatory: e.target.checked })}
+                        />
+                        Mandatory
+                      </label>
+                    ) : (
+                      row.is_mandatory && <span className="text-[11px] text-ink-4">Mandatory</span>
+                    )}
+                  </div>
                 </Td>
                 <Td>
                   <CellInput

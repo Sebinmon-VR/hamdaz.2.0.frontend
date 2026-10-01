@@ -8,6 +8,7 @@ import {
   Check,
   ChevronDown,
   Info,
+  Pencil,
   Trash2,
   Trophy,
 } from "lucide-react";
@@ -46,6 +47,7 @@ export function SupplierComparison({
   canChoose,
   onChoose,
   onRemove,
+  onEdit,
   pending,
   error,
 }: {
@@ -65,6 +67,11 @@ export function SupplierComparison({
    * offered while the quote is editable.
    */
   onRemove?: (supplierQuoteId: string) => Promise<unknown>;
+  /**
+   * Opens one supplier's offer to correct it — the name, terms, charges and
+   * lines. Only offered while the quote is editable.
+   */
+  onEdit?: (supplierQuoteId: string) => void;
   pending: boolean;
   error: string | null;
 }) {
@@ -150,6 +157,7 @@ export function SupplierComparison({
               canChoose={canChoose}
               onChoose={() => setChoosing(supplier)}
               onRemove={canChoose && onRemove ? () => onRemove(supplier.quote_id) : undefined}
+              onEdit={canChoose && onEdit ? () => onEdit(supplier.quote_id) : undefined}
             />
           ))}
         </div>
@@ -201,6 +209,7 @@ function SupplierColumn({
   canChoose,
   onChoose,
   onRemove,
+  onEdit,
 }: {
   supplier: AnalysisSupplier;
   currency: string;
@@ -209,6 +218,7 @@ function SupplierColumn({
   canChoose: boolean;
   onChoose: () => void;
   onRemove?: () => Promise<unknown>;
+  onEdit?: () => void;
 }) {
   const gaps = supplier.missing_items?.length ?? 0;
   // Two clicks to remove: the second says what goes with it.
@@ -319,6 +329,16 @@ function SupplierColumn({
         </Button>
       )}
 
+      {onEdit && (
+        <button
+          type="button"
+          onClick={onEdit}
+          className="mt-1.5 inline-flex items-center gap-1.5 self-start text-[11.5px] leading-[18px] text-ink-3 transition hover:text-ink"
+        >
+          <Pencil className="size-3" strokeWidth={1.8} />
+          Edit this offer
+        </button>
+      )}
       {onRemove && !confirming && (
         <button
           type="button"

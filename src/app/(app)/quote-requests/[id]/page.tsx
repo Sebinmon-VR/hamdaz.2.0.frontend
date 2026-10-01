@@ -4,7 +4,7 @@ import { type ReactNode, use, useState } from "react";
 import clsx from "clsx";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import useSWR from "swr";
+import useSWR, { mutate as globalMutate } from "swr";
 import {
   Check,
   ClipboardList,
@@ -26,6 +26,7 @@ import {
   toDraft,
   toLineIn,
   type QuoteLineDraft,
+  type QuoteIn,
   type QuoteLineOut,
   type QuoteRequestOut,
   type ReviewAction,
@@ -44,6 +45,7 @@ import { QuoteForm, draftOf, type QuoteFormDraft } from "@/components/quotes/Quo
 import { Calculations } from "@/components/quotes/Calculations";
 import { LineEditor } from "@/components/quotes/LineEditor";
 import { SupplierComparison } from "@/components/quotes/SupplierComparison";
+import { SupplierQuoteEditor } from "@/components/quotes/SupplierQuoteEditor";
 import { SupplierDetailsForm } from "@/components/quotes/SupplierDetailsForm";
 import { UploadBox } from "@/components/quotes/UploadBox";
 import { FreightCard } from "@/components/quotes/FreightCard";
@@ -240,6 +242,42 @@ export default function QuoteRequestPage({
   const removeSupplier = useAction(async (supplierQuoteId: string) =>
     api.del<QuoteRequestOut>(`/quote-requests/${id}/supplier-quotes/${supplierQuoteId}`),
   );
+  // One supplier's offer open for correcting, by its id.
+  const [editingOffer, setEditingOffer] = useState<string | null>(null);
+  /**
+   * Saves a correction to one supplier's offer — from the dialog or from the
+   * Summary sheet's cells. Only the offer's parts of the quote are taken from
+   * the answer, so whatever else is being edited and not yet saved stays: the
+   * drafts rebuild when the quote's own stamp moves, and this does not move it.
+   */
+  async function saveOffer(supplierId: string, body: QuoteIn) {
+    const before = data?.supplier_name ?? null;
+    const next = await api.put<QuoteRequestOut>(
+      `/quote-requests/${id}/supplier-quotes/${supplierId}`,
+      body,
+    );
+    await mutate(
+      (was) =>
+        was && {
+          ...was,
+          comparison: next.comparison,
+          supplier_quotes: next.supplier_quotes,
+          bid: next.bid,
+          supplier_name: next.supplier_name,
+        },
+      { revalidate: false },
+    );
+    // The supplier details card names the offer too.
+    void globalMutate(`/quote-requests/${id}/supplier-details`);
+    // A corrected spelling the report's supplier name followed, followed in
+    // the draft too — unless somebody has typed their own there.
+    if (next.supplier_name !== before) {
+      setBid((b) =>
+        b && b.supplier_name === (before ?? "") ? { ...b, supplier_name: next.supplier_name ?? "" } : b,
+      );
+    }
+    return next;
+  }
   if (error) return <ErrorState error={error} onRetry={() => mutate()} />;
   if (isLoading && !data) return <PanelSkeleton lines={10} />;
   if (!data || !form || !bid) return null;
@@ -328,12 +366,12 @@ export default function QuoteRequestPage({
       customer_name: form!.customer_name.trim(),
       customer_id: data!.customer_id,
       contact_person: nullable(form!.contact_person),
-      reference: data!.reference,
+      reference: nullable(form!.reference),
       reference_number: nullable(form!.reference_number),
       quote_date: nullable(form!.quote_date),
       expiry_date: nullable(form!.expiry_date),
       currency: data!.currency,
-      salesperson_name: data!.salesperson_name,
+      salesperson_name: nullable(form!.salesperson_name),
       place_of_supply: nullable(form!.place_of_supply),
       payment_terms: nullable(form!.payment_terms),
       delivery_terms: nullable(form!.delivery_terms),
@@ -347,7 +385,7 @@ export default function QuoteRequestPage({
       adjustment: form!.adjustment.trim() || "0",
       tax_name: nullable(form!.tax_name),
       tax_percentage: form!.tax_percentage.trim() || null,
-      multiple_supplier_quotes: data!.multiple_supplier_quotes,
+      multiple_supplier_quotes: form!.multiple_supplier_quotes === "Yes",
       items: lines.filter((line) => line.name.trim()).map(toLineIn),
       // The bid pack. Same rule as the lines: the lists are replaced whole, so
       // a row somebody started and abandoned is dropped rather than saved as a
@@ -810,6 +848,7 @@ export default function QuoteRequestPage({
                       if (next) await mutate(next, { revalidate: false });
                       return next;
                     }}
+                    onEdit={(data.supplier_quotes ?? []).length ? setEditingOffer : undefined}
                   />
             </Section>
           )}
@@ -874,7 +913,20 @@ export default function QuoteRequestPage({
       )}
 
       {tab === "report" && (
-        <CostingReport quote={data} unsaved={unsaved} />
+        <>
+          {/* What the report says that is not a figure — the supplier as
+              named, the route, the margins, the recommendation, the notes —
+              edited beside the report it changes. Same draft as the quote
+              tab's copy; Save, and the report below follows. */}
+          {editable && (
+            <ReportParticulars
+              draft={bid}
+              editable={editable}
+              onChange={(patch) => setBid({ ...bid, ...patch })}
+            />
+          )}
+          <CostingReport quote={data} unsaved={unsaved} />
+        </>
       )}
 
       {tab === "summary" && isBid && (
@@ -888,9 +940,25 @@ export default function QuoteRequestPage({
           currencyEditable={data.may_set_currency}
           onCurrency={changeCurrency}
           onOpenCompliance={() => setTab("compliance")}
+          onEditOffer={
+            editable &&
+            (data.supplier_quotes ?? []).some((q) => q.id === data.selected_supplier_quote_id)
+              ? () => setEditingOffer(data.selected_supplier_quote_id)
+              : undefined
+          }
+          offer={(data.supplier_quotes ?? []).find((q) => q.id === data.selected_supplier_quote_id) ?? null}
+          onSaveOffer={(body) => saveOffer(data.selected_supplier_quote_id!, body)}
         />
       )}
       {tab === "summary" && <SupplierDetailsForm quoteId={data.id} />}
+
+      {/* One supplier's offer, opened from the comparison or the Summary sheet. */}
+      <SupplierQuoteEditor
+        row={(data.supplier_quotes ?? []).find((q) => q.id === editingOffer) ?? null}
+        quoteCurrency={currency}
+        onClose={() => setEditingOffer(null)}
+        onSave={saveOffer}
+      />
 
       {tab === "compliance" && (
         <ComplianceSheet rows={rules} editable={editable} onChange={setRules} />
@@ -927,6 +995,11 @@ export default function QuoteRequestPage({
           draft={bid}
           editable={editable}
           onChange={(patch) => setBid({ ...bid, ...patch })}
+          lines={lines}
+          onLinesChange={(next) => {
+            setLines(next);
+            setDirtyLines(dirtyAgainst(next, data.items));
+          }}
         />
       )}
 

@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { Pencil } from "lucide-react";
 import { CURRENCIES, amount, date, decimal } from "@/lib/format";
-import type { BidPackOut, QuoteRequestOut } from "@/lib/types";
+import type { BidPackOut, QuoteIn, QuoteRequestOut, SupplierQuoteRow } from "@/lib/types";
+import { quoteInOf } from "@/components/quotes/SupplierQuoteEditor";
 import { SEVERITY } from "@/components/quotes/bid";
 import type { BidDraft } from "@/components/quotes/bid";
 import {
@@ -50,6 +53,9 @@ export function SummarySheet({
   currencyEditable,
   onCurrency,
   onOpenCompliance,
+  onEditOffer,
+  offer,
+  onSaveOffer,
 }: {
   quote: QuoteRequestOut;
   bid: BidPackOut | null | undefined;
@@ -64,7 +70,14 @@ export function SummarySheet({
   currencyEditable: boolean;
   onCurrency: (value: string) => void;
   onOpenCompliance: () => void;
+  /** Opens the chosen supplier's offer to correct it. The three offer rows
+      are read from that offer, so that is where they are changed. */
+  onEditOffer?: () => void;
+  /** The chosen supplier's offer as stored, and how to save a change to it. */
+  offer?: SupplierQuoteRow | null;
+  onSaveOffer?: (body: QuoteIn) => Promise<unknown>;
 }) {
+  const offerEditable = editable && Boolean(offer && onSaveOffer);
   const set =
     <K extends keyof BidDraft>(key: K) =>
     (value: string) =>
@@ -106,6 +119,14 @@ export function SummarySheet({
         </Fact>
         <Fact label="Line item">
           <CellInput {...cell("line_item_ref")} placeholder="3.13.5 — CLOTH" />
+        </Fact>
+        <Fact label="Our bid reference">
+          <CellInput {...cell("bid_reference")} />
+        </Fact>
+        <Fact label="Bid validity (days)">
+          <div className="w-28">
+            <CellInput {...cell("bid_validity_days")} placeholder="90" />
+          </div>
         </Fact>
         <Fact
           label="Quantity"
@@ -186,11 +207,60 @@ export function SummarySheet({
             />
           </div>
         </Fact>
-        <Fact label="Offer in hand" note="The supplier this quote is priced from.">
-          {supplier ? (
-            <span className="truncate">
-              {supplier.name}
-              {supplier.terms ? ` — ${supplier.terms}` : ""}
+        <Fact
+          label="Offer in hand"
+          note={
+            offerEditable
+              ? "The supplier this quote is priced from. Saved to their offer as you leave each box."
+              : "The supplier this quote is priced from."
+          }
+        >
+          {supplier && offerEditable && offer ? (
+            <span className="flex w-full min-w-0 items-center gap-2">
+              <span className="min-w-0 flex-1">
+                <OfferCell
+                  value={offer.supplier_name}
+                  placeholder="Supplier name"
+                  onSave={(v) => onSaveOffer!(quoteInOf(offer, { supplier_name: v }))}
+                  required
+                />
+              </span>
+              <span className="min-w-0 flex-1">
+                <OfferCell
+                  value={offer.payment_terms ?? ""}
+                  placeholder="Payment terms"
+                  onSave={(v) => onSaveOffer!(quoteInOf(offer, { payment_terms: v || null }))}
+                />
+              </span>
+              {onEditOffer && (
+                <button
+                  type="button"
+                  onClick={onEditOffer}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-[8px] px-2 py-1 text-[11.5px] font-medium text-ink-3 transition hover:bg-panel-2 hover:text-ink"
+                  title="Every other field: lines, charges, currency, delivery, warranty"
+                >
+                  <Pencil className="size-3" strokeWidth={1.8} />
+                  Lines &amp; charges
+                </button>
+              )}
+            </span>
+          ) : supplier ? (
+            <span className="flex w-full min-w-0 items-center gap-2">
+              <span className="min-w-0 flex-1 truncate">
+                {supplier.name}
+                {supplier.terms ? ` — ${supplier.terms}` : ""}
+              </span>
+              {onEditOffer && (
+                <button
+                  type="button"
+                  onClick={onEditOffer}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-[8px] px-2 py-1 text-[11.5px] font-medium text-ink-3 transition hover:bg-panel-2 hover:text-ink"
+                  title="Correct the supplier's name, terms, validity, charges and lines"
+                >
+                  <Pencil className="size-3" strokeWidth={1.8} />
+                  Edit offer
+                </button>
+              )}
             </span>
           ) : (
             <span className="text-ink-4">
@@ -198,8 +268,34 @@ export function SummarySheet({
             </span>
           )}
         </Fact>
-        <Fact label="Offer basis">
-          {supplier ? (
+        <Fact
+          label="Offer basis"
+          note={
+            offerEditable
+              ? "Their stated total, in their currency, and their Incoterm. Blank total: the sum of their lines."
+              : undefined
+          }
+        >
+          {supplier && offerEditable && offer ? (
+            <span className="flex w-full min-w-0 items-center gap-2">
+              <span className="shrink-0 text-[12px] text-ink-4">{offer.currency}</span>
+              <span className="w-40 shrink-0">
+                <OfferCell
+                  value={offer.quoted_total ?? ""}
+                  placeholder={supplier.basis ?? "Their total"}
+                  numeric
+                  onSave={(v) => onSaveOffer!(quoteInOf(offer, { quoted_total: v || null }))}
+                />
+              </span>
+              <span className="w-32 shrink-0">
+                <OfferCell
+                  value={offer.incoterms ?? ""}
+                  placeholder="Incoterm"
+                  onSave={(v) => onSaveOffer!(quoteInOf(offer, { incoterms: v || null }))}
+                />
+              </span>
+            </span>
+          ) : supplier ? (
             <span className="truncate">
               {supplier.basis ?? "—"}
               {supplier.incoterms ? ` ${supplier.incoterms}` : ""}
@@ -216,9 +312,17 @@ export function SummarySheet({
               : undefined
           }
         >
-          <span className={supplier?.validity ? "" : "text-ink-4"}>
-            {supplier?.validity ?? "—"}
-          </span>
+          {supplier && offerEditable && offer ? (
+            <OfferCell
+              value={offer.validity ?? ""}
+              placeholder="30 days from the date of issue"
+              onSave={(v) => onSaveOffer!(quoteInOf(offer, { validity: v || null }))}
+            />
+          ) : (
+            <span className={supplier?.validity ? "" : "text-ink-4"}>
+              {supplier?.validity ?? "—"}
+            </span>
+          )}
         </Fact>
       </Facts>
 
@@ -423,6 +527,70 @@ function supplierOf(quote: QuoteRequestOut): {
     incoterms: found.incoterms,
     terms: found.payment_terms,
   };
+}
+
+/**
+ * A cell of the chosen supplier's offer. It saves to the offer itself when the
+ * box is left with a changed value — the offer is its own record, not part of
+ * the quote's draft — and says so if the save is refused.
+ */
+function OfferCell({
+  value,
+  placeholder,
+  numeric,
+  required,
+  onSave,
+}: {
+  value: string;
+  placeholder?: string;
+  numeric?: boolean;
+  required?: boolean;
+  onSave: (value: string) => Promise<unknown>;
+}) {
+  const [text, setText] = useState(value);
+  const [state, setState] = useState<"idle" | "saving" | "saved" | string>("idle");
+  useEffect(() => setText(value), [value]);
+  async function commit() {
+    const next = text.trim();
+    if (next === value.trim()) return;
+    if (required && !next) {
+      setText(value);
+      return;
+    }
+    if (numeric && next && !/^\d*\.?\d*$/.test(next)) {
+      setState("Numbers only.");
+      return;
+    }
+    setState("saving");
+    try {
+      await onSave(next);
+      setState("saved");
+    } catch (err) {
+      setState(err instanceof Error ? err.message : "Not saved.");
+    }
+  }
+  const failed = state !== "idle" && state !== "saving" && state !== "saved";
+  return (
+    <span className="block w-full min-w-0">
+      <input
+        value={text}
+        placeholder={placeholder}
+        inputMode={numeric ? "decimal" : undefined}
+        onChange={(e) => {
+          setText(e.target.value);
+          if (state !== "saving") setState("idle");
+        }}
+        onBlur={() => void commit()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+        className={`h-[30px] w-full min-w-0 rounded-[8px] bg-warn-soft/50 px-2 text-[12.5px] outline-none focus:ring-2 focus:ring-accent/40 ${numeric ? "tnum text-right" : ""} ${failed ? "ring-2 ring-danger/50" : ""}`}
+      />
+      {state === "saving" && <span className="text-[10.5px] text-ink-4">Saving…</span>}
+      {state === "saved" && <span className="text-[10.5px] text-positive">Saved to the offer</span>}
+      {failed && <span className="text-[10.5px] text-danger">{state}</span>}
+    </span>
+  );
 }
 
 function unitOf(quote: QuoteRequestOut): string {

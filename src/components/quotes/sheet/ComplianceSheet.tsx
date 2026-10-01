@@ -114,13 +114,29 @@ export function ComplianceSheet({
                       placeholder="What the RFP asks for"
                     />
                   </Td>
-                  <Td>
-                    <CellInput
-                      value={row.source_clause}
-                      editable={editable}
-                      onChange={(v) => patch(row.key, { source_clause: v })}
-                      placeholder="Cl. 3.6"
-                    />
+                  <Td wrap>
+                    <div className="w-full space-y-1">
+                      <CellInput
+                        value={row.source_clause}
+                        editable={editable}
+                        onChange={(v) => patch(row.key, { source_clause: v })}
+                        placeholder="Cl. 3.6"
+                      />
+                      {/* Which band it sits in; changing it moves the row there. */}
+                      {editable && (
+                        <CellSelect
+                          value={row.area}
+                          editable
+                          onChange={(v) => patch(row.key, { area: v as ComplianceArea })}
+                          options={AREA_ORDER.map((a) => ({
+                            value: a,
+                            label: AREA_BANDS[a].split(" — ")[0] === "Commercial"
+                              ? AREA_BANDS[a].split(" — ")[1]
+                              : AREA_BANDS[a].split(" — ")[0],
+                          }))}
+                        />
+                      )}
+                    </div>
                   </Td>
                   <Td wrap>
                     <CellText

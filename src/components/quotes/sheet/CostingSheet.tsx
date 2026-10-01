@@ -1,7 +1,7 @@
 "use client";
 
-import { amount, decimal } from "@/lib/format";
-import type { BidPackOut, QuoteRequestOut } from "@/lib/types";
+import { amount, decimal, divideExact, multiplyExact, roundExact, subExact } from "@/lib/format";
+import type { BidPackOut, QuoteLineDraft, QuoteRequestOut } from "@/lib/types";
 import type { BidDraft } from "@/components/quotes/bid";
 import {
   Band,
@@ -49,13 +49,22 @@ export function CostingSheet({
   draft,
   editable,
   onChange,
+  lines,
+  onLinesChange,
 }: {
   quote: QuoteRequestOut;
   bid: BidPackOut;
   draft: BidDraft;
   editable: boolean;
   onChange: (patch: Partial<BidDraft>) => void;
+  /** The quote's lines as being edited — the same drafts the quote tab edits,
+      so a change here and a change there are one change, saved together. */
+  lines?: QuoteLineDraft[];
+  onLinesChange?: (next: QuoteLineDraft[]) => void;
 }) {
+  const editLines = editable && lines !== undefined && onLinesChange !== undefined;
+  const patchLine = (key: string, change: Partial<QuoteLineDraft>) =>
+    onLinesChange?.((lines ?? []).map((l) => (l.key === key ? { ...l, ...change } : l)));
   const currency = quote.currency;
   const { landed } = bid;
 
@@ -88,7 +97,33 @@ export function CostingSheet({
           <Th align="right">Total sell</Th>
         </GridHead>
 
-        {quote.items.length === 0 ? (
+        {editLines && (lines ?? []).length > 0 ? (
+          (lines ?? []).map((line, index) => (
+            <GridRow key={line.key}>
+              <Td muted>
+                <Num muted>{draft.line_item_ref || index + 1}</Num>
+              </Td>
+              <Td wrap>
+                <CellInput value={line.name} editable onChange={(v) => patchLine(line.key, { name: v })} />
+              </Td>
+              <Td>
+                <CellInput value={line.unit ?? ""} editable onChange={(v) => patchLine(line.key, { unit: v || null })} />
+              </Td>
+              <Td align="right">
+                <CellInput value={line.quantity} editable numeric align="right" onChange={(v) => patchLine(line.key, { quantity: v })} />
+              </Td>
+              <Td align="right">
+                <CellInput value={line.cost_rate ?? ""} editable numeric align="right" onChange={(v) => patchLine(line.key, { cost_rate: v || null })} placeholder="—" />
+              </Td>
+              <Td align="right">
+                <CellInput value={line.rate} editable numeric align="right" onChange={(v) => patchLine(line.key, { rate: v })} />
+              </Td>
+              <Td align="right">
+                <Num strong>{lineTotal(line)}</Num>
+              </Td>
+            </GridRow>
+          ))
+        ) : quote.items.length === 0 ? (
           <GridRow>
             <Td />
             <Td muted wrap>
@@ -309,4 +344,15 @@ export function CostingSheet({
       {editable && <YellowNote />}
     </Sheet>
   );
+}
+
+/** A line being edited: quantity × rate, less its discount, exactly. */
+function lineTotal(line: QuoteLineDraft): string {
+  const gross = multiplyExact(line.quantity.trim() || "0", line.rate.trim() || "0");
+  if (gross === null) return "—";
+  const off = line.discount.trim() && line.discount.trim() !== "0"
+    ? divideExact(multiplyExact(gross, line.discount.trim()) ?? "0", "100", 6)
+    : "0";
+  const net = off === null ? null : subExact(gross, off);
+  return net === null ? "—" : decimal(roundExact(net, 2));
 }

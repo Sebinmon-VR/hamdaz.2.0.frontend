@@ -510,8 +510,10 @@ function DocumentRow({
           <p className="truncate text-[11.5px] text-ink-4" title={meta}>
             {meta}
           </p>
-          {doc.notes && (
-            <p className="mt-0.5 text-[11.5px] leading-snug text-ink-3">{doc.notes}</p>
+          {doc.id && quote.may_add_documents ? (
+            <DocumentEdit doc={doc} quoteId={quote.id} onChanged={onChanged} />
+          ) : (
+            doc.notes && <p className="mt-0.5 text-[11.5px] leading-snug text-ink-3">{doc.notes}</p>
           )}
           {doc.email && (
             <div className="mt-1 rounded-[10px] bg-panel-2 px-2.5 py-2 text-[11.5px] leading-snug">
@@ -533,6 +535,72 @@ function DocumentRow({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── a filed document's notes and kind, put right ────────────────────── */
+
+/**
+ * The note added late, or the file filed under the wrong kind. The costing
+ * report and a supplier quotation keep their kind — the server refuses to
+ * move them, since one is the system's and the other carries prices.
+ */
+function DocumentEdit({
+  doc,
+  quoteId,
+  onChanged,
+}: {
+  doc: QuoteDocumentOut;
+  quoteId: string;
+  onChanged: (next: QuoteRequestOut) => void;
+}) {
+  const [notes, setNotes] = useState(doc.notes ?? "");
+  const [kind, setKind] = useState<DocumentKind>(doc.kind as DocumentKind);
+  const kindFixed = doc.kind === "costing_report" || doc.kind === "supplier_quote";
+  const changed = notes.trim() !== (doc.notes ?? "").trim() || kind !== doc.kind;
+  const save = useAction(async () => {
+    const next = await api.patch<QuoteRequestOut>(`/quote-requests/${quoteId}/documents/${doc.id}`, {
+      notes,
+      ...(kindFixed ? {} : { kind }),
+    });
+    onChanged(next);
+  });
+  return (
+    <div className="mt-1.5 space-y-1.5">
+      {save.error && (
+        <InlineNotice tone="danger" className="rounded-[10px]! px-3! py-2! text-[11.5px]!">
+          {save.error}
+        </InlineNotice>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {!kindFixed && (
+          <Select
+            value={kind}
+            onChange={(e) => setKind(e.target.value as DocumentKind)}
+            className="h-[30px]! w-auto! rounded-[10px]! px-2.5! text-[12px]!"
+            aria-label="Document kind"
+          >
+            {UPLOAD_KINDS.map((k) => (
+              <option key={k.value} value={k.value}>
+                {k.label}
+              </option>
+            ))}
+          </Select>
+        )}
+        <Input
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Notes"
+          className="h-[30px]! min-w-[180px] flex-1 rounded-[10px]! px-2.5! text-[12px]!"
+          aria-label="Document notes"
+        />
+        {changed && (
+          <Button size="sm" variant="accent" loading={save.pending} onClick={() => void save.run()} className={COMPACT_BUTTON}>
+            Save
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
