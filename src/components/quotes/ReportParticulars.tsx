@@ -9,9 +9,10 @@ import type { BidDraft } from "@/components/quotes/bid";
 
 /**
  * What the selling & costing report needs told that the quote does not
- * otherwise hold: who the goods come from and how they travel, who finally
- * uses them, where the walk-away line is, and what to say if the customer
- * pushes back. Saved with the quote; the report and its PDF read them.
+ * otherwise hold: how the goods travel, who finally uses them, where the
+ * walk-away line is, and what to say if the customer pushes back. Saved with
+ * the quote; the report and its PDF read them. The supplier is not asked
+ * here — the report names the chosen offer, with its supplier details.
  */
 
 const HINT =
@@ -46,24 +47,9 @@ export function ReportParticulars({
         embedded ? "mt-2" : "mt-3",
       )}
     >
-      <P className="grow basis-[170px]" label="Supplier" hint="As the report names them. Filled from the chosen offer.">
-        <Input
-          value={draft.supplier_name}
-          disabled={!editable}
-          onChange={(e) => set("supplier_name")(e.target.value)}
-          placeholder="router-switch.com"
-          className={DENSE}
-        />
-      </P>
-      <P className="grow basis-[170px]" label="Bought as" hint="Printed beside the supplier's name.">
-        <Input
-          value={draft.supplier_basis}
-          disabled={!editable}
-          onChange={(e) => set("supplier_basis")(e.target.value)}
-          placeholder="online purchase"
-          className={DENSE}
-        />
-      </P>
+      {/* No supplier name or "bought as" here: the report takes the name
+          from the chosen offer and the kind of supplier from its details'
+          Supplier type, each corrected in that one place. */}
       <P className="grow basis-[170px]" label="Route" hint="How the goods travel.">
         <Input
           value={draft.supplier_route}

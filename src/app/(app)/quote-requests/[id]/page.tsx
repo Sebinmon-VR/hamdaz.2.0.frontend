@@ -913,20 +913,7 @@ export default function QuoteRequestPage({
       )}
 
       {tab === "report" && (
-        <>
-          {/* What the report says that is not a figure — the supplier as
-              named, the route, the margins, the recommendation, the notes —
-              edited beside the report it changes. Same draft as the quote
-              tab's copy; Save, and the report below follows. */}
-          {editable && (
-            <ReportParticulars
-              draft={bid}
-              editable={editable}
-              onChange={(patch) => setBid({ ...bid, ...patch })}
-            />
-          )}
-          <CostingReport quote={data} unsaved={unsaved} />
-        </>
+        <CostingReport quote={data} unsaved={unsaved} />
       )}
 
       {tab === "summary" && isBid && (
