@@ -14,6 +14,7 @@
 import {
   Activity,
   AlarmClock,
+  CalendarClock,
   Bell,
   Briefcase,
   Building2,
@@ -245,6 +246,14 @@ export function buildNav(session: Session): Nav {
       icon: AlarmClock,
       match: "/followups",
     },
+    // The status reminders sent to the viewer: tasks due soon, and the status
+    // they gave. Everybody's, like the overdue list beside it.
+    {
+      label: "Status reminders",
+      href: "/reminders",
+      icon: CalendarClock,
+      match: "/reminders",
+    },
   ];
   if (can("directory")) {
     people.push({ label: "Directory", href: "/directory", icon: Building2, match: "/directory" });
@@ -399,6 +408,30 @@ export function buildNav(session: Session): Nav {
       href: "/admin/followups",
       icon: AlarmClock,
       match: "/admin/followups",
+      badge: "admin",
+    });
+    // The status reminder's settings, and its switch for writing to the list.
+    admin.push({
+      label: "Reminder settings",
+      href: "/admin/reminders",
+      icon: CalendarClock,
+      match: "/admin/reminders",
+      badge: "admin",
+    });
+    // New tasks whose BCD is the assignment time: held, and asked about.
+    admin.push({
+      label: "BCD checks",
+      href: "/admin/bcd",
+      icon: CalendarClock,
+      match: "/admin/bcd",
+      badge: "admin",
+    });
+    // Each open task's BCD in its holder's Outlook calendar.
+    admin.push({
+      label: "Task calendar",
+      href: "/admin/calendar",
+      icon: CalendarClock,
+      match: "/admin/calendar",
       badge: "admin",
     });
     // The Ariba reader's switch: stop it here if anything goes wrong.

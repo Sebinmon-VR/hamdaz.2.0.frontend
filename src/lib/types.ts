@@ -5592,6 +5592,155 @@ export interface FollowupSweepOut {
   errors: string[];
 }
 
+/* ── status reminders ─────────────────────────────────────────────────── */
+
+export type ReminderStatus = "pending" | "answered" | "closed";
+
+/** The four Proposals columns a reminder shows and may write, by SharePoint name. */
+export type ReminderColumn = "Status" | "SubmissionStatus" | "Remarks" | "WorkingNotes";
+
+export interface ReminderOut {
+  id: string;
+  task_id: string;
+  task_title: string;
+  task_url: string | null;
+  end_user: string | null;
+  due_at: string;
+  status_at_ask: string | null;
+  submission_at_ask: string | null;
+  remarks_at_ask: string | null;
+  working_notes_at_ask: string | null;
+  team_id: string | null;
+  assignee_id: string;
+  assignee_email: string;
+  assignee_name: string | null;
+  asked_at: string | null;
+  ask_error: string | null;
+  status: ReminderStatus;
+  answered_at: string | null;
+  /** What the answer changed, by SharePoint column name. Empty: confirmed as it was. */
+  changes: Partial<Record<ReminderColumn, string>>;
+  written_at: string | null;
+  write_error: string | null;
+  closed_note: string | null;
+  created_at: string;
+  /** The viewer is the person reminded, and it still wants an answer. */
+  may_answer: boolean;
+}
+
+/** The task's four columns as the list has them now. */
+export interface ReminderLiveTask {
+  status: string;
+  submission_status: string;
+  remarks: string;
+  working_notes: string;
+  status_choices: string[];
+  submission_choices: string[];
+  writes_to_sharepoint: boolean;
+}
+
+export interface ReminderFormOut {
+  reminder: ReminderOut;
+  task: ReminderLiveTask | null;
+  task_error: string | null;
+}
+
+export interface ReminderFields {
+  status?: string;
+  submission_status?: string;
+  remarks?: string;
+  working_notes?: string;
+}
+
+export interface ReminderSettingsOut {
+  enabled: boolean;
+  ask_time: string;
+  days_before: number;
+  write_sharepoint: boolean;
+  only_emails: string[];
+  only_title_contains: string;
+  last_run_on: string | null;
+  last_run_at: string | null;
+  last_error: string | null;
+  team_name: string | null;
+  timezone: string | null;
+  test_mail_to: string | null;
+}
+
+export interface ReminderRunOut {
+  ran: boolean;
+  people: number;
+  tasks_read: number;
+  asked: number;
+  closed: number;
+  errors: string[];
+}
+
+/* ── BCD checks ───────────────────────────────────────────────────────── */
+
+export type BcdCheckStatus = "pending" | "corrected" | "confirmed" | "closed";
+
+/** A task whose BCD was the assignment-time placeholder, and how it ended. */
+export interface BcdCheckOut {
+  id: string;
+  task_id: string;
+  task_title: string;
+  task_url: string | null;
+  task_created_at: string | null;
+  placeholder_bcd: string | null;
+  team_id: string | null;
+  assignee_id: string;
+  assignee_email: string;
+  assignee_name: string | null;
+  status: BcdCheckStatus;
+  asked_at: string | null;
+  ask_error: string | null;
+  escalated_at: string | null;
+  escalate_error: string | null;
+  resolved_at: string | null;
+  resolved_by_name: string | null;
+  resolved_note: string | null;
+  created_at: string;
+  /** The task's SharePoint edit form, where the BCD is corrected. */
+  edit_url: string | null;
+  may_confirm: boolean;
+}
+
+export interface BcdFormOut {
+  check: BcdCheckOut;
+  current_bcd: string | null;
+  still_placeholder: boolean | null;
+  task_error: string | null;
+}
+
+export interface BcdSettingsOut {
+  enabled: boolean;
+  work_start: string;
+  work_end: string;
+  timezone: string;
+  /** Monday = 0 … Sunday = 6. */
+  work_days: number[];
+  escalate_after_minutes: number;
+  watch_from: string | null;
+  only_emails: string[];
+  only_title_contains: string;
+  last_run_at: string | null;
+  last_error: string | null;
+  team_name: string | null;
+  team_leads: string[];
+  escalate_to: string[];
+}
+
+export interface BcdRunOut {
+  ran: boolean;
+  tasks_read: number;
+  found: number;
+  asked: number;
+  escalated: number;
+  resolved: number;
+  errors: string[];
+}
+
 export interface DueTodayTaskOut {
   task_id: string;
   title: string;
