@@ -510,6 +510,157 @@ export interface MyTasksOut {
   tasks: TaskOut[];
 }
 
+// ── enquiry analysis ─────────────────────────────────────────────────
+
+/** recent: met within the recent window; history: met before; new: never. */
+export type EnquiryLineStatus = "recent" | "history" | "new";
+export type EnquiryRunStatus = "idle" | "running" | "done" | "failed";
+
+export interface EnquiryLogEntry {
+  at: string;
+  level: "step" | "info" | "ok" | "warn" | "error";
+  message: string;
+}
+
+/** Where an item was met before. Amounts are decimal strings. */
+export interface EnquiryHistoryEntry {
+  source:
+    | "supplier_quote"
+    | "quote_request"
+    | "zoho_item"
+    | "zoho_po"
+    | "zoho_bill"
+    | "zoho_estimate";
+  ref: string | null;
+  date: string | null;
+  counterparty: string | null;
+  supplier: string | null;
+  description: string | null;
+  part_number: string | null;
+  rate: string | null;
+  cost_rate: string | null;
+  currency: string | null;
+  quantity: string | null;
+  score: number | null;
+}
+
+export interface EnquirySupplier {
+  name: string;
+  source: "this_enquiry" | "supplier_quote" | "quote_request" | "zoho_po" | "zoho_bill" | "web";
+  role: string | null;
+  website: string | null;
+  email: string | null;
+  phone: string | null;
+  country: string | null;
+  evidence: string | null;
+  last_rate: string | null;
+  currency: string | null;
+  last_date: string | null;
+  /** Null until the supplier library records partnerships. */
+  partner: boolean | null;
+}
+
+export interface EnquiryWeb {
+  manufacturer: string | null;
+  manufacturer_website: string | null;
+  product_url: string | null;
+  price_low: string | null;
+  price_high: string | null;
+  currency: string | null;
+  price_source: string | null;
+  notes: string | null;
+  confidence: number | null;
+  looked_up_at: string | null;
+}
+
+export interface EnquiryLineOut {
+  id: string;
+  position: number;
+  description: string;
+  part_number: string | null;
+  brand: string | null;
+  quantity: string | null;
+  unit: string | null;
+  specification: string | null;
+  source_document: string | null;
+  status: EnquiryLineStatus;
+  history: EnquiryHistoryEntry[] | null;
+  suppliers: EnquirySupplier[] | null;
+  web: EnquiryWeb | null;
+}
+
+export interface EnquiryDocumentOut {
+  id: string;
+  source: "attachment" | "folder" | "upload";
+  file_name: string;
+  path: string | null;
+  size: number | null;
+  web_url: string | null;
+  kind: "requirement" | "supplier_quote" | "other" | null;
+  status: "pending" | "read" | "skipped" | "failed";
+  note: string | null;
+  supplier_quote_id: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface EnquiryAnalysisOut {
+  id: string;
+  task_id: string;
+  task_title: string;
+  end_user: string | null;
+  bid_closing_date: string | null;
+  status: EnquiryRunStatus;
+  stage: string | null;
+  error: string | null;
+  summary: string | null;
+  customer: string | null;
+  deadline: string | null;
+  conditions: string[] | null;
+  missing: string[] | null;
+  run_notes: string[] | null;
+  /** The last run, step by step, oldest first; written as the run goes. */
+  run_log: EnquiryLogEntry[] | null;
+  web_search: boolean;
+  model: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: string;
+  started_at: string | null;
+  finished_at: string | null;
+  drive_folder: string | null;
+  drive_folder_url: string | null;
+  report_pdf_url: string | null;
+  report_xlsx_url: string | null;
+  filing_error: string | null;
+  comparison_id: string | null;
+  run_by_name: string | null;
+  counts: Record<EnquiryLineStatus, number>;
+  documents: EnquiryDocumentOut[];
+  lines: EnquiryLineOut[];
+}
+
+export interface EnquiryTaskOut {
+  task: { id: string; title: string; end_user: string | null; bid_closing_date: string | null };
+  analysis: EnquiryAnalysisOut | null;
+  can_run: boolean;
+  web_search_default: boolean;
+}
+
+export interface EnquirySummaryOut {
+  task_id: string;
+  task_title: string;
+  end_user: string | null;
+  bid_closing_date: string | null;
+  status: EnquiryRunStatus;
+  items: number;
+  recent: number;
+  history: number;
+  new: number;
+  finished_at: string | null;
+  run_by_name: string | null;
+}
+
 /**
  * An enquiry as the quoting module serves it.
  *

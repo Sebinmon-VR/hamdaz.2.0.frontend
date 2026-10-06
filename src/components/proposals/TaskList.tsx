@@ -4,8 +4,9 @@ import clsx from "clsx";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { ExternalLink, FileText, Flame, ListChecks, Workflow } from "lucide-react";
+import { ExternalLink, FileText, Flame, ListChecks, ScanSearch, Workflow } from "lucide-react";
 import { date, humanise, truncate } from "@/lib/format";
+import { useMaybeSession } from "@/lib/session";
 import type { ColumnOut, TaskOut } from "@/lib/types";
 import { Badge, Panel, Meta } from "@/components/ui/primitives";
 import { LinkButton, PillRail, SearchInput, Select } from "@/components/ui/controls";
@@ -291,6 +292,9 @@ export function TaskDetail({
   onClose: () => void;
   quotable?: boolean;
 }) {
+  // Offered on the team board too: reading a colleague's enquiry takes
+  // nothing over, and the analysis is the same whoever starts it.
+  const analysable = useMaybeSession()?.can("enquiry_analysis") ?? false;
   return (
     <Modal
       open={Boolean(task)}
@@ -314,6 +318,11 @@ export function TaskDetail({
               <ExternalLink className="size-3.5" />
               Open in SharePoint
             </a>
+          )}
+          {analysable && task && (
+            <LinkButton href={`/enquiries/${encodeURIComponent(task.id)}`} icon={ScanSearch}>
+              Analyse enquiry
+            </LinkButton>
           )}
           {/* Goes to the quoting picker rather than raising from here, so the
               existing quote against this enquiry — if there is one — is seen

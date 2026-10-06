@@ -35,6 +35,7 @@ import {
   NotebookPen,
   ReceiptText,
   Scale,
+  ScanSearch,
   Settings,
   Sliders,
   Sparkles,
@@ -100,6 +101,14 @@ export function buildNav(session: Session): Nav {
       href: "/quote-requests",
       icon: FilePen,
       match: "/quote-requests",
+    });
+  }
+  if (can("enquiry_analysis")) {
+    primary.push({
+      label: "Enquiries",
+      href: "/enquiries",
+      icon: ScanSearch,
+      match: "/enquiries",
     });
   }
   if (can("quote_comparison")) {
@@ -531,6 +540,7 @@ const STATIC_LABELS: Record<string, string> = {
   "/quote-requests": "Quote requests",
   "/quote-requests/new": "New quote",
   "/quote-requests/queue": "Ready for Zoho",
+  "/enquiries": "Enquiry analyses",
   "/admin/templates": "Form templates",
   "/admin/reports": "Report settings",
   "/admin/console": "System",
@@ -577,6 +587,7 @@ export function labelFor(pathname: string): string {
   // An id is not a name, but it is at least unique, and the screen behind it
   // replaces this the moment it knows better.
   if (parts[0] === "quotes") return `Quote ${short(parts[1])}`;
+  if (parts[0] === "enquiries") return "Enquiry analysis";
   if (parts[0] === "reports") return `Report ${short(parts[1])}`;
   // A project's own tabs read as "Project 4f2a… · plan", the same convention
   // the team routes use — two open projects have to be tellable apart.
