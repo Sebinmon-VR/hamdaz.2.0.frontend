@@ -13,7 +13,6 @@ import {
   Mic,
   Plus,
   RefreshCw,
-  ScanFace,
   Send,
   Sparkles,
   Square,
@@ -43,7 +42,6 @@ import { ToolTrace } from "@/components/assistant/ToolTrace";
 import { TurnArtifacts } from "@/components/assistant/ResultPreview";
 import { ConfirmCard } from "@/components/assistant/ConfirmCard";
 import { VoiceOverlay } from "@/components/assistant/VoiceOverlay";
-import { FACE_ENABLED } from "@/components/assistant/Face";
 import { RealtimeOverlay } from "@/components/assistant/RealtimeOverlay";
 
 /**
@@ -86,10 +84,6 @@ export default function AssistantPage() {
   const conversations = useConversations();
   const [id, setId] = useState<string | null>(null);
   const [voice, setVoice] = useState(false);
-  // The face: voice mode with the 3D head, opened on its own. It needs only the
-  // browser (listening, and a voice generated on this machine), so it is offered
-  // whatever the OpenAI voice settings say.
-  const [faceOpen, setFaceOpen] = useState(false);
 
   // `?c=` carries a conversation in from the island at the top of the app, so
   // "open this full size" continues the chat rather than starting another one
@@ -208,13 +202,8 @@ export default function AssistantPage() {
         meta={status.data.model ?? undefined}
         actions={
           <>
-            {FACE_ENABLED && dictationSupported() && (
-              <Button variant="accent" icon={ScanFace} onClick={() => setFaceOpen(true)}>
-                Face
-              </Button>
-            )}
             {canSpeak && (
-              <Button variant={FACE_ENABLED ? "outline" : "accent"} icon={AudioLines} onClick={() => setVoice(true)}>
+              <Button variant="accent" icon={AudioLines} onClick={() => setVoice(true)}>
                 {canConverse ? "Talk" : "Voice"}
               </Button>
             )}
@@ -259,15 +248,6 @@ export default function AssistantPage() {
           server — it opens a run of its own rather than continuing this chat,
           which is why it takes nothing from the conversation above. The
           dictation screen *is* this chat, held differently, so it does. */}
-      {FACE_ENABLED && (
-        <VoiceOverlay
-          open={faceOpen}
-          onClose={() => setFaceOpen(false)}
-          withFace
-          conversation={{ ...conversation, send: start }}
-        />
-      )}
-
       {canConverse ? (
         <RealtimeOverlay
           open={voice}
