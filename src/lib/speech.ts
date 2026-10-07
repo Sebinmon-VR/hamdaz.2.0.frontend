@@ -648,7 +648,7 @@ const CLIP_CHARS = 180;
  * whole document read aloud is not something anybody waits for, and it bills per
  * character. What is past the cap is on screen to be read.
  */
-export function sentences(text: string): string[] {
+function sentences(text: string): string[] {
   const clauses = text.match(/[^.!?]+[.!?]*\s*/g) ?? [text];
 
   // Anything longer than a clip on its own is cut on spaces first, so no piece
