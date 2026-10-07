@@ -8,3 +8,6 @@ build/
 next-env.d.ts
 .DS_Store
 npm-debug.log*
+
+# The 3D face's avatar (35 MB), downloaded locally; the face is switched off.
+public/avatars/

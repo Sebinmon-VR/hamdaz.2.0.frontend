@@ -3,7 +3,7 @@
 import clsx from "clsx";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { KeyRound, ListTree, Radio, Sliders, TrendingUp } from "lucide-react";
+import { Bot, KeyRound, ListTree, Radio, Sliders, TrendingUp } from "lucide-react";
 
 /**
  * The five screens the assistant's administration is made of.
@@ -22,6 +22,7 @@ const PAGES = [
   { href: "/admin/assistant", label: "Settings", icon: Sliders },
   { href: "/admin/assistant/permissions", label: "Permissions", icon: ListTree },
   { href: "/admin/assistant/access", label: "Access rules", icon: KeyRound },
+  { href: "/admin/assistant/employees", label: "AI employees", icon: Bot },
   { href: "/admin/assistant/runs", label: "Runs", icon: Radio },
   { href: "/admin/assistant/analytics", label: "Usage & cost", icon: TrendingUp },
 ] as const;

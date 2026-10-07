@@ -2,15 +2,18 @@
 
 import clsx from "clsx";
 import { useCallback, useEffect, useRef, useState } from "react";
+import useSWR from "swr";
 import {
   AudioLines,
   Ban,
+  Bot,
   CircleStop,
   Clock3,
   Loader2,
   Mic,
   Plus,
   RefreshCw,
+  ScanFace,
   Send,
   Sparkles,
   Square,
@@ -30,7 +33,7 @@ import {
   useConversation,
   useConversations,
 } from "@/lib/assistant";
-import type { AssistantMessageOut, ConversationOut } from "@/lib/types";
+import type { AssistantMessageOut, ConversationOut, EmployeeCardOut } from "@/lib/types";
 import { Avatar, Badge, PageHead, Panel } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/controls";
 import { Empty, ErrorState, PanelSkeleton, Spinner } from "@/components/ui/feedback";
@@ -40,6 +43,7 @@ import { ToolTrace } from "@/components/assistant/ToolTrace";
 import { TurnArtifacts } from "@/components/assistant/ResultPreview";
 import { ConfirmCard } from "@/components/assistant/ConfirmCard";
 import { VoiceOverlay } from "@/components/assistant/VoiceOverlay";
+import { FACE_ENABLED } from "@/components/assistant/Face";
 import { RealtimeOverlay } from "@/components/assistant/RealtimeOverlay";
 
 /**
@@ -82,15 +86,27 @@ export default function AssistantPage() {
   const conversations = useConversations();
   const [id, setId] = useState<string | null>(null);
   const [voice, setVoice] = useState(false);
+  // The face: voice mode with the 3D head, opened on its own. It needs only the
+  // browser (listening, and a voice generated on this machine), so it is offered
+  // whatever the OpenAI voice settings say.
+  const [faceOpen, setFaceOpen] = useState(false);
 
   // `?c=` carries a conversation in from the island at the top of the app, so
   // "open this full size" continues the chat rather than starting another one
   // about the same thing. Read from the location on mount rather than through
   // useSearchParams: this page is statically rendered, and that hook would
   // need a Suspense boundary around the whole screen to stay that way.
+  // The AI employees this person may talk to. A new chat is with the
+  // assistant itself unless one is picked; `?employee=` picks one from a link.
+  const team = useSWR<EmployeeCardOut[]>("/assistant/employees", { revalidateOnFocus: false });
+  const [employeeId, setEmployeeId] = useState<string | null>(null);
+
   useEffect(() => {
-    const carried = new URLSearchParams(window.location.search).get("c");
+    const params = new URLSearchParams(window.location.search);
+    const carried = params.get("c");
     if (carried) setId(carried);
+    const employee = params.get("employee");
+    if (employee) setEmployeeId(employee);
   }, []);
 
   const conversation = useConversation(id);
@@ -113,12 +129,15 @@ export default function AssistantPage() {
         await send(text);
         return;
       }
-      const created = await api.post<ConversationOut>("/assistant/conversations", {});
+      const created = await api.post<ConversationOut>(
+        "/assistant/conversations",
+        employeeId ? { employee_id: employeeId } : {},
+      );
       setId(created.id);
       setQueued(text);
       void conversations.mutate();
     },
-    [id, send, conversations],
+    [id, send, conversations, employeeId],
   );
 
   // A new chat is not created until something is said in it. An empty
@@ -189,8 +208,13 @@ export default function AssistantPage() {
         meta={status.data.model ?? undefined}
         actions={
           <>
+            {FACE_ENABLED && dictationSupported() && (
+              <Button variant="accent" icon={ScanFace} onClick={() => setFaceOpen(true)}>
+                Face
+              </Button>
+            )}
             {canSpeak && (
-              <Button variant="accent" icon={AudioLines} onClick={() => setVoice(true)}>
+              <Button variant={FACE_ENABLED ? "outline" : "accent"} icon={AudioLines} onClick={() => setVoice(true)}>
                 {canConverse ? "Talk" : "Voice"}
               </Button>
             )}
@@ -199,6 +223,13 @@ export default function AssistantPage() {
             </Button>
           </>
         }
+      />
+
+      <TalkingTo
+        team={team.data ?? []}
+        selected={employeeId}
+        onSelect={setEmployeeId}
+        current={id ? conversation.detail ?? null : null}
       />
 
       <div className="grid min-h-0 flex-1 gap-3.5 lg:grid-cols-[264px_1fr]">
@@ -228,6 +259,15 @@ export default function AssistantPage() {
           server — it opens a run of its own rather than continuing this chat,
           which is why it takes nothing from the conversation above. The
           dictation screen *is* this chat, held differently, so it does. */}
+      {FACE_ENABLED && (
+        <VoiceOverlay
+          open={faceOpen}
+          onClose={() => setFaceOpen(false)}
+          withFace
+          conversation={{ ...conversation, send: start }}
+        />
+      )}
+
       {canConverse ? (
         <RealtimeOverlay
           open={voice}
@@ -247,6 +287,84 @@ export default function AssistantPage() {
             }}
           />
         )
+      )}
+    </div>
+  );
+}
+
+/* ── who you are talking to ──────────────────────────────────────────── */
+
+/**
+ * The AI employees, for a new chat; and, in an existing one, who it is with.
+ *
+ * An employee is the assistant with a job and rules set by a super admin, so
+ * picking one changes who answers, not what the person may do: every chat still
+ * acts as them, through the same permission checks.
+ */
+function TalkingTo({
+  team,
+  selected,
+  onSelect,
+  current,
+}: {
+  team: EmployeeCardOut[];
+  selected: string | null;
+  onSelect: (id: string | null) => void;
+  current: ConversationOut | null;
+}) {
+  if (current) {
+    if (current.subject_kind !== "employee") return null;
+    return (
+      <div className="flex items-center gap-2 text-[12.5px] text-ink-3">
+        <Bot className="size-3.5" />
+        Talking to <span className="font-semibold text-ink">{current.subject_label}</span> — an AI employee
+      </div>
+    );
+  }
+  if (!team.length) return null;
+  const picked = team.find((e) => e.id === selected) ?? null;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="micro mr-1 text-ink-4">Talk to</span>
+        <button
+          type="button"
+          onClick={() => onSelect(null)}
+          aria-pressed={!picked}
+          className={clsx(
+            "rounded-full border px-3 py-1 text-[12.5px] transition",
+            !picked ? "border-accent bg-accent text-accent-ink" : "border-line text-ink-2 hover:border-line-strong",
+          )}
+        >
+          Assistant
+        </button>
+        {team.map((e) => (
+          <button
+            key={e.id}
+            type="button"
+            onClick={() => onSelect(e.id)}
+            aria-pressed={picked?.id === e.id}
+            title={e.description}
+            className={clsx(
+              "flex items-center gap-1.5 rounded-full border py-1 pl-1 pr-3 text-[12.5px] transition",
+              picked?.id === e.id ? "border-accent bg-accent-soft text-ink" : "border-line text-ink-2 hover:border-line-strong",
+            )}
+          >
+            <span
+              className="grid size-5 place-items-center rounded-full text-[9.5px] font-bold text-white"
+              style={{ background: e.color }}
+            >
+              {e.name.slice(0, 1).toUpperCase()}
+            </span>
+            {e.name}
+            <span className="text-ink-4">· {e.title}</span>
+          </button>
+        ))}
+      </div>
+      {picked && (
+        <p className="text-[12.5px] text-ink-3">
+          {picked.greeting || `${picked.name} is an AI employee: ${picked.description || picked.title}.`}
+        </p>
       )}
     </div>
   );

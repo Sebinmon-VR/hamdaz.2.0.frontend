@@ -3285,6 +3285,101 @@ export interface AssistantStatusOut {
   can_delete: boolean;
 }
 
+// ── AI employees ─────────────────────────────────────────────────────
+
+/** An AI employee as the people who may talk to it see it. */
+export interface EmployeeCardOut {
+  id: string;
+  name: string;
+  title: string;
+  description: string;
+  greeting: string | null;
+  color: string;
+}
+
+export type EmployeeWriteMode = "read_only" | "confirm" | "policy";
+
+export interface EmployeeIn {
+  name: string;
+  title: string;
+  description: string;
+  instructions: string;
+  greeting: string | null;
+  color: string;
+  model_key: string | null;
+  reasoning_effort: "low" | "medium" | "high" | null;
+  allowed_modules: string[];
+  write_mode: EmployeeWriteMode;
+  audience_roles: string[];
+  /** Decimal string, or null for no cap. */
+  monthly_budget_usd: string | null;
+  /** Its own Microsoft 365 account, for Teams (and later Outlook). */
+  ms_account_email: string | null;
+  /** Answer Teams chats as that account, once connected. */
+  teams_enabled: boolean;
+  enabled: boolean;
+  sort_order: number;
+}
+
+export interface EmployeeOut extends EmployeeIn {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  month_spend_usd: string;
+  account_status: "not_connected" | "connected" | "needs_reconnect" | "disconnected";
+  account_email: string | null;
+  account_error: string | null;
+  account_last_poll_at: string | null;
+  /** What it did with the latest Teams messages, newest first. */
+  account_activity: EmployeeActivity[];
+}
+
+export interface EmployeeActivity {
+  at: string;
+  from: string | null;
+  chat: string | null;
+  outcome: "answered" | "asked" | "ignored" | "error" | "disconnected" | "waiting";
+  detail: string;
+}
+
+export interface EmployeeChatOut {
+  id: string;
+  title: string | null;
+  channel: "teams" | "app";
+  created_at: string;
+  last_message_at: string | null;
+  messages: number;
+}
+
+export interface EmployeePersonOut {
+  user_id: string;
+  name: string;
+  email: string;
+  conversations: EmployeeChatOut[];
+  messages: number;
+  last_message_at: string | null;
+}
+
+export interface EmployeeHistoryOut {
+  employee_id: string;
+  name: string;
+  people: EmployeePersonOut[];
+}
+
+export interface EmployeeMessageOut {
+  seq: number;
+  role: "user" | "assistant" | string;
+  content: string;
+  created_at: string;
+}
+
+export interface EmployeeOptionsOut {
+  modules: { key: string; name: string }[];
+  models: { key: string; name: string }[];
+  roles: { key: string; name: string }[];
+  assistant_model: string;
+}
+
 export interface ConversationOut {
   id: string;
   title: string | null;

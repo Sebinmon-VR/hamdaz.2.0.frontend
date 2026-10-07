@@ -3,13 +3,14 @@
 import clsx from "clsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Keyboard, Mic, MicOff, Volume2, VolumeX, X } from "lucide-react";
+import { Keyboard, Mic, MicOff, ScanFace, Volume2, VolumeX, X } from "lucide-react";
 import { useDictation, useMicLevel, useSpeaker, yesOrNo } from "@/lib/speech";
 import type { Conversation } from "@/lib/assistant";
 import { Orb, useOrbSize, type OrbState } from "@/components/assistant/Orb";
 import { ConfirmCard } from "@/components/assistant/ConfirmCard";
 import { ToolTrace } from "@/components/assistant/ToolTrace";
 import { TurnArtifacts } from "@/components/assistant/ResultPreview";
+import { FACE_ENABLED, useFace } from "@/components/assistant/Face";
 
 /**
  * Voice mode: the assistant with the screen taken away.
@@ -33,10 +34,13 @@ export function VoiceOverlay({
   open,
   onClose,
   conversation,
+  withFace = false,
 }: {
   open: boolean;
   onClose: () => void;
   conversation: Conversation;
+  /** Opened from the Face button: the head is shown from the start. */
+  withFace?: boolean;
 }) {
   const { turn, busy, send, respond } = conversation;
 
@@ -46,7 +50,34 @@ export function VoiceOverlay({
   // in an open office, where being listened to is fine and being talked at is not.
   const [muted, setMuted] = useState(false);
 
-  const speaker = useSpeaker();
+  // The face: a 3D head that speaks the answers with matching lips, in place of
+  // the orb. Remembered per browser. Until it has loaded, the usual voice
+  // speaks, so switching it on never leaves an answer unsaid.
+  const [faceOn, setFaceOn] = useState(FACE_ENABLED && withFace);
+  useEffect(() => {
+    if (withFace || !FACE_ENABLED) return;
+    try {
+      setFaceOn(window.localStorage.getItem("assistant.face") === "1");
+    } catch {
+      /* storage blocked: the orb it is */
+    }
+  }, [withFace]);
+  const face = useFace(open && faceOn);
+  const voiceSpeaker = useSpeaker();
+  const speaker = faceOn && face.state === "ready" ? face.speaker : voiceSpeaker;
+
+  function toggleFace() {
+    speaker.cancel();
+    setFaceOn((was) => {
+      try {
+        window.localStorage.setItem("assistant.face", was ? "0" : "1");
+      } catch {
+        /* not remembered, still switched */
+      }
+      return !was;
+    });
+  }
+
   const dictation = useDictation({
     onFinal: (text) => {
       // What was heard is no longer kept here. It becomes a message on the
@@ -253,7 +284,23 @@ export function VoiceOverlay({
       {/* ── the orb and what is being said ──────────────────────────── */}
       <div className="flex min-h-0 flex-1 flex-col items-center gap-3 px-4 pb-4 sm:px-6">
         <div className="relative grid shrink-0 place-items-center">
-          <Orb state={paused ? "idle" : state} level={level} size={orb} />
+          {faceOn ? (
+            <div className="relative" style={{ width: Math.round(orb * 1.3), height: Math.round(orb * 1.3) }}>
+              <div ref={face.mount} className="absolute inset-0 overflow-hidden rounded-[28px]" />
+              {face.state !== "ready" && (
+                <div className="absolute inset-0 grid place-items-center rounded-[28px] bg-panel/60 px-4 text-center text-[12.5px] text-ink-3">
+                  {face.state === "error"
+                    ? `The face could not load: ${face.error}`
+                    : face.progress ?? "Loading the face…"}
+                </div>
+              )}
+              <span className="micro absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-panel/80 px-2 py-0.5 text-ink-4">
+                AI assistant
+              </span>
+            </div>
+          ) : (
+            <Orb state={paused ? "idle" : state} level={level} size={orb} />
+          )}
           {paused && (
             <span className="absolute grid size-14 place-items-center rounded-full bg-panel/80 text-ink-3 backdrop-blur">
               <MicOff className="size-5" strokeWidth={1.8} />
@@ -350,7 +397,21 @@ export function VoiceOverlay({
           )}
         </button>
 
-        <span className="size-12" aria-hidden />
+        {FACE_ENABLED ? (
+        <button
+          onClick={toggleFace}
+          aria-pressed={faceOn}
+          title={faceOn ? "Show the orb instead of the face" : "Show the assistant's face"}
+          className={clsx(
+            "grid size-12 place-items-center rounded-full transition",
+            faceOn ? "bg-accent-soft text-accent-text" : "bg-panel text-ink-3 hover:text-ink",
+          )}
+        >
+          <ScanFace className="size-4.5" strokeWidth={1.8} />
+        </button>
+        ) : (
+          <span className="size-12" aria-hidden />
+        )}
       </div>
     </div>,
     document.body,
