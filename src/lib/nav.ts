@@ -21,6 +21,7 @@ import {
   CalendarDays,
   CalendarRange,
   ClipboardList,
+  Coins,
   FilePen,
   FolderKanban,
   FolderLock,
@@ -402,6 +403,14 @@ export function buildNav(session: Session): Nav {
       href: "/admin/console",
       icon: Activity,
       match: "/admin/console",
+      badge: "admin",
+    });
+    // Which models read quote documents, and what each read cost.
+    admin.push({
+      label: "AI usage",
+      href: "/admin/ai-usage",
+      icon: Coins,
+      match: "/admin/ai-usage",
       badge: "admin",
     });
     admin.push({

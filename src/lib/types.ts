@@ -2028,6 +2028,55 @@ export const TRADE_DIRECTIONS: { value: TradeDirection; label: string; hint: str
   { value: "local", label: "Local", hint: "Bought and delivered in the country. Nothing crosses a border." },
 ];
 
+/** One call to a text model made while reading a quote's documents. */
+export interface AICallOut {
+  id: string;
+  created_at: string;
+  /** The quote it was for. */
+  request_id: string;
+  quote_title: string | null;
+  quote_reference: string | null;
+  /** supplier_quote or document. */
+  purpose: string;
+  /** What was read: "Supplier quote · Hamdaz-Wolfvision Quote.pdf". */
+  label: string | null;
+  /** anthropic (paid), groq, cerebras, openrouter, ollama (free). */
+  provider: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  /** USD, a decimal string; "0" on a free tier. */
+  cost_usd: string;
+  /** False when the answer was unusable and the next model was asked. */
+  used: boolean;
+  user_name: string | null;
+}
+
+/** One model's share of the period. */
+export interface AIModelTotalOut {
+  provider: string;
+  model: string;
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: string;
+}
+
+/** Model calls made reading quote documents, newest first (super admin). */
+export interface AIUsageOut {
+  /** The first day counted; null for all time. */
+  since: string | null;
+  /** More calls than the list carries; the totals still count every one. */
+  truncated: boolean;
+  calls: AICallOut[];
+  by_model: AIModelTotalOut[];
+  total_cost_usd: string;
+  input_tokens: number;
+  output_tokens: number;
+  paid_calls: number;
+  free_calls: number;
+}
+
 export interface QuoteRequestOut {
   id: string;
   reference: string | null;
