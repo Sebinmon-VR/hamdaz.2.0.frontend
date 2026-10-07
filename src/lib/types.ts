@@ -1629,6 +1629,13 @@ export interface QuoteCostLineOut {
    */
   percent?: string | null;
   percent_of?: PercentBasis | null;
+  /**
+   * The priced line this cost belongs to, by its place in `items` from 0;
+   * null when the whole bid shares it by value.
+   */
+  line_position?: number | null;
+  /** The amounts are per unit of that line, × its quantity. */
+  per_unit?: boolean;
 }
 
 /** What a rated cost row is charged on: the goods, or the CIF value. */
@@ -1716,6 +1723,33 @@ export interface CostElementOut {
   /** Set on a row stated as a rate; the amount is then worked out. */
   percent?: string | null;
   percent_of?: string | null;
+  /** The line a stored row is charged to; null when the whole bid shares it. */
+  line_position?: number | null;
+  /** Stated per unit: the amounts above are the line's total over `quantity`. */
+  per_unit?: boolean;
+  quantity?: string | null;
+}
+
+/** One cost element's share of one line, per unit. */
+export interface LinePartOut {
+  label: string;
+  basis: string | null;
+  each: string;
+  /** Charged to this line alone, rather than shared out across the bid. */
+  own: boolean;
+}
+
+/** What one priced line costs landed. Lines are priced on `each`. */
+export interface LineLandedOut {
+  /** The line's place in `items`, from 0. */
+  position: number;
+  quantity: string;
+  goods: string;
+  total: string;
+  each: string | null;
+  /** This line's landed ÷ its goods; null on a line with no cost. */
+  uplift: string | null;
+  parts: LinePartOut[];
 }
 
 export interface LandedCostOut {
@@ -1740,6 +1774,12 @@ export interface LandedCostOut {
    */
   uplift: string;
   principal_value: string;
+  /**
+   * Each line's landed cost, in line order. A cost can belong to one line,
+   * or be per unit of it, so a line's landed cost is not always cost × the
+   * bid's `uplift`: read it from here.
+   */
+  lines?: LineLandedOut[];
 }
 
 /** One rung of the ladder: the landed cost priced at one margin. */

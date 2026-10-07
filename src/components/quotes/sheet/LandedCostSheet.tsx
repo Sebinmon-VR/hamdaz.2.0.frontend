@@ -46,7 +46,18 @@ import {
  * the bank at 3% — typed in the "Rate" column. Both amount cells then lock and
  * show the server's arithmetic, so the row follows the goods when the
  * supplier changes rather than sitting there at last month's 1%.
+ *
+ * A row belongs to the whole bid, shared across the lines by value, or to one
+ * line — two lines from two suppliers carry two suppliers' charges. A row on a
+ * line can be per unit, and is then multiplied by that line's quantity.
  */
+
+/** A priced line, as a cost row's line picker names it. */
+export interface CostLineChoice {
+  key: string;
+  name: string;
+  quantity: string;
+}
 
 const COLUMNS =
   "44px minmax(0,1.3fr) minmax(0,0.8fr) 118px 112px 122px minmax(0,0.8fr) 34px";
@@ -55,6 +66,7 @@ export function LandedCostSheet({
   bid,
   draft,
   rows,
+  lines,
   currency,
   editable,
   onDraftChange,
@@ -63,6 +75,7 @@ export function LandedCostSheet({
   bid: BidPackOut;
   draft: BidDraft;
   rows: CostRow[];
+  lines: CostLineChoice[];
   currency: string;
   editable: boolean;
   onDraftChange: (patch: Partial<BidDraft>) => void;
@@ -304,14 +317,31 @@ export function LandedCostSheet({
                 </Td>
                 <Td wrap muted>
                   {own ? (
-                    <CellInput
-                      value={row!.basis}
-                      editable
-                      onChange={(v) => patch(row!.key, { basis: v })}
-                      placeholder="Our estimate"
-                    />
+                    <div className="w-full space-y-1">
+                      <CellInput
+                        value={row!.basis}
+                        editable
+                        onChange={(v) => patch(row!.key, { basis: v })}
+                        placeholder="Our estimate"
+                      />
+                      <LineCell
+                        row={row!}
+                        lines={lines}
+                        onChange={(change) => patch(row!.key, change)}
+                      />
+                    </div>
                   ) : (
-                    element.basis ?? "—"
+                    <div className="space-y-0.5">
+                      <div>{element.basis ?? "—"}</div>
+                      {element.line_position != null && (
+                        <div className="text-[10.5px] text-ink-4">
+                          {lineName(lines, element.line_position)}
+                          {element.per_unit && element.quantity
+                            ? ` · per unit × ${decimal(element.quantity, { min: 0 })}`
+                            : ""}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </Td>
                 <Td align="right">
@@ -347,14 +377,22 @@ export function LandedCostSheet({
                 </Td>
                 <Td align="right">
                   {own && !derivedBase && !rated ? (
-                    <CellInput
-                      value={row!.amount_base}
-                      editable
-                      numeric
-                      align="right"
-                      onChange={(v) => patch(row!.key, { amount_base: v })}
-                      placeholder="0.00"
-                    />
+                    <div className="w-full">
+                      <CellInput
+                        value={row!.amount_base}
+                        editable
+                        numeric
+                        align="right"
+                        onChange={(v) => patch(row!.key, { amount_base: v })}
+                        placeholder="0.00"
+                      />
+                      {element.per_unit && element.quantity && (
+                        <div className="mt-0.5 text-right text-[10px] text-ink-4">
+                          each · {decimal(element.amount_base)} for{" "}
+                          {decimal(element.quantity, { min: 0 })}
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <span>
                       <Num muted={element.computed || derivedBase || rated}>
@@ -425,12 +463,21 @@ export function LandedCostSheet({
               />
             </Td>
             <Td wrap>
-              <CellInput
-                value={row.basis}
-                editable={editable}
-                onChange={(v) => patch(row.key, { basis: v })}
-                placeholder="Where it came from"
-              />
+              <div className="w-full space-y-1">
+                <CellInput
+                  value={row.basis}
+                  editable={editable}
+                  onChange={(v) => patch(row.key, { basis: v })}
+                  placeholder="Where it came from"
+                />
+                {editable && (
+                  <LineCell
+                    row={row}
+                    lines={lines}
+                    onChange={(change) => patch(row.key, change)}
+                  />
+                )}
+              </div>
             </Td>
             <Td align="right">
               <RateCell
@@ -546,6 +593,61 @@ export function LandedCostSheet({
  * known until those rows are summed. After it, the bank's cut is on what was
  * paid and a clearance agent's on what arrived, so the basis is a choice.
  */
+function lineName(lines: CostLineChoice[], position: number): string {
+  const line = lines[position];
+  if (!line) return `Line ${position + 1}`;
+  const name = line.name.trim();
+  return `Line ${position + 1}${name ? ` — ${name.length > 28 ? `${name.slice(0, 28)}…` : name}` : ""}`;
+}
+
+/**
+ * Which line a cost belongs to, and whether it is per unit of it. The whole
+ * bid by default: shared across the lines by what each cost, as before.
+ */
+function LineCell({
+  row,
+  lines,
+  onChange,
+}: {
+  row: CostRow;
+  lines: CostLineChoice[];
+  onChange: (change: Partial<CostRow>) => void;
+}) {
+  if (lines.length === 0) return null;
+  const index = row.line_key === null ? -1 : lines.findIndex((l) => l.key === row.line_key);
+  const line = index >= 0 ? lines[index] : null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-ink-4">
+      <select
+        value={line ? line.key : ""}
+        onChange={(e) => {
+          const next = e.target.value || null;
+          onChange({ line_key: next, per_unit: next === null ? false : row.per_unit });
+        }}
+        aria-label="Which line this cost is for"
+        className="max-w-full rounded-[6px] border border-line bg-panel px-1 py-0.5 text-[11px] text-ink-2"
+      >
+        <option value="">Whole bid — shared by value</option>
+        {lines.map((choice, at) => (
+          <option key={choice.key} value={choice.key}>
+            {lineName(lines, at)}
+          </option>
+        ))}
+      </select>
+      {line && (
+        <label className="flex items-center gap-1">
+          <input
+            type="checkbox"
+            checked={row.per_unit}
+            onChange={(e) => onChange({ per_unit: e.target.checked })}
+          />
+          Per unit (× {decimal(line.quantity || "0", { min: 0 })})
+        </label>
+      )}
+    </div>
+  );
+}
+
 function RateCell({
   row,
   stage,

@@ -211,6 +211,15 @@ export interface CostRow {
   /** A rate instead of a figure. Blank means the amounts above are the row. */
   percent: string;
   percent_of: PercentBasis;
+  /**
+   * The line it belongs to, by that line's draft key; null for the whole bid.
+   * A key rather than the line's number, so that removing or reordering lines
+   * cannot move a cost onto the wrong one. The server takes a number, worked
+   * out on save from the lines that are actually sent.
+   */
+  line_key: string | null;
+  /** The amounts are per unit of that line, × its quantity. */
+  per_unit: boolean;
 }
 
 export interface ComplianceRow {
@@ -247,7 +256,8 @@ export function newKey(prefix: string): string {
   return `${prefix}-new-${counter}`;
 }
 
-export function costRowOf(row: QuoteCostLineOut): CostRow {
+/** `lineKeys` are the saved lines' keys, in order: what a stored position names. */
+export function costRowOf(row: QuoteCostLineOut, lineKeys: string[]): CostRow {
   return {
     key: row.id,
     id: row.id,
@@ -261,6 +271,8 @@ export function costRowOf(row: QuoteCostLineOut): CostRow {
     notes: row.notes ?? "",
     percent: row.percent ?? "",
     percent_of: row.percent_of ?? "goods",
+    line_key: row.line_position == null ? null : (lineKeys[row.line_position] ?? null),
+    per_unit: row.per_unit ?? false,
   };
 }
 
@@ -278,10 +290,18 @@ export function blankCostRow(stage: CostStage, sourceCurrency: string): CostRow 
     notes: "",
     percent: "",
     percent_of: "goods",
+    line_key: null,
+    per_unit: false,
   };
 }
 
-export function costRowIn(row: CostRow) {
+/**
+ * `sentKeys` are the keys of the lines going in the same save, in order. A row
+ * whose line is not among them — deleted, or never named — goes back to the
+ * whole bid rather than landing on whichever line took its place.
+ */
+export function costRowIn(row: CostRow, sentKeys: string[]) {
+  const at = row.line_key === null ? -1 : sentKeys.indexOf(row.line_key);
   return {
     stage: row.stage,
     label: row.label.trim(),
@@ -299,6 +319,9 @@ export function costRowIn(row: CostRow) {
     // Only meaningful with a rate; sent as null otherwise so a stale basis is
     // never stored on a row that has stopped being a rate.
     percent_of: row.percent.trim() ? row.percent_of : null,
+    line_position: at >= 0 ? at : null,
+    // Per unit means nothing without a line to count the units of.
+    per_unit: at >= 0 && row.per_unit,
   };
 }
 

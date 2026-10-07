@@ -197,7 +197,7 @@ export default function QuoteRequestPage({
     setLines(data.items.map(toDraft));
     setTargetMargin(data.target_markup_percent);
     const lists = bidLists(data);
-    setCosts(lists.costLines.map(costRowOf));
+    setCosts(lists.costLines.map((c) => costRowOf(c, data.items.map((i) => i.id))));
     setRules(lists.compliance.map(complianceRowOf));
     setPortal(lists.submissionFields.map(portalRowOf));
     setDirtyLines(new Set());
@@ -302,6 +302,10 @@ export default function QuoteRequestPage({
   const isBid = asBid || hasBidPack(data);
   const lists = bidLists(data);
   const blocking = lists.compliance.filter((c) => c.is_blocking).length;
+  // The lines a save sends, in order: what a cost row's line number refers to.
+  const sentLines = lines.filter((line) => line.name.trim());
+  const sentLineKeys = sentLines.map((line) => line.key);
+  const savedLineKeys = data.items.map((item) => item.id);
 
   const unsaved =
     dirtyLines.size > 0 ||
@@ -311,7 +315,10 @@ export default function QuoteRequestPage({
     targetMargin !== data.target_markup_percent ||
     formChanged(form, draftOf(data)) ||
     bidChanged(bid, bidDraftOf(data)) ||
-    listChanged(costs.map(costRowIn), lists.costLines.map((c) => costRowIn(costRowOf(c)))) ||
+    listChanged(
+      costs.map((c) => costRowIn(c, sentLineKeys)),
+      lists.costLines.map((c) => costRowIn(costRowOf(c, savedLineKeys), savedLineKeys)),
+    ) ||
     listChanged(
       rules.map(complianceRowIn),
       lists.compliance.map((c) => complianceRowIn(complianceRowOf(c))),
@@ -357,6 +364,17 @@ export default function QuoteRequestPage({
     data.bid?.landed.uplift ??
     (data.bid && !isZero(goodsCost) ? divideExact(data.bid.landed.total, goodsCost, 8) : null);
 
+  // Each saved line's landed cost, by line id: the server's lines come back in
+  // the order of the saved items.
+  const landedByLine = data.bid?.landed.lines
+    ? Object.fromEntries(
+        data.items.flatMap((item, i) => {
+          const landed = data.bid?.landed.lines?.[i];
+          return landed ? [[item.id, landed] as const] : [];
+        }),
+      )
+    : null;
+
   function patchBody() {
     return {
       // PATCH replaces the quote wholesale, so everything that should survive
@@ -397,7 +415,9 @@ export default function QuoteRequestPage({
       // build refused the duplicate key. The wire field keeps its old name;
       // the number is a margin, a share of the selling price.
       target_markup_percent: targetMargin?.trim() || null,
-      cost_lines: costs.filter((row) => row.label.trim()).map(costRowIn),
+      cost_lines: costs
+        .filter((row) => row.label.trim())
+        .map((row) => costRowIn(row, sentLineKeys)),
       compliance: rules.filter((row) => row.requirement.trim()).map(complianceRowIn),
       submission_fields: portal.filter((row) => row.label.trim()).map(portalRowIn),
     };
@@ -738,6 +758,7 @@ export default function QuoteRequestPage({
               fxRate={data.fx_rate}
               landedUplift={landedUplift}
               landedElements={data.bid?.landed.elements ?? null}
+              landedLines={landedByLine}
               costTotal={goodsCost}
               landedTotal={data.bid?.landed.total ?? null}
               grossProfit={data.bid?.gross_margin ?? null}
@@ -968,6 +989,11 @@ export default function QuoteRequestPage({
           bid={data.bid}
           draft={bid}
           rows={costs}
+          lines={sentLines.map((line) => ({
+            key: line.key,
+            name: line.name,
+            quantity: line.quantity,
+          }))}
           currency={currency}
           editable={editable}
           onDraftChange={(patch) => setBid({ ...bid, ...patch })}

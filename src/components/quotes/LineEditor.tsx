@@ -19,7 +19,7 @@ import {
   subExact,
   sumExact,
 } from "@/lib/format";
-import type { CostElementOut, QuoteLineDraft } from "@/lib/types";
+import type { CostElementOut, LineLandedOut, QuoteLineDraft } from "@/lib/types";
 import { Badge, Panel } from "@/components/ui/primitives";
 import { Button, Field, Input, Textarea } from "@/components/ui/controls";
 import { Empty } from "@/components/ui/feedback";
@@ -56,6 +56,8 @@ interface LandedPart {
   label: string;
   basis: string | null;
   amount: string;
+  /** Charged to this line alone, rather than its share of the bid's. */
+  own?: boolean;
 }
 
 /** A figure to the cent, with thousands, or a dash. */
@@ -76,6 +78,7 @@ export function LineEditor({
   fxRate,
   landedUplift,
   landedElements,
+  landedLines,
   costTotal,
   landedTotal,
   grossProfit,
@@ -124,6 +127,13 @@ export function LineEditor({
    * cost is its price plus its share of each, in proportion to what it cost.
    */
   landedElements?: CostElementOut[] | null;
+  /**
+   * Each saved line's landed cost from the server, by line id. A cost can
+   * belong to one line, or be per unit of it, so a line's landed cost is not
+   * always its cost × the bid's factor; where the server has worked it out,
+   * that is what a line is priced on.
+   */
+  landedLines?: Record<string, LineLandedOut> | null;
   /** The server's landed cost, gross profit and gross margin, as saved. */
   landedTotal?: string | null;
   grossProfit?: string | null;
@@ -196,6 +206,15 @@ export function LineEditor({
    * fifth of the goods carries a fifth of it: row × (this cost ÷ all costs).
    */
   function landedPartsOf(line: QuoteLineDraft): LandedPart[] {
+    const saved = savedLanded(line);
+    if (saved) {
+      return saved.parts.map((part) => ({
+        label: part.label,
+        basis: part.basis,
+        amount: part.each,
+        own: part.own,
+      }));
+    }
     const cost = line.cost_rate?.trim();
     if (!cost || isZero(cost) || !costTotal || isZero(costTotal) || !landedElements) return [];
     const parts: LandedPart[] = [];
@@ -209,10 +228,32 @@ export function LineEditor({
     return parts;
   }
 
-  /** A line's cost with its share of the landing costs on top. */
-  function landedCostOf(line: QuoteLineDraft): string {
+  /**
+   * The server's landed figures for a line, while the line still has the cost
+   * and quantity they were worked out on. Edited since, they are stale, and
+   * the line falls back to its cost × its own factor until it is saved.
+   */
+  function savedLanded(line: QuoteLineDraft): LineLandedOut | null {
+    const saved = line.id ? landedLines?.[line.id] : undefined;
+    if (!saved || saved.each === null) return null;
     const cost = line.cost_rate?.trim() ? line.cost_rate : "0";
-    const uplift = landedUplift?.trim() || "1";
+    const goods = multiplyExact(cost, line.quantity.trim() || "0");
+    const sameGoods = goods !== null && Math.abs(Number(goods) - Number(saved.goods)) < 0.005;
+    return sameGoods && Number(line.quantity) === Number(saved.quantity) ? saved : null;
+  }
+
+  /** Landed ÷ cost for this line: its own, where the server has one. */
+  function lineUpliftOf(line: QuoteLineDraft): string | null {
+    const own = line.id ? landedLines?.[line.id]?.uplift : null;
+    return own ?? landedUplift ?? null;
+  }
+
+  /** A line's cost with its landing costs on top: its own, and its share of the bid's. */
+  function landedCostOf(line: QuoteLineDraft): string {
+    const saved = savedLanded(line);
+    if (saved?.each) return saved.each;
+    const cost = line.cost_rate?.trim() ? line.cost_rate : "0";
+    const uplift = lineUpliftOf(line)?.trim() || "1";
     return multiplyExact(cost, uplift) ?? cost;
   }
 
@@ -276,10 +317,13 @@ export function LineEditor({
   // cost of goods, so the freight, insurance, duty and bank charges are
   // shared out in proportion to what each line cost — the way the costing
   // report shares them.
+  const perLine = (landedElements ?? []).some((element) => element.line_position != null);
   const landedNote =
-    landedTotal && costTotal && landedUplift && landedUplift !== "1"
-      ? `Landed cost ${amount(landedTotal, currency)} ÷ cost of goods ${amount(costTotal, currency)} = ${decimal(landedUplift, { min: 0 })}. Each line carries that share of the freight, insurance, duty and bank charges on the Landed cost tab.`
-      : null;
+    perLine && landedTotal
+      ? `Landed cost ${amount(landedTotal, currency)} in all. Each line carries the costs set against it on the Landed cost tab — per unit where marked — and a share of the bid's own, in proportion to what it cost.`
+      : landedTotal && costTotal && landedUplift && landedUplift !== "1"
+        ? `Landed cost ${amount(landedTotal, currency)} ÷ cost of goods ${amount(costTotal, currency)} = ${decimal(landedUplift, { min: 0 })}. Each line carries that share of the freight, insurance, duty and bank charges on the Landed cost tab.`
+        : null;
   const withLanded = landedNote !== null;
 
   function setQuoteMargin(text: string) {
@@ -437,7 +481,7 @@ export function LineEditor({
                     open={expanded === line.key}
                     marginText={marginText(line)}
                     landed={landedCostOf(line)}
-                    landedUplift={landedUplift ?? null}
+                    landedUplift={lineUpliftOf(line)}
                     landedNote={landedNote}
                     landedParts={landedPartsOf(line)}
                     onMargin={(text) => setMargin(line, text)}
@@ -859,7 +903,15 @@ function SheetRow({
                         <Step
                           key={`${part.label}-${i}`}
                           label={`+ ${part.label}`}
-                          note={part.basis ? `${part.basis}, this line's share` : "this line's share"}
+                          note={
+                            part.own
+                              ? part.basis
+                                ? `${part.basis}, this line's own`
+                                : "this line's own"
+                              : part.basis
+                                ? `${part.basis}, this line's share`
+                                : "this line's share"
+                          }
                           value={decimal(part.amount)}
                         />
                       ))}
