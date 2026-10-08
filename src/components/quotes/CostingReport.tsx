@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import clsx from "clsx";
 import useSWR from "swr";
 import { Download, RefreshCw } from "lucide-react";
@@ -17,6 +18,7 @@ import { Button } from "@/components/ui/controls";
 import { InlineNotice, PanelSkeleton } from "@/components/ui/feedback";
 import {
   Band,
+  CellInput,
   CellText,
   Grid,
   GridHead,
@@ -35,7 +37,8 @@ import {
  * discount step does to the margin. Nothing here is calculated. The report
  * arrives computed from the quote's own rows, and this screen formats it —
  * so the figure an approver reads here is the figure on the PDF they were
- * mailed, to the cent.
+ * mailed, to the cent. The one exception is the custom discount row under the
+ * negotiation ladder, a what-if worked out as it is typed; see `CustomStep`.
  *
  * Above the report sit the few facts it states that the quote does not
  * otherwise hold — who the goods come from and how they travel, who finally
@@ -463,6 +466,7 @@ function Report({
             </GridRow>
           );
         })}
+        <CustomStep report={report} two={two} />
       </Grid>
 
       {/* What each status means, with this quote's own thresholds in it. */}
@@ -518,6 +522,86 @@ function Report({
 }
 
 /* ── pieces ──────────────────────────────────────────────────────────── */
+
+/**
+ * Any discount, typed in, and what it leaves — worked out as it is typed.
+ *
+ * The one figure on this screen not sent by the server: a what-if for the
+ * approver, so it is on the screen only, never on the PDF. It is the server's
+ * own sum (``report._negotiation``) on the report's own figures — the quoted
+ * row's selling and total, the landed cost, the rate and the two margins —
+ * so a discount that is also on the ladder lands on the same cent.
+ */
+function CustomStep({ report, two }: { report: CostingReportOut; two: boolean }) {
+  const [typed, setTyped] = useState("");
+  const quoted = report.negotiation[0];
+  if (!quoted) return null;
+
+  const discount = Number(typed.replace(",", ".").replace("%", "").trim());
+  const valid = typed.trim() !== "" && Number.isFinite(discount) && discount >= 0 && discount < 100;
+  const cents = (n: number) => Math.round(n * 100) / 100;
+  const keep = 1 - discount / 100;
+  const sale = cents(Number(quoted.selling.amount) * keep);
+  const total = cents(Number(quoted.total_incl_tax.amount) * keep);
+  const margin = cents(sale - Number(report.landed_total.amount));
+  const pct = sale > 0 ? (margin / sale) * 100 : null;
+  const rate = report.base_rate ? Number(report.base_rate) : null;
+  const base = (n: number) => (rate ? String(cents(n * rate)) : null);
+  const status: NegotiationStatus =
+    pct === null || pct < 0
+      ? "loss"
+      : pct < Number(report.walk_away_margin_percent)
+        ? "needs_approval"
+        : pct >= Number(report.comfortable_margin_percent)
+          ? "comfortable"
+          : "acceptable";
+  const spec = STATUS[status];
+
+  return (
+    <GridRow tone="accent">
+      <Td>
+        <div className="flex items-center gap-1">
+          <CellInput
+            value={typed}
+            editable
+            numeric
+            align="right"
+            placeholder="Custom"
+            maxLength={6}
+            onChange={setTyped}
+          />
+          <span className="text-[12px] text-ink-3">%</span>
+        </div>
+      </Td>
+      <Td align="right">
+        <Num>{valid ? decimal(String(total)) : "—"}</Num>
+      </Td>
+      {two && (
+        <Td align="right">
+          <Num muted>{valid ? decimal(base(total)) : "—"}</Num>
+        </Td>
+      )}
+      <Td align="right">
+        <Num strong>{valid ? decimal(String(margin)) : "—"}</Num>
+      </Td>
+      {two && (
+        <Td align="right">
+          <Num muted>{valid ? decimal(base(margin)) : "—"}</Num>
+        </Td>
+      )}
+      <Td align="right">
+        <Num strong>{valid && pct !== null ? decimalPercent(pct.toFixed(2)) : "—"}</Num>
+      </Td>
+      <Td>
+        {valid ? (
+          <Badge tone={spec.tone} title={spec.hint}>{spec.label}</Badge>
+        ) : (
+          <span className="text-[11.5px] text-ink-4">Type any discount to see what it leaves</span>
+        )}
+      </Td>
+    </GridRow>
+  );
+}
 
 function Party({
   heading,
