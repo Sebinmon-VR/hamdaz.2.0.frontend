@@ -249,6 +249,7 @@ export default function QuoteRequestPage({
    * Summary sheet's cells. Only the offer's parts of the quote are taken from
    * the answer, so whatever else is being edited and not yet saved stays: the
    * drafts rebuild when the quote's own stamp moves, and this does not move it.
+   * The exception is a new rate on the chosen offer, which re-costs the lines.
    */
   async function saveOffer(supplierId: string, body: QuoteIn) {
     const before = data?.supplier_name ?? null;
@@ -256,17 +257,32 @@ export default function QuoteRequestPage({
       `/quote-requests/${id}/supplier-quotes/${supplierId}`,
       body,
     );
-    await mutate(
-      (was) =>
-        was && {
-          ...was,
-          comparison: next.comparison,
-          supplier_quotes: next.supplier_quotes,
-          bid: next.bid,
-          supplier_name: next.supplier_name,
-        },
-      { revalidate: false },
-    );
+    // A new exchange rate on the chosen offer re-costs the lines priced from
+    // it, server-side. Then the lines and the landed cost are taken from the
+    // answer too, as after a currency change — nothing typed here is newer.
+    const recosted = next.items.some((item) => {
+      const was = data?.items.find((i) => i.id === item.id);
+      return !was || was.cost_rate !== item.cost_rate || was.rate !== item.rate;
+    });
+    if (recosted) {
+      await mutate(next, { revalidate: false });
+      setLines(next.items.map(toDraft));
+      setTargetMargin(next.target_markup_percent);
+      setCosts(bidLists(next).costLines.map((c) => costRowOf(c, next.items.map((i) => i.id))));
+      setDirtyLines(new Set());
+    } else {
+      await mutate(
+        (was) =>
+          was && {
+            ...was,
+            comparison: next.comparison,
+            supplier_quotes: next.supplier_quotes,
+            bid: next.bid,
+            supplier_name: next.supplier_name,
+          },
+        { revalidate: false },
+      );
+    }
     // The supplier details card names the offer too.
     void globalMutate(`/quote-requests/${id}/supplier-details`);
     // A corrected spelling the report's supplier name followed, followed in
