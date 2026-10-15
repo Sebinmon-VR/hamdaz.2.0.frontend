@@ -12,6 +12,7 @@ import type {
   FigureOut,
   NegotiationStatus,
   QuoteRequestOut,
+  ReportSupplierOut,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/controls";
@@ -181,24 +182,24 @@ function Report({
             Valid: {date(report.customer.valid_from)} – {date(report.customer.valid_until)}
           </span>
         </Party>
-        <Party
-          heading="Supplier"
-          name={(report.supplier.name ?? "Supplier not stated") + (report.supplier.basis ? ` (${report.supplier.basis})` : "")}
-        >
-          <span>
-            {report.supplier.route && `Route: ${report.supplier.route} · `}
-            {report.supplier.creator && `Creator: ${report.supplier.creator}`}
-          </span>
-          {report.supplier.quote_number && <span>Their ref: {report.supplier.quote_number}</span>}
-          {(report.supplier.details ?? []).map(([label, value]) => (
-            <span key={label}>
-              {label}: <span className="text-ink-2">{value}</span>
-            </span>
-          ))}
-          {(report.supplier.missing ?? []).length > 0 && (
-            <span className="text-warn">Not given: {report.supplier.missing!.join(", ")}</span>
-          )}
-        </Party>
+        {(() => {
+          // Every supplier the lines come from — one block each, in one box.
+          const several = (report.suppliers ?? []).length > 1 ? report.suppliers! : [report.supplier];
+          return (
+            <Party
+              heading={several.length > 1 ? "Suppliers" : "Supplier"}
+              name={supplierName(several[0])}
+            >
+              <SupplierFacts supplier={several[0]} creator />
+              {several.slice(1).map((s, i) => (
+                <div key={`${s.name}-${i}`} className="mt-2 flex flex-col border-t border-line pt-2">
+                  <span className="text-[13px] font-semibold text-ink">{supplierName(s)}</span>
+                  <SupplierFacts supplier={s} />
+                </div>
+              ))}
+            </Party>
+          );
+        })()}
       </div>
 
       {/* the four figures */}
@@ -249,6 +250,9 @@ function Report({
             <Td wrap>
               {line.part_number && <span className="mr-1.5 font-semibold">{line.part_number}</span>}
               <span className="text-ink-2">{line.description}</span>
+              {line.supplier && (
+                <span className="block text-[11px] text-accent">from {line.supplier}</span>
+              )}
             </Td>
             <Td align="right">
               <Num>{decimal(line.quantity, { min: 0 })}</Num>
@@ -600,6 +604,38 @@ function CustomStep({ report, two }: { report: CostingReportOut; two: boolean })
         )}
       </Td>
     </GridRow>
+  );
+}
+
+function supplierName(s: ReportSupplierOut): string {
+  const lines = s.lines ?? [];
+  return (
+    (s.name ?? "Supplier not stated") +
+    (s.basis ? ` (${s.basis})` : "") +
+    (lines.length ? ` · line${lines.length > 1 ? "s" : ""} ${lines.join(", ")}` : "")
+  );
+}
+
+function SupplierFacts({ supplier: s, creator = false }: { supplier: ReportSupplierOut; creator?: boolean }) {
+  return (
+    <>
+      {(s.route || (creator && s.creator)) && (
+        <span>
+          {s.route && `Route: ${s.route}`}
+          {s.route && creator && s.creator && " · "}
+          {creator && s.creator && `Creator: ${s.creator}`}
+        </span>
+      )}
+      {s.quote_number && <span>Their ref: {s.quote_number}</span>}
+      {(s.details ?? []).map(([label, value]) => (
+        <span key={label}>
+          {label}: <span className="text-ink-2">{value}</span>
+        </span>
+      ))}
+      {(s.missing ?? []).length > 0 && (
+        <span className="text-warn">Not given: {s.missing!.join(", ")}</span>
+      )}
+    </>
   );
 }
 

@@ -45,6 +45,7 @@ import { QuoteForm, draftOf, type QuoteFormDraft } from "@/components/quotes/Quo
 import { Calculations } from "@/components/quotes/Calculations";
 import { LineEditor } from "@/components/quotes/LineEditor";
 import { SupplierComparison } from "@/components/quotes/SupplierComparison";
+import { SupplierQuotesTab } from "@/components/quotes/SupplierQuotesTab";
 import { SupplierQuoteEditor } from "@/components/quotes/SupplierQuoteEditor";
 import { SupplierDetailsForm } from "@/components/quotes/SupplierDetailsForm";
 import { UploadBox } from "@/components/quotes/UploadBox";
@@ -116,6 +117,7 @@ import {
  * workbook does.
  */
 type Tab =
+  | "suppliers"
   | "quote"
   | "report"
   | "summary"
@@ -158,7 +160,9 @@ export default function QuoteRequestPage({
   const [title, setTitle] = useState("");
   const [dirtyLines, setDirtyLines] = useState<Set<string>>(new Set());
   const [stamp, setStamp] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("quote");
+  // Null until somebody picks one: a quote with no lines yet opens on its
+  // supplier quotes, one already priced on its lines.
+  const [pickedTab, setTab] = useState<Tab | null>(null);
   // What is folded away below the lines, and the warnings on the status line.
   const [showWarnings, setShowWarnings] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -232,11 +236,9 @@ export default function QuoteRequestPage({
   const setCurrency = useAction(async (value: string) =>
     api.patch<QuoteRequestOut>(`/quote-requests/${id}/currency`, { currency: value }),
   );
-  const choose = useAction(async (supplier_quote_id: string, markup_percent: string) =>
-    api.post<QuoteRequestOut>(`/quote-requests/${id}/select-supplier`, {
-      supplier_quote_id,
-      markup_percent,
-    }),
+  // Line by line: each line from the supplier picked for it.
+  const chooseLines = useAction(async (picks: string[], markup_percent: string) =>
+    api.post<QuoteRequestOut>(`/quote-requests/${id}/select-lines`, { picks, markup_percent }),
   );
   // One supplier's offer off the comparison, document and all.
   const removeSupplier = useAction(async (supplierQuoteId: string) =>
@@ -368,9 +370,13 @@ export default function QuoteRequestPage({
       )
     : null;
   const displayedTotals = livePreview ?? data;
+  // Every supplier the lines are priced from — often more than one.
+  const usedIds = new Set(data.items.map((i) => i.source_supplier_quote_id).filter(Boolean));
   const chosenSupplier =
-    data.comparison?.suppliers?.find((s) => s.quote_id === data.selected_supplier_quote_id)
-      ?.supplier_name ?? null;
+    (data.comparison?.suppliers ?? [])
+      .filter((s) => usedIds.has(s.quote_id))
+      .map((s) => s.supplier_name)
+      .join(", ") || null;
   // What the lines cost us: live while editing, else from the saved lines.
   const goodsCost = livePreview?.cost_total ?? costTotal(data.items);
   // The landed factor a price is built on. The server sends it; a server
@@ -454,7 +460,14 @@ export default function QuoteRequestPage({
 
   // Named as the workbook names its tabs, so somebody who has used the
   // spreadsheet knows where they are before they read anything.
+  const tab: Tab = pickedTab ?? (data.items.length ? "quote" : "suppliers");
   const tabs: { value: Tab; label: string; count?: number }[] = [
+    // First, because it is where a quote starts: what the suppliers sent.
+    {
+      value: "suppliers",
+      label: "Supplier quotes",
+      count: (data.supplier_quotes ?? []).length || undefined,
+    },
     { value: "quote", label: "Quote & lines", count: data.items.length || undefined },
     // On every quote, not only a bid: the report is what goes to the
     // approver, and every quote goes to one — and the landed cost sheet is
@@ -763,6 +776,61 @@ export default function QuoteRequestPage({
         )}
       </div>
 
+      {tab === "suppliers" && (
+        <SupplierQuotesTab
+          quote={data}
+          editable={editable}
+          currency={currency}
+          onUpload={async (files, offerCurrency) => {
+            const body = new FormData();
+            for (const file of files) body.append("files", file);
+            if (offerCurrency) body.append("currency", offerCurrency);
+            const result = await api.upload<
+              QuoteRequestOut & { failed?: SupplierQuoteFailure[] }
+            >(`/quote-requests/${id}/supplier-quotes`, body);
+            await mutate(result, { revalidate: false });
+            return result.failed ?? null;
+          }}
+          onTyped={async (body: TypedSupplierQuotesIn) => {
+            const next = await api.post<QuoteRequestOut>(
+              `/quote-requests/${id}/supplier-quotes/typed`,
+              body,
+            );
+            await mutate(next, { revalidate: false });
+          }}
+          onRemoveOffer={async (supplierId) => {
+            const next = await removeSupplier.run(supplierId);
+            if (next) await mutate(next, { revalidate: false });
+            return next;
+          }}
+          onChanged={(next) => mutate(next, { revalidate: false })}
+        >
+          {data.comparison && (data.comparison.groups ?? []).length > 0 && (
+            <SupplierComparison
+              linesOnly
+              priceLabel="Create the quote & report"
+              comparison={data.comparison}
+              currency={currency}
+              selectedId={data.selected_supplier_quote_id}
+              hasEdits={dirtyLines.size > 0}
+              canChoose={editable}
+              lines={data.items}
+              pending={chooseLines.pending}
+              error={chooseLines.error ?? removeSupplier.error}
+              onChooseLines={async (picks, markup) => {
+                const next = await chooseLines.run(picks, markup);
+                if (next) {
+                  await mutate(next, { revalidate: false });
+                  // Priced: the report is what comes next.
+                  setTab("report");
+                }
+                return next;
+              }}
+            />
+          )}
+        </SupplierQuotesTab>
+      )}
+
       {tab === "quote" && (
         <div className="space-y-3.5">
           {/* The lines, and beside them the one place a file is dropped:
@@ -873,10 +941,11 @@ export default function QuoteRequestPage({
                     selectedId={data.selected_supplier_quote_id}
                     hasEdits={dirtyLines.size > 0}
                     canChoose={editable}
-                    pending={choose.pending}
-                    error={choose.error ?? removeSupplier.error}
-                    onChoose={async (supplierId, markup) => {
-                      const next = await choose.run(supplierId, markup);
+                    lines={data.items}
+                    pending={chooseLines.pending}
+                    error={chooseLines.error ?? removeSupplier.error}
+                    onChooseLines={async (picks, markup) => {
+                      const next = await chooseLines.run(picks, markup);
                       if (next) await mutate(next, { revalidate: false });
                       return next;
                     }}

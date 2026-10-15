@@ -162,16 +162,16 @@ export function LandedCostSheet({
         ) : (
         <Fact
           label={`1 ${currency} in ${foreign}`}
-          note="As Zoho Books states it — 1 USD = 3.672501 AED. The rate the bid is costed at, and the one the estimate will be converted at."
+          note="Zoho Books' rate, read by the server whenever the currencies change — never typed. The rate the bid is costed at, and the one the estimate will be converted at."
         >
           <div className="flex flex-wrap items-center gap-2">
             <div className="w-32">
               <CellInput
                 value={draft.fx_rate}
-                editable={editable}
+                editable={false}
                 onChange={set("fx_rate")}
                 numeric
-                placeholder="3.672501"
+                placeholder="read on save"
               />
             </div>
             {editable && foreign.length === 3 && (

@@ -313,13 +313,22 @@ export function SupplierQuoteEditor({
               ))}
             </Select>
           </Field>
-          <Field label={`Rate (1 ${head.currency} in ${quoteCurrency})`}>
+          {/* Zoho's rate, never typed: the estimate is converted at Zoho's
+              figure, so the quote is costed at it too. None at all when the
+              offer is in the quote's own currency. */}
+          <Field
+            label={foreign ? `Zoho rate (1 ${head.currency} in ${quoteCurrency})` : "Exchange rate"}
+          >
             <Input
-              value={foreign ? head.fx_rate : "1"}
-              disabled={!foreign}
-              inputMode="decimal"
-              onChange={(e) => set("fx_rate")(e.target.value)}
-              placeholder="Left at 1, Zoho's rate is used"
+              value={
+                !foreign
+                  ? `None — both in ${quoteCurrency}`
+                  : row && head.currency === row.currency && head.fx_rate !== "1"
+                    ? head.fx_rate
+                    : "Read from Zoho on save"
+              }
+              disabled
+              readOnly
             />
           </Field>
           <Field label="Validity">
