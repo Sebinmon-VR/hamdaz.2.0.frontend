@@ -98,19 +98,20 @@ export function TabsProvider({
   const close = useCallback(
     (href: string) => {
       if (href === HOME.href) return;
-      setTabs((current) => {
-        const index = current.findIndex((t) => t.href === href);
-        if (index === -1) return current;
-        const next = current.filter((t) => t.href !== href);
-        // Closing the tab you are on lands you on its neighbour, not nowhere.
-        if (href === pathname) {
-          const fallback = next[index - 1] ?? next[0] ?? HOME;
-          router.push(fallback.href);
-        }
-        return next.length ? next : [HOME];
-      });
+      const index = tabs.findIndex((t) => t.href === href);
+      if (index === -1) return;
+      const next = tabs.filter((t) => t.href !== href);
+      setTabs(next.length ? next : [HOME]);
+      // Closing the tab you are on lands you on its neighbour, not nowhere.
+      // Navigated here, after the update, never inside the updater: an updater
+      // runs while React renders, and pushing the router there is a setState
+      // on another component mid-render.
+      if (href === pathname) {
+        const fallback = next[index - 1] ?? next[0] ?? HOME;
+        router.push(fallback.href);
+      }
     },
-    [pathname, router],
+    [tabs, pathname, router],
   );
 
   const closeOthers = useCallback(

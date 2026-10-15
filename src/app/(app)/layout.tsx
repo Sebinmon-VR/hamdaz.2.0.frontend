@@ -9,7 +9,7 @@ import { labelFor } from "@/lib/nav";
 import { SessionProvider, useLoadSession } from "@/lib/session";
 import { TabsProvider } from "@/lib/tabs";
 import { CommandPalette } from "@/components/shell/CommandPalette";
-import { Island } from "@/components/shell/Island";
+import { CompanionLayer } from "@/components/agents/Companion";
 import { Doodles } from "@/components/shell/Doodles";
 import { RouteProgress } from "@/components/shell/RouteProgress";
 import { Rail } from "@/components/shell/Rail";
@@ -103,11 +103,10 @@ function Shell({ children }: { children: React.ReactNode }) {
           {/* Bound to the window, so ⌘K works from any screen and from any
               focused field — the point is not having to reach for anything. */}
           <CommandPalette />
-          {/* Its neighbour on ⌘J. The palette finds a screen; the island
-              answers a question — and can open a screen itself, which is why
-              it lives here rather than on one page. */}
-          <Island />
           <Rail />
+          {/* An agent let out of the command bar, following the pointer. Here
+              rather than in a screen so it stays out across navigation. */}
+          <CompanionLayer />
           <main className="flex min-w-0 flex-1 flex-col gap-3">
             {/* The open screens ride on the ground rather than in a block:
                 they are a list of places, not a second navigation, and giving

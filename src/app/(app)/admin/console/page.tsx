@@ -7,7 +7,6 @@ import {
   Bell,
   ChevronRight,
   Database,
-  Inbox,
   ListOrdered,
   NotebookPen,
   ShieldAlert,
@@ -110,7 +109,6 @@ export default function AdminConsolePage() {
 /* ── one section ─────────────────────────────────────────────────────── */
 
 const ICONS: Record<string, React.ElementType> = {
-  intake: Inbox,
   mirror: Database,
   standing: ListOrdered,
   reports: NotebookPen,
@@ -119,9 +117,8 @@ const ICONS: Record<string, React.ElementType> = {
 
 /** Where the section is actually operated, when there is such a screen. */
 const SCREENS: Record<string, { href: string; label: string }> = {
-  intake: { href: "/admin/intake", label: "Open mail intake" },
-  mirror: { href: "/admin/intake", label: "See the copy" },
-  standing: { href: "/admin/intake", label: "See the queue" },
+  mirror: { href: "/admin/mirror", label: "See the copy" },
+  standing: { href: "/admin/mirror", label: "See the queue" },
   reports: { href: "/admin/reports", label: "Report settings" },
   notifications: { href: "/notifications", label: "Open notifications" },
 };
@@ -226,75 +223,23 @@ function Section({ section }: { section: ConsoleSectionOut }) {
 /**
  * What a section currently says.
  *
- * Each of the five known sections is drawn deliberately, because the figure
- * that matters is different in each: for the intake it is whether it is writing
- * to SharePoint, for the mirror it is how stale the copy is, for the ranking it
+ * Each of the known sections is drawn deliberately, because the figure that
+ * matters is different in each: for the mirror it is how stale the copy is, for the ranking it
  * is who is next. An unknown section falls back to pairs — see the note at the
  * top of the file about why that is the right failure.
  */
 function Figures({ section }: { section: ConsoleSectionOut }) {
   const s = section.status;
 
-  if (section.key === "intake") {
-    const messages = (s.messages ?? {}) as Record<string, number>;
-    return (
-      <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-2.5">
-          <Tile
-            label="Reading mail"
-            value={s.enabled ? "On" : "Off"}
-            tone={s.enabled ? undefined : "muted"}
-            hint={String(s.mailbox || "No mailbox set yet")}
-          />
-          {/* The one setting that changes something outside this system, so it
-              is a figure rather than a line of small print. */}
-          <Tile
-            label="Creates tasks"
-            value={s.writes_to_sharepoint ? "Yes" : "No"}
-            tone={s.writes_to_sharepoint ? "warn" : undefined}
-            hint={
-              s.writes_to_sharepoint
-                ? "New jobs become real tasks in SharePoint with real names on them."
-                : "It works everything out but does not create anything."
-            }
-          />
-        </div>
-        <MessageBar counts={messages} />
-        <Lines
-          rows={[
-            ["People it will read", num(Number(s.senders ?? 0))],
-            ["Last checked", s.last_poll_at ? relative(String(s.last_poll_at)) : "never"],
-            [
-              "Microsoft is notifying us",
-              s.subscription_expires_at
-                ? `until ${relative(String(s.subscription_expires_at))}`
-                : "not set up",
-            ],
-          ]}
-        />
-        {typeof s.last_error === "string" && s.last_error && (
-          <p className="text-[11.5px] leading-relaxed text-danger">{s.last_error}</p>
-        )}
-      </div>
-    );
-  }
-
   if (section.key === "mirror") {
-    const coverage = Number(s.embedding_coverage ?? 0);
     const since = s.seconds_since_sync as number | null;
     return (
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-2.5">
           <Tile label="Jobs copied" value={num(Number(s.rows ?? 0))} />
           <Tile
-            label="Searchable"
-            value={`${Math.round(coverage * 100)}%`}
-            tone={coverage < 1 ? "warn" : undefined}
-            hint={
-              coverage < 1
-                ? "Used to work out which job an email is about. Below 100% usually means the OpenAI key is missing."
-                : undefined
-            }
+            label="Last copied"
+            value={s.last_sync_at ? relative(String(s.last_sync_at)) : "never"}
           />
         </div>
         <Lines
@@ -306,7 +251,6 @@ function Figures({ section }: { section: ConsoleSectionOut }) {
                 : "never",
             ],
             ["Changed since last time", num(Number(s.rows_changed_last ?? 0))],
-            ["Re-processed last time", num(Number(s.rows_embedded_last ?? 0))],
           ]}
         />
         {since !== null && since !== undefined && since > 3600 && (
@@ -440,64 +384,6 @@ function Lines({ rows }: { rows: [string, string][] }) {
         </div>
       ))}
     </dl>
-  );
-}
-
-/**
- * Every message the intake has seen, by what became of it.
- *
- * One bar rather than six numbers because these are parts of a whole, and the
- * proportion is the thing worth seeing: mostly-ignored is healthy for a shared
- * mailbox, mostly-failed is not, and both look identical as a column of
- * figures.
- */
-function MessageBar({ counts }: { counts: Record<string, number> }) {
-  const order: { key: string; label: string; fill: string }[] = [
-    { key: "actioned", label: "Done", fill: "var(--positive)" },
-    { key: "simulated", label: "Not written", fill: "var(--info)" },
-    { key: "classified", label: "Read", fill: "var(--accent)" },
-    { key: "received", label: "Waiting", fill: "var(--panel-3)" },
-    { key: "ignored", label: "Ignored", fill: "var(--panel-3)" },
-    { key: "failed", label: "Failed", fill: "var(--danger)" },
-  ];
-  const total = order.reduce((sum, part) => sum + (counts[part.key] ?? 0), 0);
-  if (total === 0) {
-    return <p className="text-[11.5px] text-ink-4">No email has come in yet.</p>;
-  }
-
-  return (
-    <div>
-      <div className="flex h-2.5 gap-[2px] overflow-hidden rounded-full">
-        {order
-          .filter((part) => (counts[part.key] ?? 0) > 0)
-          .map((part) => (
-            <span
-              key={part.key}
-              title={`${part.label}: ${counts[part.key]}`}
-              className="rounded-full"
-              style={{
-                width: `${((counts[part.key] ?? 0) / total) * 100}%`,
-                background: part.fill,
-              }}
-            />
-          ))}
-      </div>
-      <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-        {order
-          .filter((part) => (counts[part.key] ?? 0) > 0)
-          .map((part) => (
-            <li key={part.key} className="flex items-center gap-1.5 text-[11px] text-ink-4">
-              <span
-                aria-hidden
-                className="size-1.5 rounded-full"
-                style={{ background: part.fill }}
-              />
-              {part.label}
-              <span className="tnum text-ink-2">{counts[part.key]}</span>
-            </li>
-          ))}
-      </ul>
-    </div>
   );
 }
 

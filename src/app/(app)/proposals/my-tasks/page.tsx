@@ -54,7 +54,7 @@ export default function MyTasksPage() {
             <Stat value={num(data.total - data.open_count)} label="closed" />
             <Stat value={num(data.total)} label="assigned in total" />
           </Panel>
-          <TaskList tasks={data.tasks} workflows={session.can("workflows")} />
+          <TaskList tasks={data.tasks} />
         </>
       )}
     </div>

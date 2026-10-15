@@ -19,12 +19,7 @@ export function TabStrip() {
   const { tabs, active, close } = useTabs();
 
   return (
-    // The right padding is the island's corner, and it is load-bearing rather
-    // than spacing: the island floats over the top-right, and without the gap
-    // the chips scrolled underneath it where they could be neither read nor
-    // clicked. Reserved horizontally rather than vertically — the strip
-    // already scrolls sideways, so this costs a screen nothing.
-    <div className="flex shrink-0 items-center gap-2 pr-[316px]">
+    <div className="flex shrink-0 items-center gap-2">
       <button
         onClick={() => router.back()}
         aria-label="Back"

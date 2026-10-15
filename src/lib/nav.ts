@@ -16,6 +16,7 @@ import {
   AlarmClock,
   CalendarClock,
   Bell,
+  Bot,
   Briefcase,
   Building2,
   CalendarDays,
@@ -39,7 +40,6 @@ import {
   ScanSearch,
   Settings,
   Sliders,
-  Sparkles,
   Star,
   Tag,
   Trophy,
@@ -47,7 +47,6 @@ import {
   UserSearch,
   ShieldCheck,
   Users,
-  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import { isHrViewer } from "@/lib/hr";
@@ -84,6 +83,10 @@ export function buildNav(session: Session): Nav {
 
   const primary: NavItem[] = [
     { label: "Overview", href: "/dashboard", icon: GaugeCircle, match: "/dashboard" },
+    // Everybody's own, gated on nothing: an agent works for the person who
+    // made it. Frontend only for now — there is no module to grant yet, and
+    // when the backend arrives it should get a catalogue entry like the rest.
+    { label: "Agents", href: "/agents", icon: Bot, match: "/agents" },
   ];
   if (can("quotes")) {
     primary.push({ label: "Quotes", href: "/quotes", icon: ReceiptText, match: "/quotes" });
@@ -157,19 +160,6 @@ export function buildNav(session: Session): Nav {
       match: "/reports",
     });
   }
-  // The assistant's catalogue entry says in so many words that it is listed
-  // "for navigation" and that who may use it is decided by its own access
-  // rules, which a super admin sets — not by a team grant. So the link is shown
-  // to everybody and the screen behind it asks `/assistant/status`, which
-  // answers with a sentence saying why when the answer is no. Hiding it on a
-  // grant would be gating it on the one thing the backend says does not gate it.
-  primary.push({
-    label: "Assistant",
-    href: "/assistant",
-    icon: Sparkles,
-    match: "/assistant",
-  });
-
   const more: NavGroup[] = [];
 
   // Tenders read from the Ariba supplier portal. Beside Proposals rather than
@@ -213,17 +203,6 @@ export function buildNav(session: Session): Nav {
     });
   }
   if (assignment.length) more.push({ label: "Work assignment", items: assignment });
-
-  // A team's process run one task at a time — the presales flow, for now.
-  // Granted per team like proposals, and in the menu rather than the pill bar
-  // because a run asks for attention by notification when it needs it; nobody
-  // has to go and look.
-  if (can("workflows")) {
-    more.push({
-      label: "Automation",
-      items: [{ label: "Workflows", href: "/workflows", icon: Workflow, match: "/workflows" }],
-    });
-  }
 
   // Meetings has **no catalogue entry**, so there is no `can("meetings")` to
   // ask. That is not an oversight to work around: its endpoints take a bare
@@ -395,7 +374,7 @@ export function buildNav(session: Session): Nav {
       match: "/admin/reports",
       badge: "admin",
     });
-    // The parts that run without anybody asking — a watched mailbox, a mirrored
+    // The parts that run without anybody asking — a mirrored
     // list, a live ranking. They have no natural place in the app because
     // nobody navigates to them, so this is where they become visible.
     admin.push({
@@ -414,10 +393,10 @@ export function buildNav(session: Session): Nav {
       badge: "admin",
     });
     admin.push({
-      label: "Mail intake",
-      href: "/admin/intake",
+      label: "Proposals sync",
+      href: "/admin/mirror",
       icon: Inbox,
-      match: "/admin/intake",
+      match: "/admin/mirror",
       badge: "admin",
     });
     // The overdue follow-up's settings, apart from the list people answer on.
@@ -460,45 +439,11 @@ export function buildNav(session: Session): Nav {
       match: "/admin/ariba",
       badge: "admin",
     });
-    // Deliberately not `match`ed on "/admin/permissions" alone as a prefix of
-    // anything else: the assistant has its own permissions screen and the two
-    // would light up together.
     admin.push({
       label: "Who may do what",
       href: "/admin/permissions",
       icon: KeyRound,
       match: "/admin/permissions",
-      badge: "admin",
-    });
-    // The assistant's own administration. Two entries rather than the
-    // catalogue's five: the other three are one click away through the strip
-    // those screens share, and five near-identical rows would crowd out every
-    // other thing an administrator does from the rail.
-    //
-    // Deliberately no `match` on the first. As a prefix it would swallow the
-    // whole subtree and light both rows at once — the same mistake the roles
-    // entries above already carry a note about.
-    admin.push({
-      label: "Assistant settings",
-      href: "/admin/assistant",
-      icon: Sparkles,
-      badge: "admin",
-    });
-    admin.push({
-      label: "Assistant usage",
-      href: "/admin/assistant/analytics",
-      icon: Trophy,
-      match: "/admin/assistant/analytics",
-      badge: "admin",
-    });
-    // The flows themselves and the three switches that let one send mail,
-    // write to SharePoint and create in Zoho. A flow acts as whoever started
-    // it, so what it is allowed to do is the company's decision, not a team's.
-    admin.push({
-      label: "Workflows",
-      href: "/admin/workflows",
-      icon: Workflow,
-      match: "/admin/workflows",
       badge: "admin",
     });
   }
@@ -529,6 +474,8 @@ export function isActive(pathname: string, item: NavItem): boolean {
  */
 const STATIC_LABELS: Record<string, string> = {
   "/dashboard": "Overview",
+  "/agents": "My agents",
+  "/agents/new": "New agent",
   "/teams": "Teams",
   "/directory": "Directory",
   "/leave": "My leave",
@@ -553,7 +500,7 @@ const STATIC_LABELS: Record<string, string> = {
   "/admin/templates": "Form templates",
   "/admin/reports": "Report settings",
   "/admin/console": "System",
-  "/admin/intake": "Mail intake",
+  "/admin/mirror": "Proposals sync",
   "/admin/permissions": "Who may do what",
   "/notifications": "Notifications",
   "/comparisons": "Comparisons",
@@ -561,12 +508,6 @@ const STATIC_LABELS: Record<string, string> = {
   "/admin/roles": "Roles",
   "/admin/roles/assignments": "Who holds what",
   "/admin/access": "Module access",
-  "/assistant": "Assistant",
-  "/admin/assistant": "Assistant settings",
-  "/admin/assistant/permissions": "Assistant permissions",
-  "/admin/assistant/access": "Assistant access",
-  "/admin/assistant/runs": "Assistant runs",
-  "/admin/assistant/analytics": "Assistant usage",
   "/settings": "Settings",
   "/assignment/labels": "Labels",
   "/assignment/policy": "Assignment policy",
@@ -577,9 +518,6 @@ const STATIC_LABELS: Record<string, string> = {
   "/hr/reviews": "Review cycles",
   "/hr/my-reviews": "Reviews to write",
   "/hr/me": "My HR record",
-  "/workflows": "Workflows",
-  "/workflows/runs": "Workflow runs",
-  "/admin/workflows": "Workflow admin",
 };
 
 export function labelFor(pathname: string): string {
@@ -605,13 +543,10 @@ export function labelFor(pathname: string): string {
     return tail ? `Project ${short(parts[1])} · ${tail}` : `Project ${short(parts[1])}`;
   }
   if (parts[0] === "comparisons") return `Comparison ${short(parts[1])}`;
+  if (parts[0] === "agents") return "Agent";
   if (parts[0] === "directory") return `Person ${short(parts[1])}`;
   if (parts[0] === "admin" && parts[1] === "users") return `User ${short(parts[2])}`;
   if (parts[0] === "assignment" && parts[1] === "runs") return `Run ${short(parts[2])}`;
-  // A run's tag would read better than its id, but the tab strip only has the
-  // URL, and a shortened id at least tells two open runs apart.
-  if (parts[0] === "workflows" && parts[1] === "runs") return `Run ${short(parts[2])}`;
-  if (parts[0] === "admin" && parts[1] === "workflows" && parts[2]) return `Flow ${parts[2]}`;
   // HR's four detail routes. Named by what the id points at rather than by the
   // section, because two open tabs of the same section are the normal case
   // here — comparing candidates is the whole job.

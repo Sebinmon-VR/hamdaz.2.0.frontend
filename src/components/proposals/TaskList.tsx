@@ -4,7 +4,7 @@ import clsx from "clsx";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { ExternalLink, FileText, Flame, ListChecks, ScanSearch, Workflow } from "lucide-react";
+import { ExternalLink, FileText, Flame, ListChecks, ScanSearch } from "lucide-react";
 import { date, humanise, truncate } from "@/lib/format";
 import { useMaybeSession } from "@/lib/session";
 import type { ColumnOut, TaskOut } from "@/lib/types";
@@ -14,7 +14,6 @@ import { Empty, Modal } from "@/components/ui/feedback";
 import { DueChip } from "@/components/widgets";
 import { Countdown, bcdInstant } from "@/components/ui/Countdown";
 import { AttachmentMark, TaskAttachments } from "@/components/proposals/TaskAttachments";
-import { TaskWorkflow } from "@/components/proposals/TaskWorkflow";
 
 type Filter = "all" | "live" | "due_soon" | "overdue" | "closed" | "done";
 
@@ -65,16 +64,9 @@ export function classify(task: TaskOut, days: number | null, soonDays: number): 
 export function TaskList({
   tasks,
   soonDays = 7,
-  workflows = false,
 }: {
   tasks: TaskOut[];
   soonDays?: number;
-  /**
-   * Offer the way into a workflow on each open row. A link only: whether a
-   * run already exists on the task is one request per row to find out, and
-   * the Workflows screen answers it the moment the flow is picked.
-   */
-  workflows?: boolean;
 }) {
   const [filter, setFilter] = useState<Filter>("live");
   const [status, setStatus] = useState<string>("any");
@@ -230,17 +222,6 @@ export function TaskList({
                       </p>
                     </div>
                     <AttachmentMark task={task} />
-                    {workflows && task.is_open && (
-                      <Link
-                        href={`/workflows?task=${encodeURIComponent(task.id)}`}
-                        onClick={(e) => e.stopPropagation()}
-                        aria-label="Run a workflow on this task"
-                        title="Run a workflow on this task"
-                        className="grid size-7 shrink-0 place-items-center rounded-full text-ink-4 transition hover:bg-panel-2 hover:text-ink"
-                      >
-                        <Workflow className="size-3.5" strokeWidth={2} />
-                      </Link>
-                    )}
                     {task.status && <Badge>{task.status}</Badge>}
                     {task.priority && (
                       <Badge tone={/high|urgent/i.test(task.priority) ? "danger" : "neutral"}>
@@ -390,11 +371,6 @@ export function TaskFacts({ task }: { task: TaskOut }) {
           )}
 
           <TaskAttachments task={task} />
-
-          {/* What the workflow has found for this task — the items, the
-              suppliers, the quote — and where it has got to. Shows nothing
-              for a person without the Workflows module. */}
-          <TaskWorkflow task={task} />
 
           <p className="text-[11.5px] text-ink-4">
             Last changed {date(task.modified_at)} · created {date(task.created_at)} ·{" "}

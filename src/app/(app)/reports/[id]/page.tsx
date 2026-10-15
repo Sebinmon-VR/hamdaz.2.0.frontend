@@ -54,7 +54,6 @@ import {
   ScopeBadge,
   SEVERITY_LABELS,
 } from "@/components/reports/ReportBits";
-import { ReportBrief } from "@/components/reports/ReportBrief";
 import { ReportView } from "@/components/reports/ReportView";
 import {
   NoProjectLines,
@@ -868,13 +867,6 @@ function Reader({ report, onChanged }: { report: ReportOut; onChanged: () => voi
           your next report.
         </InlineNotice>
       )}
-
-      {/* Above the report, not instead of it. A manager reading nine of these
-          wants the short version first and the document underneath the moment
-          the short version worries them. Draws nothing at all when the
-          summariser is off, so a team that has not turned it on sees the
-          screen it has always seen. */}
-      <ReportBrief reportId={report.id} />
 
       <ReportView report={report} />
 
