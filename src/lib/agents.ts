@@ -9,11 +9,17 @@
  * store below for SWR calls is the whole of the migration.
  *
  * **Blocks are code; an agent's steps are data.** The catalogue below is what
- * the builder offers and what the engine will one day run. Every block that
- * would act on the outside world drafts rather than acts — the person who owns
- * the agent sends, submits and approves. That is a decision, not a gap.
+ * the builder offers and what the engine runs. Every block that would act on
+ * the outside world drafts rather than acts, with one exception: "Send the
+ * emails, once I say yes" sends — only the drafts its owner ticks, from their
+ * own mailbox, after asking in Teams and in the app.
+ *
+ * **Nova** (``systemKey: "nova"``) is the agent the presales team is given:
+ * defined by the backend, the same for everyone, never edited here — only
+ * switched off.
  */
 
+import { AGENTS_ENABLED } from "@/lib/features";
 import { useCallback, useEffect, useMemo } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/api";
@@ -25,6 +31,7 @@ import {
   FileOutput,
   FileSearch,
   FileText,
+  FolderInput,
   Gavel,
   GitBranch,
   Hourglass,
@@ -39,6 +46,7 @@ import {
   Scale,
   ScrollText,
   Search,
+  Send,
   ShieldCheck,
   Sparkles,
   Timer,
@@ -128,6 +136,11 @@ export const STARTER_AVATARS: AvatarSpec[] = [
   { body: "heart", colour: "pink", eyes: "dots", mouth: "none", accessory: "shades" },
 ];
 
+/** Names one look, for the saved face picture: a new look, a new picture. */
+export function faceKeyOf(spec: AvatarSpec): string {
+  return ["v1", spec.body, spec.colour, spec.eyes, spec.mouth, spec.accessory].join(".");
+}
+
 export function randomAvatar(): AvatarSpec {
   const pick = <T,>(list: readonly T[]) => list[Math.floor(Math.random() * list.length)];
   const body = pick(BLOB_BODIES);
@@ -167,7 +180,7 @@ export const BLOCK_GROUPS: { key: BlockGroup; label: string; hint: string }[] = 
   { key: "read", label: "Read", hint: "Gather what it needs from the app." },
   { key: "think", label: "Think", hint: "Work something out." },
   { key: "ask", label: "Ask you", hint: "Stop and check with you." },
-  { key: "act", label: "Draft", hint: "Prepare work for you. It never sends on its own." },
+  { key: "act", label: "Draft & send", hint: "Prepare work for you. Nothing is sent unless you say yes." },
   { key: "wait", label: "Wait", hint: "Hold until something happens." },
 ];
 
@@ -217,7 +230,7 @@ export const BLOCKS: BlockDef[] = [
     kind: "start_new_task",
     group: "start",
     name: "A task is assigned to me",
-    blurb: "A new Proposals task lands in your name.",
+    blurb: "A new Proposals task lands in your name — it starts on its own.",
     icon: ListChecks,
     fields: [
       {
@@ -469,6 +482,23 @@ export const BLOCKS: BlockDef[] = [
 
   // ── ask ──
   {
+    kind: "ask_documents",
+    group: "ask",
+    name: "Ask for the documents",
+    blurb: "Starts at once if the task has them; otherwise asks you in Teams and waits.",
+    icon: FolderInput,
+    fields: [
+      {
+        key: "days",
+        label: "Give up after (days)",
+        type: "number",
+        default: 3,
+        help: "It looks in the task's folder every couple of minutes, so dropping the files there is enough.",
+      },
+    ],
+    describe: (c) => `From the task, or asks you · waits up to ${c.days ?? 3} day${Number(c.days ?? 3) === 1 ? "" : "s"}`,
+  },
+  {
     kind: "ask_me",
     group: "ask",
     name: "Ask me",
@@ -531,6 +561,15 @@ export const BLOCKS: BlockDef[] = [
     },
   },
   {
+    kind: "send_emails",
+    group: "act",
+    name: "Send the emails, once I say yes",
+    blurb: "Asks you in Teams with a tick beside each draft, then sends the ticked ones from your mailbox.",
+    icon: Send,
+    fields: [],
+    describe: () => "After your yes, from your own mailbox",
+  },
+  {
     kind: "draft_quote_request",
     group: "act",
     name: "Draft a quote request",
@@ -577,12 +616,12 @@ export const BLOCKS: BlockDef[] = [
         key: "via",
         label: "How",
         type: "select",
-        options: opts(["app", "In the app"], ["email", "Email to me"], ["both", "Both"]),
+        options: opts(["app", "In the app"], ["teams", "In Teams"], ["both", "In the app and Teams"]),
         default: "app",
       },
       { key: "message", label: "Message", type: "textarea", placeholder: "Leave empty and it says what it did." },
     ],
-    describe: (c) => `${({ app: "In the app", email: "By email", both: "In the app and by email" })[str(c.via)] ?? "In the app"}${str(c.message) ? ` · ${str(c.message)}` : ""}`,
+    describe: (c) => `${({ app: "In the app", teams: "In Teams", both: "In the app and Teams", email: "By email" })[str(c.via)] ?? "In the app"}${str(c.message) ? ` · ${str(c.message)}` : ""}`,
   },
 
   // ── wait ──
@@ -666,6 +705,12 @@ export interface Agent {
   instructions: string;
   /** The first step is always the trigger, when there is one. */
   steps: Step[];
+  /** "nova" for the presales team's agent — the app's, not editable. */
+  systemKey: string | null;
+  /** Whether its trigger starts it on its own. */
+  alwaysOn: boolean;
+  /** The look its saved face picture (for Teams cards) was drawn from. */
+  faceKey: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -697,6 +742,9 @@ export function blankAgent(): Agent {
     avatar: randomAvatar(),
     instructions: "",
     steps: [],
+    systemKey: null,
+    alwaysOn: true,
+    faceKey: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -705,6 +753,11 @@ export function blankAgent(): Agent {
 export function triggerOf(agent: Pick<Agent, "steps">): Step | null {
   const first = agent.steps[0];
   return first && BLOCKS_BY_KIND[first.kind]?.group === "start" ? first : null;
+}
+
+/** Starts on its own: its trigger is a task being assigned, and it is switched on. */
+export function startsOnItsOwn(agent: Pick<Agent, "steps" | "alwaysOn">): boolean {
+  return agent.alwaysOn && triggerOf(agent)?.kind === "start_new_task";
 }
 
 export function describeStep(step: Step): string {
@@ -763,22 +816,18 @@ export const TEMPLATES: AgentTemplate[] = [
     icon: Bot,
     role: "Prepares RFQs and draft quotes for my presales tasks",
     instructions:
-      "When I get a new presales task, read what the customer wants, find suppliers who can supply it, " +
-      "and draft the RFQ emails for me to send. When replies come in, compare them and draft the quote. " +
-      "Check with me before contacting anyone.",
+      "When I get a new presales task, ask me for its documents if they are not there, read what the customer " +
+      "wants, find suppliers who can supply it, and draft the RFQ emails. Check with me before contacting anyone, " +
+      "and send only the ones I tick.",
     steps: [
       ["start_new_task"],
+      ["ask_documents"],
       ["read_documents"],
       ["extract_requirements"],
       ["lookup_history"],
-      ["find_suppliers"],
-      ["ask_me", { question: "Here is the supplier shortlist. Remove any we should not contact.", mode: "review" }],
+      ["find_suppliers", { web: true }],
       ["draft_email", { to: "suppliers", subject: "RFQ — {task title}", body: "Ask for their best price, lead time and validity for the items." }],
-      ["wait_replies"],
-      ["read_supplier_quotes"],
-      ["compare_quotes"],
-      ["draft_quote_request"],
-      ["notify_me", { message: "The draft quote is ready for you to check." }],
+      ["send_emails"],
     ],
   },
   {
@@ -849,7 +898,9 @@ const SUGGESTIONS: [RegExp, string, StepConfig?][] = [
   [/\bmy (open )?tasks|what is due|overdue/i, "lookup_tasks"],
   [/\b(past|previous|before|history|last time)\b.*\bquote/i, "lookup_history"],
   [/\bfind\b.*\bsuppliers?|supplier shortlist|who can supply/i, "find_suppliers"],
+  [/\b(share|send me|ask (me )?for)\b.*\b(documents?|docs|files|rfq)\b/i, "ask_documents"],
   [/\b(draft|write)\b.*\b(rfq|e-?mail|mail|reminder)|rfq e-?mails?/i, "draft_email"],
+  [/\bsend (them|the (e-?mails?|mails|rfqs?))\b|\b(ask|permission) (me )?before sending\b/i, "send_emails"],
   [/\bwait\b.*\brepl|replies come in|when .* repl/i, "wait_replies"],
   [/\bread\b.*\b(their|supplier)\b.*\bquotes?|repl(y|ies)\b.*\bquotes?/i, "read_supplier_quotes"],
   [/\bcompare\b/i, "compare_quotes"],
@@ -901,6 +952,9 @@ interface AgentApi {
   avatar: unknown;
   instructions: string;
   steps: Step[];
+  system_key: string | null;
+  always_on: boolean;
+  face_key: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -913,6 +967,9 @@ function fromApi(a: AgentApi): Agent {
     avatar: normalizeAvatar(a.avatar),
     instructions: a.instructions,
     steps: a.steps ?? [],
+    systemKey: a.system_key ?? null,
+    alwaysOn: a.always_on ?? true,
+    faceKey: a.face_key ?? null,
     createdAt: a.created_at,
     updatedAt: a.updated_at,
   };
@@ -968,7 +1025,8 @@ async function moveLocalAgents(userId: string, known: Agent[], refresh: () => vo
 }
 
 export function useAgents(userId: string) {
-  const { data, error, isLoading, mutate } = useSWR<AgentApi[]>(userId ? "/agents" : null);
+  // Nothing asked of the API while agents are paused: it does not serve /agents.
+  const { data, error, isLoading, mutate } = useSWR<AgentApi[]>(AGENTS_ENABLED && userId ? "/agents" : null);
   const agents = useMemo(() => (data ? data.map(fromApi) : EMPTY), [data]);
 
   useEffect(() => {
@@ -986,6 +1044,22 @@ export function useAgents(userId: string) {
     [mutate],
   );
 
+  /** Let its trigger start it on its own, or not. */
+  const switchOn = useCallback(
+    async (id: string, on: boolean) => {
+      await api.put(`/agents/${id}/always-on`, { always_on: on });
+      await mutate();
+    },
+    [mutate],
+  );
+
+  /** Nova, the presales team's agent — added only when asked for. */
+  const addNova = useCallback(async (): Promise<Agent> => {
+    const saved = await api.post<AgentApi>("/agents/nova");
+    await mutate();
+    return fromApi(saved);
+  }, [mutate]);
+
   const remove = useCallback(
     async (id: string) => {
       await api.del(`/agents/${id}`);
@@ -1001,6 +1075,8 @@ export function useAgents(userId: string) {
       const copy: Agent = {
         ...source,
         id: newId(),
+        systemKey: null,
+        faceKey: null,
         name: `${source.name} (copy)`.slice(0, 80),
         steps: source.steps.map((s) => ({ ...s, id: newId(), config: { ...s.config } })),
       };
@@ -1011,7 +1087,7 @@ export function useAgents(userId: string) {
     [agents, mutate],
   );
 
-  return { agents, error, loading: isLoading && !data, save, remove, duplicate };
+  return { agents, error, loading: isLoading && !data, save, remove, duplicate, switchOn, addNova };
 }
 
 /* ── runs ────────────────────────────────────────────────────────────── */
@@ -1048,13 +1124,42 @@ export interface RunSummary {
   status: RunStatus;
   summary: string | null;
   cost_usd: string;
+  /** hand — started with Run; trigger — started on its own when the task was assigned. */
+  started_by: "hand" | "trigger";
   created_at: string;
   finished_at: string | null;
 }
 
+/** A draft on a "send these emails?" question. */
+export interface QuestionDraft {
+  n: number;
+  to_name: string | null;
+  to_email: string | null;
+  subject: string | null;
+  /** The email's text, as drafted. */
+  body?: string;
+  sendable: boolean;
+}
+
+export interface RunQuestion {
+  title: string;
+  message?: string | null;
+  /** review | answer | files — and docs (share the documents), send (send these emails?) */
+  mode?: string;
+  step_id: string;
+  about_step_id?: string | null;
+  folder_url?: string | null;
+  drafts?: QuestionDraft[];
+  /** Test mode: every email goes to this one inbox, never to the supplier. */
+  test_to?: string | null;
+  /** Asked in Teams as well. */
+  teams?: boolean;
+  answer?: unknown;
+}
+
 export interface Run extends RunSummary {
   results: StepResult[];
-  question: { title: string; message?: string | null; mode?: string; step_id: string; about_step_id?: string | null } | null;
+  question: RunQuestion | null;
   error: string | null;
   model: string | null;
   input_tokens: number;
@@ -1072,7 +1177,7 @@ export interface RecentRun extends RunSummary {
 
 /** Your latest runs, the ones waiting for you first. Polled gently, for the badge. */
 export function useRecentRuns(enabled = true) {
-  return useSWR<RecentRun[]>(enabled ? "/agents/runs/recent" : null, {
+  return useSWR<RecentRun[]>(AGENTS_ENABLED && enabled ? "/agents/runs/recent" : null, {
     refreshInterval: 30_000,
     dedupingInterval: 10_000,
     shouldRetryOnError: false,
@@ -1092,12 +1197,53 @@ export interface AgentStatus {
   effort: string;
   configured: boolean;
   web_allowed: boolean;
+  /** Agents start on their own when a task is assigned. */
+  triggers_on: boolean;
+  /** Questions and results go to Teams. */
+  teams_on: boolean;
+  /** In presales and has not added Nova: offered, never given unasked. */
+  nova_available: boolean;
 }
 
 export const isLive = (status: RunStatus | undefined) => status === "running" || status === "waiting";
 
 export function useRuns(agentId: string | null) {
   return useSWR<RunSummary[]>(agentId ? `/agents/${agentId}/runs` : null, { dedupingInterval: 2_000 });
+}
+
+/** One RFQ an agent sent, and what became of it: the reply, their quote, approval. */
+export interface Rfq {
+  id: string;
+  run_id: string;
+  task_title: string | null;
+  supplier_name: string | null;
+  supplier_email: string;
+  /** Where it really went — the test inbox, in test mode. */
+  sent_to: string;
+  subject: string;
+  sent_at: string;
+  status: "waiting" | "replied" | "taking" | "taken" | "declined" | "submitted" | "failed";
+  reply: { subject?: string; preview?: string; received?: string; attachments?: string[]; from?: { name?: string; address?: string } } | null;
+  quote_request_id: string | null;
+  report: {
+    currency?: string;
+    quoted?: string;
+    landed?: string;
+    margin?: string;
+    margin_percent?: string | null;
+    lines?: number;
+    recommendation?: string;
+    warnings?: string[];
+    missing?: string | null;
+  } | null;
+  note: string | null;
+}
+
+/** A run's RFQs, followed while any is waiting on a reply or being worked on. */
+export function useRfqs(runId: string | null) {
+  return useSWR<Rfq[]>(runId ? `/agents/runs/${runId}/rfqs` : null, {
+    refreshInterval: (latest) => (latest?.some((r) => r.status === "waiting" || r.status === "taking") ? 20_000 : 0),
+  });
 }
 
 /** A run, followed while it works: every second and a half, then not at all. */

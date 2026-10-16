@@ -10,6 +10,7 @@ import { FetchDot } from "@/components/shell/RouteProgress";
 import { FitText } from "@/components/ui/FitText";
 import { NextMeeting } from "@/components/meetings/NextMeeting";
 import { CompanionDock } from "@/components/agents/Companion";
+import { AGENTS_ENABLED } from "@/lib/features";
 
 /* ── surfaces ────────────────────────────────────────────────────────── */
 
@@ -702,8 +703,9 @@ export function PageHead({
             you already are. It draws nothing when the calendar is clear, so
             the bar is unchanged on a day with no meetings. */}
         <NextMeeting />
-        {/* The viewer's agent, on every screen. Drag it down and it follows. */}
-        <CompanionDock />
+        {/* The viewer's agent, on every screen. Drag it down and it follows.
+            Not while agents are paused (lib/features). */}
+        {AGENTS_ENABLED && <CompanionDock />}
         {faces && <span className="flex shrink-0 items-center">{faces}</span>}
         {actions && (
           <span className="flex shrink-0 items-center gap-2">{actions}</span>

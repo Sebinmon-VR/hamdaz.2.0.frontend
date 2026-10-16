@@ -51,6 +51,9 @@ import { AgentAvatar } from "@/components/agents/AgentAvatar";
  * What it does can be written, built from blocks, or both. The words are kept
  * either way: the blocks are the steps, the words are how the person wants
  * them done, and the model will read the two together.
+ *
+ * Nova, the presales team's agent, is the app's and not editable: it opens on
+ * how it works and its runs, and nothing else.
  */
 
 type Stage = "who" | "job" | "review" | "run";
@@ -62,6 +65,11 @@ const BUILD: { key: Stage; label: string }[] = [
 ];
 /** A saved agent can also be run; a new one has to exist first. */
 const SAVED: { key: Stage; label: string }[] = [...BUILD, { key: "run", label: "Run it" }];
+/** The team's agent: how it works, and its runs. */
+const SYSTEM: { key: Stage; label: string }[] = [
+  { key: "job", label: "How it works" },
+  { key: "run", label: "Its runs" },
+];
 
 /** ?run=<id> opens a run straight away — the link a notification carries. */
 function runInUrl(): string | null {
@@ -78,7 +86,8 @@ export function AgentEditor({ initial, isNew }: { initial: Agent; isNew: boolean
 
   const [agent, setAgent] = useState<Agent>(initial);
   const [saved, setSaved] = useState<string>(() => JSON.stringify(initial));
-  const STAGES = isNew ? BUILD : SAVED;
+  const locked = Boolean(agent.systemKey);
+  const STAGES = isNew ? BUILD : locked ? SYSTEM : SAVED;
   const [openRun] = useState(runInUrl);
   // A saved agent opens on its runs: running it is what people come back for.
   const [stage, setStage] = useState<Stage>(isNew ? "who" : "run");
@@ -129,7 +138,7 @@ export function AgentEditor({ initial, isNew }: { initial: Agent; isNew: boolean
         actions={
           <>
             {!isNew && dirty && <span className="micro hidden text-warn sm:inline">Unsaved</span>}
-            <Button
+            {!locked && <Button
               variant="accent"
               size="sm"
               icon={flash ? Check : Save}
@@ -138,7 +147,7 @@ export function AgentEditor({ initial, isNew }: { initial: Agent; isNew: boolean
               onClick={commit}
             >
               {isNew ? "Create agent" : flash ? "Saved" : "Save"}
-            </Button>
+            </Button>}
           </>
         }
       />
@@ -181,7 +190,8 @@ export function AgentEditor({ initial, isNew }: { initial: Agent; isNew: boolean
       {stage === "run" && !isNew && (
         <RunPanel agent={agent} dirty={dirty} initialRunId={openRun} onSave={commit} saving={saving} />
       )}
-      {stage === "job" && (
+      {stage === "job" && locked && <SystemJob agent={agent} />}
+      {stage === "job" && !locked && (
         <JobStage
           agent={agent}
           set={set}
@@ -554,6 +564,53 @@ function MiniStep({ step, index, active, done }: { step: Step; index: number; ac
         <span className="block truncate text-[11.5px] text-ink-4">{describeStep(step)}</span>
       </span>
     </li>
+  );
+}
+
+/** The team's agent, read-only: what it does, step by step, and how it talks to you. */
+function SystemJob({ agent }: { agent: Agent }) {
+  return (
+    <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+      <Panel className="p-5">
+        <div className="flex items-start gap-4">
+          <AgentAvatar spec={agent.avatar} size={88} />
+          <div className="min-w-0 pt-1">
+            <h3 className="text-[18px] font-bold tracking-tight">{agent.name}</h3>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3">{agent.role}</p>
+          </div>
+        </div>
+        <p className="mt-5 whitespace-pre-line rounded-[14px] bg-panel-2 px-4 py-3 text-[13px] leading-relaxed text-ink-2">
+          {agent.instructions}
+        </p>
+        <ul className="mt-4 space-y-2 text-[12.5px] leading-relaxed text-ink-3">
+          <li>
+            <span className="font-semibold text-ink">It talks to you in Teams.</span> When a task lands on you it asks
+            for the documents there, and before sending anything it shows you the drafts with a tick beside each.
+          </li>
+          <li>
+            <span className="font-semibold text-ink">Emails go from your own mailbox</span>, only the ones you tick, and
+            sit in your Sent Items; replies come to you.
+          </li>
+          <li>
+            <span className="font-semibold text-ink">Then it watches for the replies.</span> When a supplier answers it
+            tells you in Teams; say &ldquo;take their quote&rdquo; and it puts it on the task&apos;s quote request, priced,
+            with the costing report — and sends it for approval when you say so.
+          </li>
+          <li>
+            <span className="font-semibold text-ink">Everyone in presales has the same Nova.</span> Its job is set by the
+            app, so it cannot be edited — switch it off on My agents if you would rather run it by hand.
+          </li>
+        </ul>
+      </Panel>
+      <Panel className="p-5">
+        <PanelHead title="What it does" count={agent.steps.length} />
+        <ol className="mt-3 space-y-1.5">
+          {agent.steps.map((step, i) => (
+            <MiniStep key={step.id} step={step} index={i} />
+          ))}
+        </ol>
+      </Panel>
+    </div>
   );
 }
 

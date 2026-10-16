@@ -11,15 +11,21 @@ import {
   Copy,
   ExternalLink,
   FileText,
+  FolderOpen,
   Hourglass,
   Loader2,
   Mail,
+  MessageSquare,
   Minus,
+  PenLine,
   Play,
   Save,
+  Send,
   Sparkles,
   Square,
+  Upload,
   X,
+  Zap,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { dateShort, relative } from "@/lib/format";
@@ -27,17 +33,20 @@ import {
   BLOCKS_BY_KIND,
   GROUP_TONE,
   isLive,
+  startsOnItsOwn,
+  useRfqs,
   useRun,
   useRuns,
   type Agent,
   type AgentStatus,
   type AgentTask,
+  type Rfq,
   type Run,
   type RunStatus,
   type Source,
   type StepResult,
 } from "@/lib/agents";
-import { Button, FileDrop, SearchInput, Textarea } from "@/components/ui/controls";
+import { Button, FileDrop, Input, SearchInput, Textarea } from "@/components/ui/controls";
 import { Empty, ErrorState, InlineNotice, RowsSkeleton } from "@/components/ui/feedback";
 import { Badge, Panel, PanelHead, type Tone } from "@/components/ui/primitives";
 import { AgentAvatar } from "@/components/agents/AgentAvatar";
@@ -48,7 +57,8 @@ import { AgentAvatar } from "@/components/agents/AgentAvatar";
  * Each step lands as it finishes, with what it produced, where every fact
  * came from, and whether the AI model was used (and what it cost) — so the
  * page answers "is this right?" and "what did that cost?" without anybody
- * asking. A step that waits for you shows its question at the top.
+ * asking. A step that waits for you shows its question at the top — the same
+ * question it asked in Teams, answerable from either.
  */
 
 /** Blocks that may reach the model at all; everything else is the app alone. */
@@ -105,7 +115,10 @@ export function RunPanel({
                 >
                   <StatusDot status={r.status} />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[12.5px] font-medium">{r.task_title || "Files only"}</span>
+                    <span className="flex items-center gap-1.5 text-[12.5px] font-medium">
+                      <span className="truncate">{r.task_title || "Files only"}</span>
+                      {r.started_by === "trigger" && <Zap className="size-3 shrink-0 text-info" aria-label="Started on its own" />}
+                    </span>
                     <span className={clsx("block text-[11px]", r.id === selected ? "text-row-ink-2" : "text-ink-4")}>
                       {relative(r.created_at)} · {cost(r.cost_usd)}
                     </span>
@@ -122,10 +135,13 @@ export function RunPanel({
       ) : (
         <Panel className="flex flex-col items-center justify-center px-6 py-16 text-center">
           <AgentAvatar spec={agent.avatar} size={120} />
-          <p className="mt-5 text-[15px] font-semibold">Pick a task and press Run</p>
+          <p className="mt-5 text-[15px] font-semibold">
+            {startsOnItsOwn(agent) ? "It starts on its own" : "Pick a task and press Run"}
+          </p>
           <p className="mt-2 max-w-sm text-[12.5px] leading-relaxed text-ink-3">
-            {agent.name || "Your agent"} works through its steps on that task. You will see each result here, with where
-            it came from.
+            {startsOnItsOwn(agent)
+              ? `When a task is assigned to you, ${agent.name || "your agent"} asks you in Teams for its documents and gets to work. Its runs show up here.`
+              : `${agent.name || "Your agent"} works through its steps on that task. You will see each result here, with where it came from.`}
           </p>
         </Panel>
       )}
@@ -155,6 +171,9 @@ function StartPanel({
   const [files, setFiles] = useState<File[]>([]);
   const [starting, setStarting] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
+  // Try the always-on start on a task already in the list.
+  const [asAssigned, setAsAssigned] = useState(false);
+  const canPretend = agent.steps[0]?.kind === "start_new_task";
 
   const needle = search.trim().toLowerCase();
   const shown = (tasks.data ?? []).filter((t) => !needle || `${t.title} ${t.end_user ?? ""}`.toLowerCase().includes(needle));
@@ -166,6 +185,7 @@ function StartPanel({
     try {
       const form = new FormData();
       if (taskId) form.append("task_id", taskId);
+      if (taskId && canPretend && asAssigned) form.append("as_assigned", "true");
       for (const f of files) form.append("files", f);
       const started = await api.upload<Run>(`/agents/${agent.id}/runs`, form);
       setFiles([]);
@@ -179,7 +199,8 @@ function StartPanel({
 
   return (
     <Panel className="p-4">
-      <PanelHead title="Run it on" />
+      {startsOnItsOwn(agent) && <AloneNote agent={agent} status={status.data} />}
+      <PanelHead title={startsOnItsOwn(agent) ? "Or run it now on" : "Run it on"} />
       {dirty && (
         <div className="mt-3 flex items-center gap-2 rounded-[12px] bg-warn-soft px-3 py-2 text-[12px] text-warn">
           <span className="flex-1">Unsaved changes — a run uses the saved version.</span>
@@ -235,6 +256,23 @@ function StartPanel({
         </ul>
       )}
 
+      {canPretend && taskId && (
+        <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-[12px] bg-panel-2 px-3 py-2.5 text-[12px]">
+          <input
+            type="checkbox"
+            className="mt-0.5 size-4 accent-[var(--accent)]"
+            checked={asAssigned}
+            onChange={(e) => setAsAssigned(e.target.checked)}
+          />
+          <span>
+            <span className="block font-medium">As if it was just assigned to me</span>
+            <span className="block text-ink-4">
+              To try the always-on start: it says it is on it, or asks you for the documents, just as it would for a new task.
+            </span>
+          </span>
+        </label>
+      )}
+
       {failed && <InlineNotice tone="danger" className="mt-3">{failed}</InlineNotice>}
 
       <Button
@@ -262,6 +300,27 @@ function StartPanel({
         )}
       </p>
     </Panel>
+  );
+}
+
+/** What an always-on agent does without being asked, and whether this server lets it. */
+function AloneNote({ agent, status }: { agent: Agent; status: AgentStatus | undefined }) {
+  return (
+    <div className="mb-4 rounded-[14px] bg-info-soft px-3.5 py-3 text-[12px] leading-relaxed text-info">
+      <p className="flex items-center gap-1.5 font-semibold">
+        <Zap className="size-3.5" /> Always on
+      </p>
+      <p className="mt-1 text-ink-2">
+        When a task is assigned to you, {agent.name || "it"} starts on its own: it asks you in Teams for the documents,
+        works through its steps, and asks again before sending anything.
+      </p>
+      {status && !status.triggers_on && (
+        <p className="mt-1.5 text-warn">Starting on its own is switched off on this server for now — run it by hand below.</p>
+      )}
+      {status && !status.teams_on && (
+        <p className="mt-1.5 text-warn">Teams is not connected on this server, so it asks you here and in the bell instead.</p>
+      )}
+    </div>
   );
 }
 
@@ -318,6 +377,11 @@ function RunView({ runId, agent, onChanged }: { runId: string; agent: Agent; onC
             </div>
             <h3 className="mt-1.5 text-[17px] font-semibold tracking-tight">{run.task_title || "Files only"}</h3>
             <p className="mt-1 text-[11.5px] text-ink-4">
+              {run.started_by === "trigger" && (
+                <span className="text-info">
+                  <Zap className="mb-px inline size-3" /> Started on its own when the task was assigned ·{" "}
+                </span>
+              )}
               {aiUse(run)} · {cost(run.cost_usd)}
             </p>
           </div>
@@ -344,6 +408,8 @@ function RunView({ runId, agent, onChanged }: { runId: string; agent: Agent; onC
         <QuestionCard run={run} onAnswered={() => void mutate()} />
       )}
 
+      {run.results.some((r) => r.kind === "send_emails" && r.status === "done") && <RepliesPanel run={run} />}
+
       <div className="space-y-2">
         {run.results.length === 0 && live && (
           <Panel className="flex items-center gap-3 p-5 text-[12.5px] text-ink-3">
@@ -359,6 +425,22 @@ function RunView({ runId, agent, onChanged }: { runId: string; agent: Agent; onC
 }
 
 function QuestionCard({ run, onAnswered }: { run: Run; onAnswered: () => void }) {
+  if (run.question?.mode === "docs") return <DocsQuestion run={run} onAnswered={onAnswered} />;
+  if (run.question?.mode === "send") return <SendQuestion run={run} onAnswered={onAnswered} />;
+  return <PlainQuestion run={run} onAnswered={onAnswered} />;
+}
+
+/** "Asked in Teams too" — so nobody answers twice wondering which counts. */
+function AlsoInTeams({ run }: { run: Run }) {
+  if (!run.question?.teams) return null;
+  return (
+    <p className="mt-2 flex items-center gap-1.5 text-[11.5px] text-ink-4">
+      <MessageSquare className="size-3.5" /> Also asked in Teams — answer there or here, whichever is first.
+    </p>
+  );
+}
+
+function PlainQuestion({ run, onAnswered }: { run: Run; onAnswered: () => void }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState<"go" | "stop" | null>(null);
   const q = run.question!;
@@ -379,6 +461,7 @@ function QuestionCard({ run, onAnswered }: { run: Run; onAnswered: () => void })
       <p className="micro text-warn">Waiting for you</p>
       <h3 className="mt-1.5 text-[16px] font-semibold">{q.title}</h3>
       {q.message && <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-3">{q.message}</p>}
+      <AlsoInTeams run={run} />
       {/* What it is asking about, right here — not a scroll away. */}
       {about && Object.keys(about.output ?? {}).length > 0 && (
         <div className="mt-3 max-h-[320px] overflow-y-auto rounded-[14px] border border-line p-3">
@@ -400,6 +483,431 @@ function QuestionCard({ run, onAnswered }: { run: Run; onAnswered: () => void })
           Stop here
         </Button>
       </div>
+    </Panel>
+  );
+}
+
+/**
+ * "Can you share the documents?" — drop them here (they are filed into the
+ * task's folder, where the team finds them too), or put them in the folder
+ * yourself and say so. It looks in the folder on its own every couple of
+ * minutes as well.
+ */
+function DocsQuestion({ run, onAnswered }: { run: Run; onAnswered: () => void }) {
+  const q = run.question!;
+  const [files, setFiles] = useState<File[]>([]);
+  const [busy, setBusy] = useState<"file" | "go" | "stop" | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+
+  async function act(kind: "file" | "go" | "stop") {
+    setBusy(kind);
+    setFailed(null);
+    try {
+      if (kind === "file") {
+        const form = new FormData();
+        for (const f of files) form.append("files", f);
+        await api.upload(`/agents/runs/${run.id}/documents`, form);
+        setFiles([]);
+      } else {
+        await api.post(`/agents/runs/${run.id}/answer`, { go: kind === "go", text: "" });
+      }
+      onAnswered();
+    } catch (caught) {
+      setFailed(caught instanceof Error ? caught.message : "That did not go through.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Panel className="border-2 border-warn p-5">
+      <p className="micro text-warn">Waiting for the documents</p>
+      <h3 className="mt-1.5 text-[16px] font-semibold">{q.title}</h3>
+      {q.message && <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-3">{q.message}</p>}
+      <AlsoInTeams run={run} />
+      {q.folder_url && (
+        <a
+          href={q.folder_url}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 inline-flex h-9 items-center gap-2 rounded-[13px] border border-line px-3.5 text-[12.5px] font-medium text-ink-2 hover:border-line-strong hover:text-ink"
+        >
+          <FolderOpen className="size-4" /> Open the task folder <ExternalLink className="size-3 text-ink-4" />
+        </a>
+      )}
+      <FileDrop
+        className="mt-3"
+        onFiles={(picked) => setFiles((now) => [...now, ...picked].slice(0, 10))}
+        label="Or drop them here"
+        hint="They are filed into the task's folder, so the team has them too."
+      />
+      {files.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {files.map((f, i) => (
+            <li key={`${f.name}-${i}`} className="flex items-center gap-2 rounded-[10px] bg-panel-2 px-3 py-1.5 text-[12px]">
+              <FileText className="size-3.5 text-ink-4" />
+              <span className="min-w-0 flex-1 truncate">{f.name}</span>
+              <button aria-label={`Remove ${f.name}`} onClick={() => setFiles((now) => now.filter((_, n) => n !== i))} className="text-ink-4 hover:text-ink">
+                <X className="size-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {failed && <InlineNotice tone="danger" className="mt-3">{failed}</InlineNotice>}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {files.length > 0 ? (
+          <Button variant="accent" icon={Upload} loading={busy === "file"} disabled={busy !== null} onClick={() => act("file")}>
+            File {files.length === 1 ? "it" : `these ${files.length}`} and start
+          </Button>
+        ) : (
+          <Button variant="accent" icon={Check} loading={busy === "go"} disabled={busy !== null} onClick={() => act("go")}>
+            They&apos;re in — start
+          </Button>
+        )}
+        <Button variant="outline" icon={Ban} loading={busy === "stop"} disabled={busy !== null} onClick={() => act("stop")}>
+          Not needed
+        </Button>
+      </div>
+    </Panel>
+  );
+}
+
+const EMAIL = /^[^@\s,;<>]+@[^@\s,;<>]+\.[A-Za-z]{2,}$/;
+
+interface DraftEdit {
+  to_email: string;
+  subject: string;
+  body: string;
+}
+
+/**
+ * "Review these before they go" — the failsafe on supplier mail. Nothing is
+ * ticked to start with, and an email can only be ticked once it has been
+ * opened and read; any of it can be changed there. Sending asks once more,
+ * with the list of who gets what, and only then goes — as you. The server
+ * refuses a send without that confirmation.
+ */
+function SendQuestion({ run, onAnswered }: { run: Run; onAnswered: () => void }) {
+  const q = run.question!;
+  const drafts = q.drafts ?? [];
+  const drafted = run.results.find((r) => r.step_id === q.about_step_id) ?? [...run.results].reverse().find((r) => r.kind === "draft_email");
+  const full = (n: number) => list(drafted?.output.drafts).find((d, i) => Number(d.n ?? i) === n);
+  const [picked, setPicked] = useState<Set<number>>(() => new Set());
+  const [read, setRead] = useState<Set<number>>(() => new Set());
+  const [edits, setEdits] = useState<Record<number, DraftEdit>>({});
+  const [open, setOpen] = useState<number | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState<"go" | "stop" | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+
+  const testTo = q.test_to ?? null;
+  const current = (n: number): DraftEdit => {
+    const d = drafts.find((x) => x.n === n);
+    const body = full(n)?.body ?? d?.body;
+    return edits[n] ?? { to_email: d?.to_email ?? "", subject: d?.subject ?? "", body: body ? String(body) : "" };
+  };
+  const canSend = (n: number) => EMAIL.test(current(n).to_email.trim());
+  const chosen = [...picked].filter((n) => canSend(n) && read.has(n)).sort((a, b) => a - b);
+
+  function toggleOpen(n: number) {
+    setConfirming(false);
+    setOpen(open === n ? null : n);
+    setRead((r) => new Set(r).add(n));
+  }
+
+  function edit(n: number, patch: Partial<DraftEdit>) {
+    // A change after "Review and send" means confirming again, on the new text.
+    setConfirming(false);
+    setEdits((now) => ({ ...now, [n]: { ...current(n), ...patch } }));
+  }
+
+  async function answer(go: boolean) {
+    setBusy(go ? "go" : "stop");
+    setFailed(null);
+    try {
+      await api.post(`/agents/runs/${run.id}/answer`, {
+        go,
+        text,
+        picks: go ? chosen : [],
+        confirmed: go,
+        edits: Object.fromEntries(Object.entries(edits).map(([n, e]) => [n, { to_email: e.to_email.trim(), subject: e.subject, body: e.body }])),
+      });
+      onAnswered();
+    } catch (caught) {
+      setFailed(caught instanceof Error ? caught.message : "That did not go through.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Panel className="border-2 border-warn p-5">
+      <p className="micro text-warn">Nothing sent yet — review each email, then confirm</p>
+      <h3 className="mt-1.5 text-[16px] font-semibold">{q.title}</h3>
+      {testTo ? (
+        <p className="mt-2.5 rounded-[12px] bg-warn-soft px-3.5 py-2.5 text-[12.5px] font-semibold text-warn">
+          Test mode — every email goes to {testTo} only. No supplier receives anything.
+        </p>
+      ) : (
+        q.message && <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-3">{q.message}</p>
+      )}
+      <AlsoInTeams run={run} />
+      <ul className="mt-3 space-y-1.5">
+        {drafts.map((d) => {
+          const now = current(d.n);
+          const ok = canSend(d.n);
+          const seen = read.has(d.n);
+          const on = picked.has(d.n) && ok && seen;
+          return (
+            <li key={d.n} className={clsx("rounded-[14px] border p-3 transition", on ? "border-accent bg-accent-soft/40" : "border-line")}>
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-[var(--accent)]"
+                  checked={on}
+                  disabled={!ok || !seen}
+                  title={!seen ? "Read the email first" : undefined}
+                  aria-label={`Send to ${d.to_name ?? now.to_email}`}
+                  onChange={(e) => {
+                    setConfirming(false);
+                    setPicked((p) => {
+                      const next = new Set(p);
+                      if (e.target.checked) next.add(d.n);
+                      else next.delete(d.n);
+                      return next;
+                    });
+                  }}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-semibold">{d.to_name || now.to_email}</span>
+                  <span className="block truncate text-[11.5px] text-ink-4">
+                    {!ok ? (
+                      <span className="text-warn">No email address — add one to send it</span>
+                    ) : !seen ? (
+                      <span className="text-warn">Read it first — then you can tick it</span>
+                    ) : testTo ? (
+                      <>
+                        <span className="font-medium text-warn">Goes to {testTo}</span> · for {now.to_email}
+                      </>
+                    ) : (
+                      now.to_email
+                    )}{" "}
+                    · {now.subject}
+                  </span>
+                </span>
+                <Button size="sm" variant="ghost" icon={PenLine} onClick={() => toggleOpen(d.n)}>
+                  {open === d.n ? "Close" : "Read / edit"}
+                </Button>
+              </div>
+              {open === d.n && (
+                <div className="mt-3 space-y-2">
+                  <Input value={now.to_email} placeholder="Email address" onChange={(e) => edit(d.n, { to_email: e.target.value })} />
+                  <Input value={now.subject} placeholder="Subject" onChange={(e) => edit(d.n, { subject: e.target.value })} />
+                  <Textarea className="min-h-48 font-sans text-[12.5px]" value={now.body} onChange={(e) => edit(d.n, { body: e.target.value })} />
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <Textarea
+        className="mt-3 min-h-16"
+        placeholder="Anything to add (optional) — kept with the run, not put in the emails"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+      />
+      {failed && <InlineNotice tone="danger" className="mt-3">{failed}</InlineNotice>}
+      {confirming && chosen.length > 0 && (
+        <div className="mt-3 rounded-[14px] border-2 border-accent bg-accent-soft/40 p-3.5">
+          <p className="text-[13px] font-semibold">
+            Send these {chosen.length} email{chosen.length === 1 ? "" : "s"} from {testTo ? `your mailbox (test: all to ${testTo})` : "your mailbox"}?
+          </p>
+          <ul className="mt-2 space-y-1 text-[12px] text-ink-2">
+            {chosen.map((n) => {
+              const now = current(n);
+              const d = drafts.find((x) => x.n === n);
+              return (
+                <li key={n} className="truncate">
+                  <span className="font-semibold">{d?.to_name || now.to_email}</span> · {now.to_email}
+                  {edits[n] && <span className="text-accent-text"> · edited</span>} · {now.subject}
+                </li>
+              );
+            })}
+          </ul>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button variant="accent" icon={Send} loading={busy === "go"} disabled={busy !== null} onClick={() => answer(true)}>
+              Yes, send {chosen.length}
+            </Button>
+            <Button variant="ghost" disabled={busy !== null} onClick={() => setConfirming(false)}>
+              Go back
+            </Button>
+          </div>
+        </div>
+      )}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {!confirming && (
+          <Button variant="accent" icon={Send} disabled={busy !== null || chosen.length === 0} onClick={() => setConfirming(true)}>
+            Review and send {chosen.length}
+          </Button>
+        )}
+        <Button variant="outline" icon={Ban} loading={busy === "stop"} disabled={busy !== null} onClick={() => answer(false)}>
+          Don&apos;t send
+        </Button>
+        <span className="text-[11px] text-ink-4">
+          {testTo ? `Test mode: all to ${testTo}.` : "They go as you, and land in your Sent Items."}
+        </span>
+      </div>
+    </Panel>
+  );
+}
+
+/* ── after the RFQs ───────────────────────────────────────────────────── */
+
+const RFQ_STATUS: Record<Rfq["status"], { label: string; tone: Tone }> = {
+  waiting: { label: "Waiting for a reply", tone: "neutral" },
+  replied: { label: "Replied", tone: "warn" },
+  taking: { label: "Taking their quote…", tone: "info" },
+  taken: { label: "Quote taken", tone: "positive" },
+  declined: { label: "Not taken", tone: "neutral" },
+  submitted: { label: "Sent for approval", tone: "positive" },
+  failed: { label: "Could not finish", tone: "danger" },
+};
+
+/**
+ * The RFQs this run sent and what became of each: the reply when it comes,
+ * "take their quote" (onto the quote request, priced, report made), and
+ * "send for approval" — the same choices the Teams cards offer.
+ */
+function RepliesPanel({ run }: { run: Run }) {
+  const { data, mutate } = useRfqs(run.id);
+  const [checking, setChecking] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  if (!data || data.length === 0) return null;
+  const waiting = data.filter((r) => r.status === "waiting").length;
+
+  async function check() {
+    setChecking(true);
+    setFailed(null);
+    try {
+      await mutate(api.post<Rfq[]>(`/agents/runs/${run.id}/rfqs/check`), { revalidate: false });
+    } catch (caught) {
+      setFailed(caught instanceof Error ? caught.message : "Your inbox could not be read.");
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  async function act(rfq: Rfq, what: "take" | "approval", go: boolean) {
+    setBusy(`${rfq.id}:${what}:${go}`);
+    setFailed(null);
+    try {
+      await api.post(`/agents/rfqs/${rfq.id}/${what}`, { go });
+      // The work goes on in the background; look again shortly.
+      setTimeout(() => void mutate(), 1500);
+      setTimeout(() => void mutate(), 8000);
+      await mutate();
+    } catch (caught) {
+      setFailed(caught instanceof Error ? caught.message : "That did not go through.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Panel className="p-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <PanelHead title="Supplier replies" count={data.length} />
+        <span className="text-[11.5px] text-ink-4">
+          {waiting ? `Watching your inbox — ${waiting} still to reply` : "Everyone has replied or been answered"}
+        </span>
+        <Button size="sm" variant="outline" icon={Mail} loading={checking} className="ml-auto" onClick={check}>
+          Check for replies now
+        </Button>
+      </div>
+      {failed && <InlineNotice tone="danger" className="mt-3">{failed}</InlineNotice>}
+      <ul className="mt-3 space-y-2">
+        {data.map((r) => {
+          const state = RFQ_STATUS[r.status];
+          const test = r.sent_to.toLowerCase() !== r.supplier_email.toLowerCase();
+          const report = r.report;
+          return (
+            <li key={r.id} className={clsx("rounded-[14px] border p-3.5", r.status === "replied" ? "border-warn" : "border-line")}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[13px] font-semibold">{r.supplier_name || r.supplier_email}</span>
+                <Badge tone={state.tone} icon={r.status === "taking" ? Loader2 : undefined} className={r.status === "taking" ? "[&>svg]:animate-spin" : undefined}>
+                  {state.label}
+                </Badge>
+                <span className="ml-auto text-[11px] text-ink-4">
+                  {test ? `test inbox ${r.sent_to} · for ${r.supplier_email}` : r.supplier_email} · sent {relative(r.sent_at)}
+                </span>
+              </div>
+              {r.reply && (
+                <div className="mt-2 rounded-[12px] bg-panel-2 px-3 py-2">
+                  <p className="text-[11.5px] text-ink-4">
+                    {r.reply.subject} {r.reply.received && `· ${relative(r.reply.received)}`}
+                  </p>
+                  {r.reply.preview && <p className="mt-1 line-clamp-3 text-[12.5px] text-ink-2">{r.reply.preview}</p>}
+                  {(r.reply.attachments ?? []).length > 0 && (
+                    <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11.5px] text-ink-3">
+                      <FileText className="size-3.5" /> {(r.reply.attachments ?? []).join(", ")}
+                    </p>
+                  )}
+                </div>
+              )}
+              {report && (
+                <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
+                  <Fact label="Lines" small>{report.lines ?? 0}</Fact>
+                  <Fact label="We sell at" small>{report.quoted} {report.currency}</Fact>
+                  <Fact label="Landed cost" small>{report.landed} {report.currency}</Fact>
+                  <Fact label="Margin" small>
+                    {report.margin} {report.currency}
+                    {report.margin_percent ? ` (${Number(report.margin_percent).toFixed(1)}%)` : ""}
+                  </Fact>
+                </dl>
+              )}
+              {report?.warnings?.map((w, i) => (
+                <p key={i} className="mt-1 flex gap-1.5 text-[11.5px] text-warn">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> {w}
+                </p>
+              ))}
+              {r.note && <p className="mt-2 text-[12px] text-ink-3">{r.note}</p>}
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {(r.status === "replied" || r.status === "failed") && r.reply && (
+                  <>
+                    <Button size="sm" variant="accent" icon={Check} loading={busy === `${r.id}:take:true`} disabled={busy !== null} onClick={() => act(r, "take", true)}>
+                      {r.status === "failed" ? "Try again" : "Take their quote"}
+                    </Button>
+                    <Button size="sm" variant="outline" icon={Ban} loading={busy === `${r.id}:take:false`} disabled={busy !== null} onClick={() => act(r, "take", false)}>
+                      Not this one
+                    </Button>
+                  </>
+                )}
+                {r.status === "taken" && (
+                  <>
+                    <Button size="sm" variant="accent" icon={Send} loading={busy === `${r.id}:approval:true`} disabled={busy !== null} onClick={() => act(r, "approval", true)}>
+                      {test ? "Test: who would approve?" : "Send for approval"}
+                    </Button>
+                    <Button size="sm" variant="outline" loading={busy === `${r.id}:approval:false`} disabled={busy !== null} onClick={() => act(r, "approval", false)}>
+                      Not yet
+                    </Button>
+                  </>
+                )}
+                {r.quote_request_id && (
+                  <a
+                    href={`/quote-requests/${r.quote_request_id}`}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-[13px] border border-line px-3 text-[12px] text-ink-2 hover:border-line-strong hover:text-ink"
+                  >
+                    <ExternalLink className="size-3.5" /> Open the quote request
+                  </a>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
     </Panel>
   );
 }
@@ -700,6 +1208,45 @@ function Output({ kind, output }: { kind: string; output: Rec }) {
           />
         </div>
       );
+    case "ask_documents":
+      return (
+        <div className="space-y-2">
+          {strs(output.files).length > 0 && (
+            <ul className="space-y-0.5">
+              {strs(output.files).map((f, i) => (
+                <li key={i} className="flex items-center gap-2 text-[12px] text-ink-2">
+                  <FileText className="size-3.5 text-ink-4" /> {f}
+                </li>
+              ))}
+            </ul>
+          )}
+          {output.folder_url ? (
+            <a href={String(output.folder_url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11.5px] text-accent-text underline">
+              The task folder <ExternalLink className="size-3" />
+            </a>
+          ) : null}
+        </div>
+      );
+    case "send_emails":
+      return list(output.sent).length > 0 ? (
+        <Table
+          head={["To", "Subject", "Sent"]}
+          rows={list(output.sent).map((m) => [
+            <span key="t">
+              <span className="font-medium">{String(m.to_name ?? "")}</span>{" "}
+              <span className="text-ink-4">{String(m.to_email ?? "")}</span>
+            </span>,
+            String(m.subject ?? ""),
+            m.status === "sent" ? (
+              <span key="s" className="inline-flex items-center gap-1 text-positive"><Check className="size-3.5" /> Sent</span>
+            ) : (
+              <span key="s" className="text-danger">{String(m.error ?? m.status)}</span>
+            ),
+          ])}
+        />
+      ) : output.declined ? (
+        <p className="text-[12.5px] text-ink-3">You said don&apos;t send.</p>
+      ) : null;
     case "notify_me":
       return <p className="text-[12.5px]">{String(output.message ?? "")}</p>;
     case "ask_me":

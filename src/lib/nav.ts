@@ -11,6 +11,7 @@
  * because a pill row that wraps is a pill row that has stopped being one.
  */
 
+import { AGENTS_ENABLED } from "@/lib/features";
 import {
   Activity,
   AlarmClock,
@@ -83,10 +84,6 @@ export function buildNav(session: Session): Nav {
 
   const primary: NavItem[] = [
     { label: "Overview", href: "/dashboard", icon: GaugeCircle, match: "/dashboard" },
-    // Everybody's own, gated on nothing: an agent works for the person who
-    // made it. Frontend only for now — there is no module to grant yet, and
-    // when the backend arrives it should get a catalogue entry like the rest.
-    { label: "Agents", href: "/agents", icon: Bot, match: "/agents" },
   ];
   if (can("quotes")) {
     primary.push({ label: "Quotes", href: "/quotes", icon: ReceiptText, match: "/quotes" });
@@ -221,6 +218,11 @@ export function buildNav(session: Session): Nav {
       match: "/notifications",
       badge: "unread",
     },
+    // Everybody's own, gated on nothing: an agent works for the person who
+    // made it. Here rather than in the bar across the top — agents are
+    // something to build if you want one, not a page everybody is sent to.
+    // Hidden while agents are paused (lib/features).
+    ...(AGENTS_ENABLED ? [{ label: "Agents", href: "/agents", icon: Bot, match: "/agents" }] : []),
     {
       label: "Meetings",
       href: "/meetings",
