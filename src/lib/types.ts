@@ -4881,3 +4881,166 @@ export interface AribaBcdOut {
   site_timezone: string;
   rows: AribaBcdFixOut[];
 }
+
+/* ── mail watch (super admin) ─────────────────────────────────────────── */
+
+export type MailCategory = "new_tender" | "negotiation" | "general" | "confidential";
+
+export interface MailWatchSettingsOut {
+  enabled: boolean;
+  mailbox: string;
+  /** The settings' own list; empty means whoever holds the CEO role. */
+  senders: string[];
+  /** Who is actually watched now. */
+  watching: string[];
+  use_model: boolean;
+  watch_from: string | null;
+  has_bookmark: boolean;
+  subscription_id: string | null;
+  subscription_mailbox: string | null;
+  subscription_expires_at: string | null;
+  /** Where Graph posts, or why there is no such place here. */
+  notification_url: string | null;
+  last_notified_at: string | null;
+  last_read_at: string | null;
+  last_error: string | null;
+  mails_kept: number;
+}
+
+export interface MailWatchReadReport {
+  mailbox: string;
+  seen: number;
+  kept: number;
+  already: number;
+  senders: string[];
+  error: string | null;
+}
+
+/** What the classifier made of a mail — the same fields on a saved mail and a trial row. */
+export interface MailReading {
+  category: MailCategory | null;
+  kind: string | null;
+  stage: string | null;
+  decided_by: string | null;
+  reason: string | null;
+  confidence: number | null;
+  title: string | null;
+  customer: string | null;
+  ariba_doc: string | null;
+  closing_at: string | null;
+  original_sender: string | null;
+  model_cost_usd: string;
+}
+
+export interface WatchedMailOut extends MailReading {
+  id: string;
+  mailbox: string;
+  received_at: string | null;
+  sender_email: string | null;
+  sender_name: string | null;
+  subject: string | null;
+  has_attachments: boolean;
+  attachment_names: string[];
+  conversation_id: string | null;
+  web_link: string | null;
+  created_at: string;
+  reference_numbers: string[];
+  classify_error: string | null;
+  verdict: MailVerdict | null;
+  matched_item_id: string | null;
+  match_method: string | null;
+  match_score: number | null;
+  match_reason: string | null;
+  match_candidates: MatchCandidate[];
+  task: MatchedTask | null;
+  duplicate_of_id: string | null;
+  match_error: string | null;
+}
+
+export interface WatchedMailDetailOut extends WatchedMailOut {
+  body: string | null;
+  internet_message_id: string | null;
+  graph_message_id: string;
+}
+
+export interface MailTrialReading extends MailReading {
+  references: string[];
+  error: string | null;
+}
+
+export type MailVerdict =
+  | "new"
+  | "existing"
+  | "stage_change"
+  | "duplicate_mail"
+  | "not_found"
+  | "unsure";
+
+/** A Proposals task as SharePoint had it when the mail was matched. */
+export interface MatchedTask {
+  item_id: string;
+  title: string;
+  assignee: string | null;
+  assignee_email: string | null;
+  status: string | null;
+  submission_status: string | null;
+  current_type: string | null;
+  stage: string | null;
+  customer: string | null;
+  quote_no: string | null;
+  bid_closing_date: string | null;
+  due_date: string | null;
+  negotiation: string | null;
+  order_status: string | null;
+  remarks: string | null;
+  created_at: string | null;
+  url: string;
+  /** False when SharePoint could not be reached and the app's copy answered. */
+  live: boolean;
+}
+
+export interface MatchCandidate {
+  item_id: string;
+  title: string;
+  customer: string | null;
+  assignee: string | null;
+  status: string | null;
+  created_at: string | null;
+  score: number;
+  why: string;
+}
+
+export interface MailMatch {
+  verdict: MailVerdict;
+  method: string | null;
+  item_id: string | null;
+  score: number;
+  reason: string;
+  candidates: MatchCandidate[];
+  task: MatchedTask | null;
+  duplicate_of_id: string | null;
+  model_cost_usd: number;
+  error: string | null;
+}
+
+export interface MailTrialRow {
+  received_at: string | null;
+  subject: string | null;
+  web_link: string | null;
+  attachments: number;
+  reading: MailTrialReading;
+  match: MailMatch | null;
+}
+
+export interface MailTrialOut {
+  mailbox: string;
+  senders: string[];
+  since: string;
+  mails: number;
+  by_category: Record<string, number>;
+  by_decided: Record<string, number>;
+  by_verdict: Record<string, number>;
+  unsure: number;
+  model_cost_usd: string;
+  rows: MailTrialRow[];
+}

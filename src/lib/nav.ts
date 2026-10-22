@@ -33,6 +33,7 @@ import {
   KeyRound,
   LayoutList,
   Inbox,
+  MailSearch,
   ListChecks,
   Map as MapIcon,
   NotebookPen,
@@ -441,6 +442,14 @@ export function buildNav(session: Session): Nav {
       match: "/admin/ariba",
       badge: "admin",
     });
+    // The CEO's mails, sorted for presales. Reads his mail, so super admins only.
+    admin.push({
+      label: "Mail watch",
+      href: "/admin/mail-watch",
+      icon: MailSearch,
+      match: "/admin/mail-watch",
+      badge: "admin",
+    });
     admin.push({
       label: "Who may do what",
       href: "/admin/permissions",
@@ -503,6 +512,7 @@ const STATIC_LABELS: Record<string, string> = {
   "/admin/reports": "Report settings",
   "/admin/console": "System",
   "/admin/mirror": "Proposals sync",
+  "/admin/mail-watch": "Mail watch",
   "/admin/permissions": "Who may do what",
   "/notifications": "Notifications",
   "/comparisons": "Comparisons",
