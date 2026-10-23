@@ -5059,7 +5059,61 @@ export interface MailWatchTeamsOut {
   channel_name: string | null;
   post_negotiations: boolean;
   posting_from: string | null;
+  /** New tenders: assign each and keep its task in the test list (and post its card). */
+  assign_new_tenders: boolean;
+  assign_from: string | null;
+  /** Where new tenders' tasks are created: the Proposals Test list, the real Proposals list, or nowhere. */
+  task_list: "test" | "real" | "none";
+  task_lists: { key: "test" | "real"; name: string; url: string }[];
   last_used_at: string | null;
   last_error: string | null;
   posted: number;
+  test_tasks: number;
+}
+
+/** A task a new tender would have created on the Proposals list, kept in the test list instead. */
+export interface MailWatchTestTaskOut {
+  id: string;
+  mail_id: string;
+  /** "new" (priority 1 of the team) or "stage_change" (the earlier assignee). */
+  action: "new" | "stage_change";
+  title: string;
+  assigned_to_name: string | null;
+  assigned_to_email: string | null;
+  assigned_to_lookup_id: string | null;
+  status: string | null;
+  current_type: string | null;
+  end_user: string | null;
+  start_date: string | null;
+  bcd: string | null;
+  remarks: string | null;
+  previous_owner: string | null;
+  /** The create payload, by the list's internal names. */
+  fields: Record<string, unknown>;
+  assign_reason: string;
+  standing: {
+    rank: number;
+    name: string | null;
+    email: string | null;
+    active: number;
+    open: number;
+    labels?: string[];
+    /** 1 is a full load. */
+    capacity?: number | null;
+    /** The policy's ceiling on open tasks; null: none. */
+    limit?: number | null;
+  }[];
+  previous_item_id: string | null;
+  previous_title: string | null;
+  previous_stage: string | null;
+  /** The item made for it — in the list `list_id` — or why there is none. */
+  list_id: string | null;
+  list_item_id: string | null;
+  list_item_url: string | null;
+  list_error: string | null;
+  created_at: string;
+  subject: string | null;
+  received_at: string | null;
+  teams_posted_at: string | null;
+  teams_error: string | null;
 }

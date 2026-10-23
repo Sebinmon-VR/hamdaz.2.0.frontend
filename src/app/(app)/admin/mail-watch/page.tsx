@@ -8,6 +8,7 @@ import { PillRail } from "@/components/ui/controls";
 import { Empty } from "@/components/ui/feedback";
 import { MailsPanel, SearchPanel, SettingsPanel, TrialPanel } from "@/components/mailwatch/MailWatchPanels";
 import { TeamsPanel } from "@/components/mailwatch/TeamsPanel";
+import { TestTasksPanel } from "@/components/mailwatch/TestTasksPanel";
 
 /**
  * The mail watch, for a super admin: the CEO's mails in the watched mailbox,
@@ -16,7 +17,7 @@ import { TeamsPanel } from "@/components/mailwatch/TeamsPanel";
  */
 export default function MailWatchPage() {
   const session = useSession();
-  const [tab, setTab] = useState<"mails" | "trial" | "search">("mails");
+  const [tab, setTab] = useState<"mails" | "tasks" | "trial" | "search">("mails");
   const [refreshKey, setRefreshKey] = useState(0);
 
   if (!session.roles.is_super_admin) {
@@ -40,6 +41,7 @@ export default function MailWatchPage() {
       <PillRail
         options={[
           { value: "mails", label: "Mails kept" },
+          { value: "tasks", label: "Test tasks" },
           { value: "trial", label: "Trial on past mail" },
           { value: "search", label: "Search Proposals" },
         ]}
@@ -48,6 +50,7 @@ export default function MailWatchPage() {
         className="w-fit"
       />
       {tab === "mails" && <MailsPanel refreshKey={refreshKey} />}
+      {tab === "tasks" && <TestTasksPanel />}
       {tab === "trial" && <TrialPanel />}
       {tab === "search" && <SearchPanel />}
     </div>

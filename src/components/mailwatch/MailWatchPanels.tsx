@@ -467,7 +467,14 @@ function MailModal({ id, onClose, onChanged }: { id: string | null; onClose: () 
     await mutate(out, { revalidate: false });
     onChanged();
   });
+  const assignNow = useAction(async () => {
+    await api.post(`/mailwatch/mails/${id}/assign`);
+    setAssigned(true);
+  });
+  const [assigned, setAssigned] = useState(false);
   const secret = data?.category === "confidential";
+  const assignable =
+    data?.category === "new_tender" && (data.verdict === "new" || data.verdict === "stage_change");
 
   return (
     <Modal
@@ -483,9 +490,14 @@ function MailModal({ id, onClose, onChanged }: { id: string | null; onClose: () 
               Open in Outlook
             </LinkButton>
           )}
-          {data?.category === "negotiation" && (
+          {assignable && (
+            <Button icon={FlaskConical} loading={assignNow.pending} onClick={() => assignNow.run()}>
+              Assign now (test)
+            </Button>
+          )}
+          {(data?.category === "negotiation" || (assignable && assigned)) && (
             <Button icon={Send} loading={toTeams.pending} onClick={() => toTeams.run()}>
-              {data.teams_posted_at ? "Post to Teams again" : "Post to Teams"}
+              {data?.teams_posted_at ? "Post to Teams again" : "Post to Teams"}
             </Button>
           )}
           <Button variant="accent" icon={RotateCcw} loading={again.pending} onClick={() => again.run()}>
@@ -514,6 +526,12 @@ function MailModal({ id, onClose, onChanged }: { id: string | null; onClose: () 
           {data.classify_error && <InlineNotice tone="warn">{data.classify_error}</InlineNotice>}
           {again.error && <InlineNotice tone="danger">{again.error}</InlineNotice>}
           {toTeams.error && <InlineNotice tone="danger">{toTeams.error}</InlineNotice>}
+          {assignNow.error && <InlineNotice tone="danger">{assignNow.error}</InlineNotice>}
+          {assigned && (
+            <InlineNotice tone="warn">
+              Testing: assigned and kept in the test list (Test tasks tab) — not written to SharePoint.
+            </InlineNotice>
+          )}
           {data.teams_posted_at && (
             <InlineNotice tone="positive">Posted to Teams {uaeDateTime(data.teams_posted_at)}.</InlineNotice>
           )}

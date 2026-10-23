@@ -10,7 +10,7 @@ import type { MailWatchTeamsOut } from "@/lib/types";
 import { Panel, PanelHead } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/controls";
 import { ErrorState, InlineNotice, PanelSkeleton } from "@/components/ui/feedback";
-import { Toggle } from "@/components/ui/controls";
+import { Field, Select, Toggle } from "@/components/ui/controls";
 import { uaeDateTime } from "@/components/followups/FollowupBits";
 
 const RETURN_ERRORS: Record<string, string> = {
@@ -44,6 +44,14 @@ export function TeamsPanel() {
     const out = await api.patch<MailWatchTeamsOut>("/mailwatch/teams", { post_negotiations: on });
     await mutate(out, { revalidate: false });
   });
+  const assignToggle = useAction(async (on: boolean) => {
+    const out = await api.patch<MailWatchTeamsOut>("/mailwatch/teams", { assign_new_tenders: on });
+    await mutate(out, { revalidate: false });
+  });
+  const chooseList = useAction(async (task_list: MailWatchTeamsOut["task_list"]) => {
+    const out = await api.patch<MailWatchTeamsOut>("/mailwatch/teams", { task_list });
+    await mutate(out, { revalidate: false });
+  });
   const test = useAction(async () => {
     const out = await api.post<MailWatchTeamsOut>("/mailwatch/teams/test");
     await mutate(out, { revalidate: false });
@@ -59,7 +67,7 @@ export function TeamsPanel() {
   return (
     <Panel className="space-y-3 p-4">
       <PanelHead
-        title="Negotiation updates to Teams"
+        title="Teams: negotiations and new tenders"
         hint={
           data
             ? data.connected
@@ -86,6 +94,8 @@ export function TeamsPanel() {
             <Fact label="Last post" value={data.last_used_at ? relative(data.last_used_at) : "Never"} />
             <Fact label="Mails posted" value={String(data.posted)} />
             <Fact label="Posting from" value={data.posting_from ? uaeDateTime(data.posting_from) : "—"} />
+            <Fact label="Test tasks" value={String(data.test_tasks)} />
+            <Fact label="Assigning from" value={data.assign_from ? uaeDateTime(data.assign_from) : "—"} />
           </dl>
 
           {data.connected && (
@@ -96,6 +106,63 @@ export function TeamsPanel() {
               label="Post each negotiation mail to the channel"
               hint="With the task, its assignee, status, quote number and BCD from SharePoint, and what the customer asks. Only mail arriving after it is switched on."
             />
+          )}
+
+          <Toggle
+            checked={data.assign_new_tenders}
+            disabled={assignToggle.pending}
+            onChange={(on) => assignToggle.run(on)}
+            label="Assign each new tender (testing: kept in the test list)"
+            hint="A new tender goes to priority 1 of Presale; a later stage of a known tender (EOI → RFP) to whoever had it. The task is kept in the test list with the Proposals list's columns, not written to SharePoint, and its card goes to the test channel when an account is connected. Only mail arriving after it is switched on."
+          />
+
+          <Field
+            label="Create each new tender's task in"
+            hint={
+              data.task_list === "real"
+                ? "The real Proposals list: tasks appear there for the team, assigned."
+                : data.task_list === "test"
+                  ? "The Proposals Test list on the Test site — a copy of the real list's columns, for testing."
+                  : "Nowhere: the task is kept in the app only (Test tasks tab)."
+            }
+          >
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="min-w-64">
+                <Select
+                  value={data.task_list}
+                  disabled={chooseList.pending}
+                  onChange={(e) => {
+                    const next = e.target.value as MailWatchTeamsOut["task_list"];
+                    if (
+                      next === "real" &&
+                      !window.confirm(
+                        "Create new tenders' tasks in the REAL Proposals list? The team will see them there, assigned.",
+                      )
+                    )
+                      return;
+                    chooseList.run(next);
+                  }}
+                >
+                  {data.task_lists.map((l) => (
+                    <option key={l.key} value={l.key}>
+                      {l.name}
+                      {l.key === "test" ? " (Test site — testing)" : " (real list)"}
+                    </option>
+                  ))}
+                  <option value="none">Nowhere — keep in the app only</option>
+                </Select>
+              </div>
+              {data.task_lists
+                .filter((l) => l.key === data.task_list)
+                .map((l) => (
+                  <a key={l.key} href={l.url} target="_blank" rel="noreferrer" className="text-[12.5px] text-accent">
+                    Open {l.name}
+                  </a>
+                ))}
+            </div>
+          </Field>
+          {data.task_list === "real" && (
+            <InlineNotice tone="warn">New tenders&apos; tasks are created in the real Proposals list.</InlineNotice>
           )}
 
           <div className="flex flex-wrap gap-2">
@@ -126,7 +193,7 @@ export function TeamsPanel() {
           {data.last_error && <InlineNotice tone="warn">Last error: {data.last_error}</InlineNotice>}
         </>
       ) : null}
-      {[toggle, test, disconnect].map(
+      {[toggle, assignToggle, chooseList, test, disconnect].map(
         (a, i) => a.error && <InlineNotice key={i} tone="danger">{a.error}</InlineNotice>,
       )}
       {notice && <InlineNotice tone={notice.tone}>{notice.text}</InlineNotice>}
