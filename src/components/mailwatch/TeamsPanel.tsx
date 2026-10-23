@@ -231,7 +231,12 @@ function ChannelPicker({ data, onSaved }: { data: MailWatchTeamsOut; onSaved: (o
     onSaved(out);
     setOpen(false);
   });
-  const testTeam = teamList?.find((t) => t.name === data.test_team);
+  // Defensive: an older backend sends neither the test channel nor lists.
+  const testTeamName = data.test_team ?? "";
+  const testChannelName = (data.test_channel ?? "").toLowerCase();
+  const teamOptions = Array.isArray(teamList) ? teamList : undefined;
+  const channelOptions = Array.isArray(channels) ? channels : undefined;
+  const testTeam = teamOptions?.find((t) => t.name === testTeamName);
 
   if (!open) {
     return (
@@ -248,9 +253,10 @@ function ChannelPicker({ data, onSaved }: { data: MailWatchTeamsOut; onSaved: (o
       </Field>
     );
   }
-  const chosenTeam = teamList?.find((t) => t.id === teamId);
-  const chosen = channels?.find((c) => c.id === channelId);
-  const isTest = chosenTeam?.name === data.test_team && chosen?.name.toLowerCase() === data.test_channel.toLowerCase();
+  const chosenTeam = teamOptions?.find((t) => t.id === teamId);
+  const chosen = channelOptions?.find((c) => c.id === channelId);
+  const isTest =
+    !!chosenTeam && !!chosen && chosenTeam.name === testTeamName && (chosen.name ?? "").toLowerCase() === testChannelName;
   return (
     <Field label="Post cards to" hint="The connected account must be a member of the team. Send a test message after changing.">
       <div className="flex flex-wrap items-center gap-2">
@@ -262,8 +268,8 @@ function ChannelPicker({ data, onSaved }: { data: MailWatchTeamsOut; onSaved: (o
               setChannelId("");
             }}
           >
-            <option value="">{teamList ? "Choose a team…" : "Loading teams…"}</option>
-            {teamList?.map((t) => (
+            <option value="">{teamOptions ? "Choose a team…" : "Loading teams…"}</option>
+            {teamOptions?.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
               </option>
@@ -272,8 +278,8 @@ function ChannelPicker({ data, onSaved }: { data: MailWatchTeamsOut; onSaved: (o
         </div>
         <div className="min-w-56">
           <Select value={channelId} disabled={!teamId} onChange={(e) => setChannelId(e.target.value)}>
-            <option value="">{teamId && !channels ? "Loading channels…" : "Choose a channel…"}</option>
-            {channels?.map((c) => (
+            <option value="">{teamId && !channelOptions ? "Loading channels…" : "Choose a channel…"}</option>
+            {channelOptions?.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
                 {c.kind !== "standard" ? ` (${c.kind})` : ""}
@@ -307,7 +313,9 @@ function ChannelPicker({ data, onSaved }: { data: MailWatchTeamsOut; onSaved: (o
               const list = await api.get<{ id: string; name: string }[]>(
                 `/mailwatch/teams/channels?team_id=${encodeURIComponent(testTeam.id)}`,
               );
-              const test = list.find((c) => c.name.toLowerCase() === data.test_channel.toLowerCase());
+              const test = (Array.isArray(list) ? list : []).find(
+                (c) => (c.name ?? "").toLowerCase() === testChannelName,
+              );
               if (test) save.run(testTeam.id, test.id);
             }}
           >
@@ -319,7 +327,12 @@ function ChannelPicker({ data, onSaved }: { data: MailWatchTeamsOut; onSaved: (o
         </Button>
       </div>
       {[teamsError, channelsError].map(
-        (e, i) => e && <InlineNotice key={i} tone="danger">{String(e.message ?? e)}</InlineNotice>,
+        (e, i) =>
+          e && (
+            <InlineNotice key={i} tone="danger">
+              Could not load the {i === 0 ? "teams" : "channels"}: {e instanceof Error ? e.message : String(e)}
+            </InlineNotice>
+          ),
       )}
       {save.error && <InlineNotice tone="danger">{save.error}</InlineNotice>}
     </Field>
