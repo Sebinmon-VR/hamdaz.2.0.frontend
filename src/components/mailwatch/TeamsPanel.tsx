@@ -10,7 +10,7 @@ import type { MailWatchTeamsOut } from "@/lib/types";
 import { Badge, Panel, PanelHead } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/controls";
 import { ErrorState, InlineNotice, PanelSkeleton } from "@/components/ui/feedback";
-import { Field, Select, Toggle } from "@/components/ui/controls";
+import { Field, PillRail, Select, Toggle } from "@/components/ui/controls";
 import { uaeDateTime } from "@/components/followups/FollowupBits";
 
 const RETURN_ERRORS: Record<string, string> = {
@@ -90,8 +90,8 @@ export function TeamsPanel() {
               value={data.connected ? `${data.account_name ?? ""} (${data.account_email ?? ""})` : "Nobody connected"}
             />
             <Fact
-              label="Channel"
-              value={`${data.team_name ?? data.test_team} → ${data.channel_name ?? data.test_channel}${data.is_test_channel ? " (test)" : ""}`}
+              label="Posts to"
+              value={`${data.destination || `${data.team_name ?? data.test_team} → ${data.channel_name ?? data.test_channel}`}${data.is_test_channel ? " (test)" : ""}`}
             />
             <Fact label="Connected" value={data.connected_at ? uaeDateTime(data.connected_at) : "—"} />
             <Fact label="Last post" value={data.last_used_at ? relative(data.last_used_at) : "Never"} />
@@ -167,7 +167,7 @@ export function TeamsPanel() {
           <ChannelPicker data={data} onSaved={(out) => mutate(out, { revalidate: false })} />
           {!data.is_test_channel && (
             <InlineNotice tone="warn">
-              Cards go to {data.team_name} → {data.channel_name}, a real channel — without the TESTING banner.
+              Cards go to {data.destination || `${data.team_name} → ${data.channel_name}`} — without the TESTING banner.
             </InlineNotice>
           )}
           {data.task_list === "real" && (
@@ -215,126 +215,196 @@ export function TeamsPanel() {
   );
 }
 
-/** Where cards are posted: a team, then one of its channels. */
+/** Where cards are posted: a team's channel, or a group chat the connected account is in. */
 function ChannelPicker({ data, onSaved }: { data: MailWatchTeamsOut; onSaved: (out: MailWatchTeamsOut) => void }) {
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"channel" | "chat">(data.target_kind === "chat" ? "chat" : "channel");
   const [teamId, setTeamId] = useState("");
   const [channelId, setChannelId] = useState("");
+  const [chatId, setChatId] = useState("");
   const { data: teamList, error: teamsError } = useSWR<{ id: string; name: string }[]>(
-    open ? "/mailwatch/teams/teams" : null,
+    open && mode === "channel" ? "/mailwatch/teams/teams" : null,
   );
   const { data: channels, error: channelsError } = useSWR<{ id: string; name: string; kind: string }[]>(
-    open && teamId ? `/mailwatch/teams/channels?team_id=${encodeURIComponent(teamId)}` : null,
+    open && mode === "channel" && teamId ? `/mailwatch/teams/channels?team_id=${encodeURIComponent(teamId)}` : null,
   );
-  const save = useAction(async (team_id: string, channel_id: string) => {
-    const out = await api.patch<MailWatchTeamsOut>("/mailwatch/teams", { team_id, channel_id });
+  const { data: chatList, error: chatsError } = useSWR<{ id: string; name: string }[]>(
+    open && mode === "chat" && data.can_chat ? "/mailwatch/teams/chats" : null,
+  );
+  const save = useAction(async (body: { team_id?: string; channel_id?: string; chat_id?: string }) => {
+    const out = await api.patch<MailWatchTeamsOut>("/mailwatch/teams", body);
     onSaved(out);
     setOpen(false);
   });
+
   // Defensive: an older backend sends neither the test channel nor lists.
   const testTeamName = data.test_team ?? "";
   const testChannelName = (data.test_channel ?? "").toLowerCase();
   const teamOptions = Array.isArray(teamList) ? teamList : undefined;
   const channelOptions = Array.isArray(channels) ? channels : undefined;
+  const chatOptions = Array.isArray(chatList) ? chatList : undefined;
   const testTeam = teamOptions?.find((t) => t.name === testTeamName);
+  const current = data.destination || `${data.team_name ?? data.test_team} → ${data.channel_name ?? data.test_channel}`;
 
   if (!open) {
     return (
       <Field label="Post cards to">
         <div className="flex flex-wrap items-center gap-3 text-[12.5px]">
-          <span className="font-medium">
-            {data.team_name ?? data.test_team} → {data.channel_name ?? data.test_channel}
-          </span>
-          {data.is_test_channel ? <Badge tone="warn">Test channel</Badge> : <Badge tone="positive">Real channel</Badge>}
+          <span className="font-medium">{current}</span>
+          {data.is_test_channel ? (
+            <Badge tone="warn">Test channel</Badge>
+          ) : data.target_kind === "chat" ? (
+            <Badge tone="positive">Group chat</Badge>
+          ) : (
+            <Badge tone="positive">Real channel</Badge>
+          )}
           <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-            Change channel
+            Change
           </Button>
         </div>
       </Field>
     );
   }
+
   const chosenTeam = teamOptions?.find((t) => t.id === teamId);
   const chosen = channelOptions?.find((c) => c.id === channelId);
+  const chosenChat = chatOptions?.find((c) => c.id === chatId);
   const isTest =
     !!chosenTeam && !!chosen && chosenTeam.name === testTeamName && (chosen.name ?? "").toLowerCase() === testChannelName;
+  const errors = [teamsError, channelsError, chatsError];
+
   return (
-    <Field label="Post cards to" hint="The connected account must be a member of the team. Send a test message after changing.">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="min-w-56">
-          <Select
-            value={teamId}
-            onChange={(e) => {
-              setTeamId(e.target.value);
-              setChannelId("");
-            }}
-          >
-            <option value="">{teamOptions ? "Choose a team…" : "Loading teams…"}</option>
-            {teamOptions?.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="min-w-56">
-          <Select value={channelId} disabled={!teamId} onChange={(e) => setChannelId(e.target.value)}>
-            <option value="">{teamId && !channelOptions ? "Loading channels…" : "Choose a channel…"}</option>
-            {channelOptions?.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-                {c.kind !== "standard" ? ` (${c.kind})` : ""}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <Button
-          size="sm"
-          variant="accent"
-          disabled={!teamId || !channelId}
-          loading={save.pending}
-          onClick={() => {
-            if (
-              !isTest &&
-              !window.confirm(
-                `Post the cards to ${chosenTeam?.name} → ${chosen?.name}? That is a real channel: the team will see them, without the TESTING banner.`,
-              )
-            )
-              return;
-            save.run(teamId, channelId);
-          }}
-        >
-          Save
-        </Button>
-        {testTeam && !data.is_test_channel && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={async () => {
-              const list = await api.get<{ id: string; name: string }[]>(
-                `/mailwatch/teams/channels?team_id=${encodeURIComponent(testTeam.id)}`,
-              );
-              const test = (Array.isArray(list) ? list : []).find(
-                (c) => (c.name ?? "").toLowerCase() === testChannelName,
-              );
-              if (test) save.run(testTeam.id, test.id);
-            }}
-          >
-            Back to the test channel
-          </Button>
+    <Field
+      label="Post cards to"
+      hint="The connected account must be a member of the team or the group chat. Cards there carry no TESTING banner."
+    >
+      <div className="space-y-2">
+        <PillRail
+          options={[
+            { value: "channel", label: "Team channel" },
+            { value: "chat", label: "Group chat" },
+          ]}
+          value={mode}
+          onChange={(m) => setMode(m)}
+          className="w-fit"
+        />
+        {mode === "channel" ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-56">
+              <Select
+                value={teamId}
+                onChange={(e) => {
+                  setTeamId(e.target.value);
+                  setChannelId("");
+                }}
+              >
+                <option value="">{teamOptions ? "Choose a team…" : "Loading teams…"}</option>
+                {teamOptions?.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="min-w-56">
+              <Select value={channelId} disabled={!teamId} onChange={(e) => setChannelId(e.target.value)}>
+                <option value="">{teamId && !channelOptions ? "Loading channels…" : "Choose a channel…"}</option>
+                {channelOptions?.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                    {c.kind !== "standard" ? ` (${c.kind})` : ""}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <Button
+              size="sm"
+              variant="accent"
+              disabled={!teamId || !channelId}
+              loading={save.pending}
+              onClick={() => {
+                if (
+                  !isTest &&
+                  !window.confirm(
+                    `Post the cards to ${chosenTeam?.name} → ${chosen?.name}? That is a real channel: the team will see them, without the TESTING banner.`,
+                  )
+                )
+                  return;
+                save.run({ team_id: teamId, channel_id: channelId });
+              }}
+            >
+              Save
+            </Button>
+            {testTeam && !data.is_test_channel && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={async () => {
+                  const list = await api.get<{ id: string; name: string }[]>(
+                    `/mailwatch/teams/channels?team_id=${encodeURIComponent(testTeam.id)}`,
+                  );
+                  const test = (Array.isArray(list) ? list : []).find(
+                    (c) => (c.name ?? "").toLowerCase() === testChannelName,
+                  );
+                  if (test) save.run({ team_id: testTeam.id, channel_id: test.id });
+                }}
+              >
+                Back to the test channel
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        ) : !data.can_chat ? (
+          <InlineNotice tone="warn">
+            Group chats need the account connected again, so it can allow sending chat messages and reading the names of
+            its chats. Use “Connect a different account” below with the same account, then come back here.
+          </InlineNotice>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-72">
+              <Select value={chatId} onChange={(e) => setChatId(e.target.value)}>
+                <option value="">{chatOptions ? "Choose a group chat…" : "Loading group chats…"}</option>
+                {chatOptions?.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <Button
+              size="sm"
+              variant="accent"
+              disabled={!chatId}
+              loading={save.pending}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    `Post the cards to the group chat “${chosenChat?.name}”? Everyone in it will see them, without the TESTING banner.`,
+                  )
+                )
+                  return;
+                save.run({ chat_id: chatId });
+              }}
+            >
+              Save
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
         )}
-        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
-          Cancel
-        </Button>
+        {errors.map(
+          (e, i) =>
+            e && (
+              <InlineNotice key={i} tone="danger">
+                Could not load the {["teams", "channels", "group chats"][i]}: {e instanceof Error ? e.message : String(e)}
+              </InlineNotice>
+            ),
+        )}
+        {save.error && <InlineNotice tone="danger">{save.error}</InlineNotice>}
       </div>
-      {[teamsError, channelsError].map(
-        (e, i) =>
-          e && (
-            <InlineNotice key={i} tone="danger">
-              Could not load the {i === 0 ? "teams" : "channels"}: {e instanceof Error ? e.message : String(e)}
-            </InlineNotice>
-          ),
-      )}
-      {save.error && <InlineNotice tone="danger">{save.error}</InlineNotice>}
     </Field>
   );
 }

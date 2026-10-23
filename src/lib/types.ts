@@ -5056,6 +5056,13 @@ export interface MailWatchTeamsOut {
   test_team: string;
   test_channel: string;
   is_test_channel: boolean;
+  /** Where cards go: a team channel or a group chat; said in words. */
+  target_kind?: "channel" | "chat";
+  chat_id?: string | null;
+  chat_name?: string | null;
+  destination?: string;
+  /** The connection was granted group chats (else: connect again). */
+  can_chat?: boolean;
   team_name: string | null;
   channel_name: string | null;
   post_negotiations: boolean;
