@@ -7,7 +7,7 @@ import { api, apiUrl } from "@/lib/api";
 import { relative } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
 import type { MailWatchTeamsOut } from "@/lib/types";
-import { Panel, PanelHead } from "@/components/ui/primitives";
+import { Badge, Panel, PanelHead } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/controls";
 import { ErrorState, InlineNotice, PanelSkeleton } from "@/components/ui/feedback";
 import { Field, Select, Toggle } from "@/components/ui/controls";
@@ -89,7 +89,10 @@ export function TeamsPanel() {
               label="Posts as"
               value={data.connected ? `${data.account_name ?? ""} (${data.account_email ?? ""})` : "Nobody connected"}
             />
-            <Fact label="Channel" value={`${data.locked_team} → ${data.locked_channel} (fixed)`} />
+            <Fact
+              label="Channel"
+              value={`${data.team_name ?? data.test_team} → ${data.channel_name ?? data.test_channel}${data.is_test_channel ? " (test)" : ""}`}
+            />
             <Fact label="Connected" value={data.connected_at ? uaeDateTime(data.connected_at) : "—"} />
             <Fact label="Last post" value={data.last_used_at ? relative(data.last_used_at) : "Never"} />
             <Fact label="Mails posted" value={String(data.posted)} />
@@ -161,6 +164,12 @@ export function TeamsPanel() {
                 ))}
             </div>
           </Field>
+          <ChannelPicker data={data} onSaved={(out) => mutate(out, { revalidate: false })} />
+          {!data.is_test_channel && (
+            <InlineNotice tone="warn">
+              Cards go to {data.team_name} → {data.channel_name}, a real channel — without the TESTING banner.
+            </InlineNotice>
+          )}
           {data.task_list === "real" && (
             <InlineNotice tone="warn">New tenders&apos; tasks are created in the real Proposals list.</InlineNotice>
           )}
@@ -199,10 +208,121 @@ export function TeamsPanel() {
       {notice && <InlineNotice tone={notice.tone}>{notice.text}</InlineNotice>}
       <p className="text-[11.5px] text-ink-4">
         Microsoft lets no app post to a channel on its own, so posts are sent as the connected account.
-        The channel is fixed to the test channel in the app&apos;s code. Connecting asks only to send channel
-        messages; the account must be a member of that team.
+        Cards go to the channel chosen above — the test channel until changed. Connecting asks only to send
+        channel messages; the account must be a member of the chosen team.
       </p>
     </Panel>
+  );
+}
+
+/** Where cards are posted: a team, then one of its channels. */
+function ChannelPicker({ data, onSaved }: { data: MailWatchTeamsOut; onSaved: (out: MailWatchTeamsOut) => void }) {
+  const [open, setOpen] = useState(false);
+  const [teamId, setTeamId] = useState("");
+  const [channelId, setChannelId] = useState("");
+  const { data: teamList, error: teamsError } = useSWR<{ id: string; name: string }[]>(
+    open ? "/mailwatch/teams/teams" : null,
+  );
+  const { data: channels, error: channelsError } = useSWR<{ id: string; name: string; kind: string }[]>(
+    open && teamId ? `/mailwatch/teams/channels?team_id=${encodeURIComponent(teamId)}` : null,
+  );
+  const save = useAction(async (team_id: string, channel_id: string) => {
+    const out = await api.patch<MailWatchTeamsOut>("/mailwatch/teams", { team_id, channel_id });
+    onSaved(out);
+    setOpen(false);
+  });
+  const testTeam = teamList?.find((t) => t.name === data.test_team);
+
+  if (!open) {
+    return (
+      <Field label="Post cards to">
+        <div className="flex flex-wrap items-center gap-3 text-[12.5px]">
+          <span className="font-medium">
+            {data.team_name ?? data.test_team} → {data.channel_name ?? data.test_channel}
+          </span>
+          {data.is_test_channel ? <Badge tone="warn">Test channel</Badge> : <Badge tone="positive">Real channel</Badge>}
+          <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+            Change channel
+          </Button>
+        </div>
+      </Field>
+    );
+  }
+  const chosenTeam = teamList?.find((t) => t.id === teamId);
+  const chosen = channels?.find((c) => c.id === channelId);
+  const isTest = chosenTeam?.name === data.test_team && chosen?.name.toLowerCase() === data.test_channel.toLowerCase();
+  return (
+    <Field label="Post cards to" hint="The connected account must be a member of the team. Send a test message after changing.">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="min-w-56">
+          <Select
+            value={teamId}
+            onChange={(e) => {
+              setTeamId(e.target.value);
+              setChannelId("");
+            }}
+          >
+            <option value="">{teamList ? "Choose a team…" : "Loading teams…"}</option>
+            {teamList?.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="min-w-56">
+          <Select value={channelId} disabled={!teamId} onChange={(e) => setChannelId(e.target.value)}>
+            <option value="">{teamId && !channels ? "Loading channels…" : "Choose a channel…"}</option>
+            {channels?.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+                {c.kind !== "standard" ? ` (${c.kind})` : ""}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <Button
+          size="sm"
+          variant="accent"
+          disabled={!teamId || !channelId}
+          loading={save.pending}
+          onClick={() => {
+            if (
+              !isTest &&
+              !window.confirm(
+                `Post the cards to ${chosenTeam?.name} → ${chosen?.name}? That is a real channel: the team will see them, without the TESTING banner.`,
+              )
+            )
+              return;
+            save.run(teamId, channelId);
+          }}
+        >
+          Save
+        </Button>
+        {testTeam && !data.is_test_channel && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={async () => {
+              const list = await api.get<{ id: string; name: string }[]>(
+                `/mailwatch/teams/channels?team_id=${encodeURIComponent(testTeam.id)}`,
+              );
+              const test = list.find((c) => c.name.toLowerCase() === data.test_channel.toLowerCase());
+              if (test) save.run(testTeam.id, test.id);
+            }}
+          >
+            Back to the test channel
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </div>
+      {[teamsError, channelsError].map(
+        (e, i) => e && <InlineNotice key={i} tone="danger">{String(e.message ?? e)}</InlineNotice>,
+      )}
+      {save.error && <InlineNotice tone="danger">{save.error}</InlineNotice>}
+    </Field>
   );
 }
 

@@ -5052,9 +5052,10 @@ export interface MailWatchTeamsOut {
   account_email: string | null;
   account_name: string | null;
   connected_at: string | null;
-  /** The only channel posts can go to — fixed in the backend's code. */
-  locked_team: string;
-  locked_channel: string;
+  /** The test channel (the default), and whether cards go there now. */
+  test_team: string;
+  test_channel: string;
+  is_test_channel: boolean;
   team_name: string | null;
   channel_name: string | null;
   post_negotiations: boolean;
