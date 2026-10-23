@@ -4955,6 +4955,8 @@ export interface WatchedMailOut extends MailReading {
   task: MatchedTask | null;
   duplicate_of_id: string | null;
   match_error: string | null;
+  teams_posted_at: string | null;
+  teams_error: string | null;
 }
 
 export interface WatchedMailDetailOut extends WatchedMailOut {
@@ -5043,4 +5045,21 @@ export interface MailTrialOut {
   unsure: number;
   model_cost_usd: string;
   rows: MailTrialRow[];
+}
+
+export interface MailWatchTeamsOut {
+  connected: boolean;
+  account_email: string | null;
+  account_name: string | null;
+  connected_at: string | null;
+  /** The only channel posts can go to — fixed in the backend's code. */
+  locked_team: string;
+  locked_channel: string;
+  team_name: string | null;
+  channel_name: string | null;
+  post_negotiations: boolean;
+  posting_from: string | null;
+  last_used_at: string | null;
+  last_error: string | null;
+  posted: number;
 }

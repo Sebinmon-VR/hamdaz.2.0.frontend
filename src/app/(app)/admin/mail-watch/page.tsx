@@ -7,6 +7,7 @@ import { PageHead } from "@/components/ui/primitives";
 import { PillRail } from "@/components/ui/controls";
 import { Empty } from "@/components/ui/feedback";
 import { MailsPanel, SearchPanel, SettingsPanel, TrialPanel } from "@/components/mailwatch/MailWatchPanels";
+import { TeamsPanel } from "@/components/mailwatch/TeamsPanel";
 
 /**
  * The mail watch, for a super admin: the CEO's mails in the watched mailbox,
@@ -35,6 +36,7 @@ export default function MailWatchPage() {
         lead="The CEO's mails as they arrive, sorted for presales and checked against the Proposals list: new, already assigned, a stage change, or a repeat."
       />
       <SettingsPanel onRead={() => setRefreshKey((k) => k + 1)} />
+      <TeamsPanel />
       <PillRail
         options={[
           { value: "mails", label: "Mails kept" },

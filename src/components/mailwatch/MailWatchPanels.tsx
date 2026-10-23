@@ -10,6 +10,7 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  Send,
   Unplug,
 } from "lucide-react";
 import clsx from "clsx";
@@ -461,6 +462,11 @@ function MailModal({ id, onClose, onChanged }: { id: string | null; onClose: () 
     await mutate(out, { revalidate: false });
     onChanged();
   });
+  const toTeams = useAction(async () => {
+    const out = await api.post<WatchedMailDetailOut>(`/mailwatch/mails/${id}/teams`);
+    await mutate(out, { revalidate: false });
+    onChanged();
+  });
   const secret = data?.category === "confidential";
 
   return (
@@ -476,6 +482,11 @@ function MailModal({ id, onClose, onChanged }: { id: string | null; onClose: () 
             <LinkButton href={data.web_link} target="_blank" rel="noreferrer" icon={ExternalLink}>
               Open in Outlook
             </LinkButton>
+          )}
+          {data?.category === "negotiation" && (
+            <Button icon={Send} loading={toTeams.pending} onClick={() => toTeams.run()}>
+              {data.teams_posted_at ? "Post to Teams again" : "Post to Teams"}
+            </Button>
           )}
           <Button variant="accent" icon={RotateCcw} loading={again.pending} onClick={() => again.run()}>
             Classify again
@@ -502,6 +513,13 @@ function MailModal({ id, onClose, onChanged }: { id: string | null; onClose: () 
           {data.reason && <p className="text-ink-3">{data.reason}</p>}
           {data.classify_error && <InlineNotice tone="warn">{data.classify_error}</InlineNotice>}
           {again.error && <InlineNotice tone="danger">{again.error}</InlineNotice>}
+          {toTeams.error && <InlineNotice tone="danger">{toTeams.error}</InlineNotice>}
+          {data.teams_posted_at && (
+            <InlineNotice tone="positive">Posted to Teams {uaeDateTime(data.teams_posted_at)}.</InlineNotice>
+          )}
+          {data.teams_error && !data.teams_posted_at && (
+            <InlineNotice tone="warn">Teams post failed: {data.teams_error}</InlineNotice>
+          )}
           {secret ? (
             <InlineNotice tone="info">
               Nothing this mail says is kept. Open it in Outlook to check the label; if it is wrong, Classify
