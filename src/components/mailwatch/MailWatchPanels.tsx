@@ -40,6 +40,7 @@ import { uaeDateTime } from "@/components/followups/FollowupBits";
 const CATEGORY: Record<MailCategory, { label: string; tone: Tone }> = {
   new_tender: { label: "New tender", tone: "accent" },
   negotiation: { label: "Negotiation", tone: "second" },
+  order: { label: "Order confirmation", tone: "positive" },
   general: { label: "General", tone: "neutral" },
   confidential: { label: "Confidential", tone: "danger" },
 };
@@ -59,7 +60,7 @@ const VERDICT: Record<MailVerdict, { label: string; tone: Tone; hint: string }> 
   existing: { label: "Existing", tone: "info", hint: "Already on the Proposals list" },
   stage_change: { label: "Stage change", tone: "warn", hint: "On the list at an earlier stage" },
   duplicate_mail: { label: "Duplicate mail", tone: "neutral", hint: "An earlier mail brought the same tender" },
-  not_found: { label: "Task not found", tone: "danger", hint: "No task found for this negotiation" },
+  not_found: { label: "Task not found", tone: "danger", hint: "No task found for this negotiation or order" },
   unsure: { label: "Match unsure", tone: "warn", hint: "Several tasks are alike — check the candidates" },
 };
 
@@ -395,6 +396,7 @@ const FILTERS: { value: Filter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "new_tender", label: "New tender" },
   { value: "negotiation", label: "Negotiation" },
+  { value: "order", label: "Order confirmation" },
   { value: "general", label: "General" },
   { value: "confidential", label: "Confidential" },
 ];
@@ -474,7 +476,10 @@ function MailModal({ id, onClose, onChanged }: { id: string | null; onClose: () 
   const [assigned, setAssigned] = useState(false);
   const secret = data?.category === "confidential";
   const assignable =
-    data?.category === "new_tender" && (data.verdict === "new" || data.verdict === "stage_change");
+    data?.category === "new_tender" &&
+    (data.verdict === "new" || data.verdict === "stage_change" || data.verdict === "unsure");
+  // The weekly list of unconfirmed orders gets no card; an order arriving does.
+  const order = data?.category === "order" && data.kind !== "confirm_reminder";
 
   return (
     <Modal
@@ -495,9 +500,10 @@ function MailModal({ id, onClose, onChanged }: { id: string | null; onClose: () 
               Assign now (test)
             </Button>
           )}
-          {(data?.category === "negotiation" || (assignable && assigned)) && (
+          {(data?.category === "negotiation" || order || (assignable && assigned)) && (
             <Button icon={Send} loading={toTeams.pending} onClick={() => toTeams.run()}>
               {data?.teams_posted_at ? "Post to Teams again" : "Post to Teams"}
+              {order ? " (test channel)" : ""}
             </Button>
           )}
           <Button variant="accent" icon={RotateCcw} loading={again.pending} onClick={() => again.run()}>
@@ -590,7 +596,11 @@ function ProposalsMatch({
   };
 }) {
   if (!match.verdict) {
-    return <p className="text-ink-4">Not matched — only new tenders and negotiations are looked up on the Proposals list.</p>;
+    return (
+      <p className="text-ink-4">
+        Not matched — only new tenders, negotiations and orders are looked up on the Proposals list.
+      </p>
+    );
   }
   const t = match.task;
   return (

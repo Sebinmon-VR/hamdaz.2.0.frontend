@@ -44,6 +44,10 @@ export function TeamsPanel() {
     const out = await api.patch<MailWatchTeamsOut>("/mailwatch/teams", { post_negotiations: on });
     await mutate(out, { revalidate: false });
   });
+  const orderToggle = useAction(async (on: boolean) => {
+    const out = await api.patch<MailWatchTeamsOut>("/mailwatch/teams", { post_orders: on });
+    await mutate(out, { revalidate: false });
+  });
   const assignToggle = useAction(async (on: boolean) => {
     const out = await api.patch<MailWatchTeamsOut>("/mailwatch/teams", { assign_new_tenders: on });
     await mutate(out, { revalidate: false });
@@ -67,7 +71,7 @@ export function TeamsPanel() {
   return (
     <Panel className="space-y-3 p-4">
       <PanelHead
-        title="Teams: negotiations and new tenders"
+        title="Teams: negotiations, orders and new tenders"
         hint={
           data
             ? data.connected
@@ -99,6 +103,7 @@ export function TeamsPanel() {
             <Fact label="Posting from" value={data.posting_from ? uaeDateTime(data.posting_from) : "—"} />
             <Fact label="Test tasks" value={String(data.test_tasks)} />
             <Fact label="Assigning from" value={data.assign_from ? uaeDateTime(data.assign_from) : "—"} />
+            <Fact label="Orders from" value={data.orders_from ? uaeDateTime(data.orders_from) : "—"} />
           </dl>
 
           {data.connected && (
@@ -108,6 +113,16 @@ export function TeamsPanel() {
               onChange={(on) => toggle.run(on)}
               label="Post each negotiation mail to the channel"
               hint="With the task, its assignee, status, quote number and BCD from SharePoint, and what the customer asks. Only mail arriving after it is switched on."
+            />
+          )}
+
+          {data.connected && (
+            <Toggle
+              checked={!!data.post_orders}
+              disabled={orderToggle.pending}
+              onChange={(on) => orderToggle.run(on)}
+              label={`Post each customer order (testing: ${data.test_team} → ${data.test_channel} only)`}
+              hint="One card per purchase order: value, payment terms, the buyer's RFQ and PR numbers, and whose task it was on the Proposals list. Always the test channel, whatever is chosen below. Only mail arriving after it is switched on."
             />
           )}
 

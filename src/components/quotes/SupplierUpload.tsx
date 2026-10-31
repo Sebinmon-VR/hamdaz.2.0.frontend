@@ -85,6 +85,8 @@ export function SupplierUpload({
   // whose error this component is the one to interpret.
   const [pending, setPending] = useState(false);
   const [typing, setTyping] = useState(false);
+  const filed = failures.filter((f) => f.filed);
+  const unread = failures.filter((f) => !f.filed);
 
   const body = (
     <>
@@ -122,19 +124,32 @@ export function SupplierUpload({
         </InlineNotice>
       )}
 
+      {/* A datasheet dropped in with the quotes: filed, not failed. */}
+      {filed.length > 0 && (
+        <InlineNotice tone="positive" className={COMPACT_NOTICE}>
+          <ul className="space-y-0.5">
+            {filed.map((f, i) => (
+              <li key={`${f.file_name}-${i}`}>
+                <span className="font-medium">{f.file_name}</span> — {f.error}
+              </li>
+            ))}
+          </ul>
+        </InlineNotice>
+      )}
+
       {/* Named, with the reason, and kept beside the drop zone so the retry is
           in the same place as the complaint. */}
-      {failures.length > 0 && (
+      {unread.length > 0 && (
         <div className="mt-2 rounded-[10px] border border-warn/40 bg-warn-soft/40 px-2.5 py-2">
           <p
             className="flex items-center gap-1.5 text-[11.5px] font-semibold text-warn"
             title="Everything else was attached. Fix these and drop them in again."
           >
             <FileWarning className="size-3.5 shrink-0" strokeWidth={2} />
-            {failures.length} file{failures.length === 1 ? "" : "s"} could not be read
+            {unread.length} file{unread.length === 1 ? "" : "s"} could not be read
           </p>
           <ul className="mt-1 space-y-0.5">
-            {failures.map((failure, i) => (
+            {unread.map((failure, i) => (
               <li key={`${failure.file_name}-${i}`} className="text-[11.5px] leading-snug">
                 <span className="font-medium">{failure.file_name}</span>
                 <span className="text-ink-3"> — {failure.error}</span>
@@ -170,7 +185,7 @@ export function SupplierUpload({
               size="sm"
               icon={Keyboard}
               className={clsx(COMPACT_BUTTON, "shrink-0")}
-              title="A photo or a screenshot has nothing to read; type its lines in instead"
+              title="For an offer that came in the body of an email, or a file that could not be read"
               onClick={() => setTyping(true)}
             >
               Type one in
@@ -184,7 +199,7 @@ export function SupplierUpload({
           className="mt-1.5"
           accept={ACCEPT}
           busy={pending}
-          title={`PDF, spreadsheet or Word, read on the spot; up to ${MAX_FILES} at a time. A photo or a scan is read by OCR where that is installed; otherwise type it in.`}
+          title={`PDF, spreadsheet or Word, read on the spot; up to ${MAX_FILES} at a time. A scan or a photo is read off the page itself; check its figures.`}
           onFiles={async (files) => {
             setFailures([]);
             setFatal(null);

@@ -219,17 +219,26 @@ export function SupplierQuotesTab({
           )}
         </div>
 
-        {failures.length > 0 && (
-          <InlineNotice tone="warn" className={clsx(COMPACT_NOTICE, "mt-3!")}>
-            <ul className="space-y-0.5">
-              {failures.map((f, i) => (
-                <li key={`${f.file_name}-${i}`}>
-                  <span className="font-medium">{f.file_name}</span> — {f.error}
-                </li>
-              ))}
-            </ul>
-          </InlineNotice>
-        )}
+        {/* Filed (a datasheet with no prices) shown as done; the rest as failed. */}
+        {[true, false].map((done) => {
+          const shown = failures.filter((f) => Boolean(f.filed) === done);
+          if (shown.length === 0) return null;
+          return (
+            <InlineNotice
+              key={String(done)}
+              tone={done ? "positive" : "warn"}
+              className={clsx(COMPACT_NOTICE, "mt-3!")}
+            >
+              <ul className="space-y-0.5">
+                {shown.map((f, i) => (
+                  <li key={`${f.file_name}-${i}`}>
+                    <span className="font-medium">{f.file_name}</span> — {f.error}
+                  </li>
+                ))}
+              </ul>
+            </InlineNotice>
+          );
+        })}
       </Panel>
 
       <CustomerRequest quote={quote} editable={editable} onChanged={onChanged} />

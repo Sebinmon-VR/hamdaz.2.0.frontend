@@ -2379,6 +2379,9 @@ export interface NegotiationIn {
 export interface SupplierQuoteFailure {
   file_name: string;
   error: string;
+  /** Set when the file had no prices and was filed with the quote instead
+   * (a datasheet): the document kind it was filed as. Done, not failed. */
+  filed?: string;
 }
 
 export interface QuoteRequestIn {
@@ -4884,7 +4887,7 @@ export interface AribaBcdOut {
 
 /* ── mail watch (super admin) ─────────────────────────────────────────── */
 
-export type MailCategory = "new_tender" | "negotiation" | "general" | "confidential";
+export type MailCategory = "new_tender" | "negotiation" | "order" | "general" | "confidential";
 
 export interface MailWatchSettingsOut {
   enabled: boolean;
@@ -5070,6 +5073,9 @@ export interface MailWatchTeamsOut {
   /** New tenders: assign each and keep its task in the test list (and post its card). */
   assign_new_tenders: boolean;
   assign_from: string | null;
+  /** Order cards (a customer's purchase order) — always to the test channel while tested. */
+  post_orders?: boolean;
+  orders_from?: string | null;
   /** Where new tenders' tasks are created: the Proposals Test list, the real Proposals list, or nowhere. */
   task_list: "test" | "real" | "none";
   task_lists: { key: "test" | "real"; name: string; url: string }[];
