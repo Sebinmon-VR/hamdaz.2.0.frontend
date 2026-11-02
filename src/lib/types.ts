@@ -5073,9 +5073,10 @@ export interface MailWatchTeamsOut {
   /** New tenders: assign each and keep its task in the test list (and post its card). */
   assign_new_tenders: boolean;
   assign_from: string | null;
-  /** Order cards (a customer's purchase order) — always to the test channel while tested. */
+  /** Order cards (a customer's purchase order) — to the test channel while `orders_test_only`, else where the other cards go. */
   post_orders?: boolean;
   orders_from?: string | null;
+  orders_test_only?: boolean;
   /** Where new tenders' tasks are created: the Proposals Test list, the real Proposals list, or nowhere. */
   task_list: "test" | "real" | "none";
   task_lists: { key: "test" | "real"; name: string; url: string }[];

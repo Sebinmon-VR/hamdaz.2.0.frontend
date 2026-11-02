@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import useSWR from "swr";
-import { Link2, Send, Unlink } from "lucide-react";
+import { Link2, PartyPopper, Send, Unlink } from "lucide-react";
 import { api, apiUrl } from "@/lib/api";
 import { relative } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
@@ -48,6 +48,15 @@ export function TeamsPanel() {
     const out = await api.patch<MailWatchTeamsOut>("/mailwatch/teams", { post_orders: on });
     await mutate(out, { revalidate: false });
   });
+  const ordersWhere = useAction(async (orders_test_only: boolean) => {
+    const out = await api.patch<MailWatchTeamsOut>("/mailwatch/teams", { orders_test_only });
+    await mutate(out, { revalidate: false });
+  });
+  const sample = useAction(async () => {
+    const out = await api.post<MailWatchTeamsOut>("/mailwatch/teams/sample-order");
+    await mutate(out, { revalidate: false });
+    setNotice({ tone: "info", text: `Sample order card posted to ${out.test_team} → ${out.test_channel}.` });
+  });
   const assignToggle = useAction(async (on: boolean) => {
     const out = await api.patch<MailWatchTeamsOut>("/mailwatch/teams", { assign_new_tenders: on });
     await mutate(out, { revalidate: false });
@@ -67,6 +76,11 @@ export function TeamsPanel() {
   });
 
   const connectHref = apiUrl("/mailwatch/teams/connect");
+  // An older backend sends no orders_test_only: its order cards are test-only.
+  const ordersTestOnly = data?.orders_test_only ?? true;
+  const chosen = data
+    ? data.destination || `${data.team_name ?? data.test_team} → ${data.channel_name ?? data.test_channel}`
+    : "";
 
   return (
     <Panel className="space-y-3 p-4">
@@ -121,9 +135,49 @@ export function TeamsPanel() {
               checked={!!data.post_orders}
               disabled={orderToggle.pending}
               onChange={(on) => orderToggle.run(on)}
-              label={`Post each customer order (testing: ${data.test_team} → ${data.test_channel} only)`}
-              hint="One card per purchase order: value, payment terms, the buyer's RFQ and PR numbers, and whose task it was on the Proposals list. Always the test channel, whatever is chosen below. Only mail arriving after it is switched on."
+              label={
+                ordersTestOnly
+                  ? `Post each customer order (testing: ${data.test_team} → ${data.test_channel} only)`
+                  : `Post each customer order (to ${chosen})`
+              }
+              hint="One card per purchase order, congratulating whoever's task won it: value, payment terms, the buyer's RFQ and PR numbers, and whose task it was on the Proposals list. Only mail arriving after it is switched on."
             />
+          )}
+
+          {data.connected && (
+            <Field
+              label="Send order cards to"
+              hint={
+                ordersTestOnly
+                  ? "The test channel, whatever is chosen below for the other cards."
+                  : "Where the other cards go — the channel or group chat chosen below."
+              }
+            >
+              <div className="min-w-64 max-w-md">
+                <Select
+                  value={ordersTestOnly ? "test" : "chosen"}
+                  disabled={ordersWhere.pending}
+                  onChange={(e) => {
+                    const testOnly = e.target.value === "test";
+                    if (
+                      !testOnly &&
+                      !data.is_test_channel &&
+                      !window.confirm(`Send order cards to ${chosen}? Everyone there will see each order.`)
+                    )
+                      return;
+                    ordersWhere.run(testOnly);
+                  }}
+                >
+                  <option value="test">
+                    {data.test_team} → {data.test_channel} (test channel only)
+                  </option>
+                  <option value="chosen">
+                    {chosen}
+                    {data.is_test_channel ? " (the test channel too, until one is chosen below)" : ""}
+                  </option>
+                </Select>
+              </div>
+            </Field>
           )}
 
           <Toggle
@@ -182,7 +236,8 @@ export function TeamsPanel() {
           <ChannelPicker data={data} onSaved={(out) => mutate(out, { revalidate: false })} />
           {!data.is_test_channel && (
             <InlineNotice tone="warn">
-              Cards go to {data.destination || `${data.team_name} → ${data.channel_name}`} — without the TESTING banner.
+              Cards go to {chosen} — without the TESTING banner
+              {ordersTestOnly ? "; order cards still go to the test channel." : ", order cards included."}
             </InlineNotice>
           )}
           {data.task_list === "real" && (
@@ -199,6 +254,9 @@ export function TeamsPanel() {
               <>
                 <Button size="sm" icon={Send} loading={test.pending} onClick={() => test.run()}>
                   Send test message
+                </Button>
+                <Button size="sm" variant="outline" icon={PartyPopper} loading={sample.pending} onClick={() => sample.run()}>
+                  Post sample order card
                 </Button>
                 <Button
                   size="sm"
@@ -217,13 +275,14 @@ export function TeamsPanel() {
           {data.last_error && <InlineNotice tone="warn">Last error: {data.last_error}</InlineNotice>}
         </>
       ) : null}
-      {[toggle, assignToggle, chooseList, test, disconnect].map(
+      {[toggle, orderToggle, ordersWhere, assignToggle, chooseList, test, sample, disconnect].map(
         (a, i) => a.error && <InlineNotice key={i} tone="danger">{a.error}</InlineNotice>,
       )}
       {notice && <InlineNotice tone={notice.tone}>{notice.text}</InlineNotice>}
       <p className="text-[11.5px] text-ink-4">
         Microsoft lets no app post to a channel on its own, so posts are sent as the connected account.
-        Cards go to the channel chosen above — the test channel until changed. Connecting asks only to send
+        Cards go to the channel chosen above — the test channel until changed; order cards follow their own
+        choice, and the sample order card always goes to the test channel. Connecting asks only to send
         channel messages; the account must be a member of the chosen team.
       </p>
     </Panel>
