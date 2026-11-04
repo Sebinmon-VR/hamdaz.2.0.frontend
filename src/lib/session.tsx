@@ -12,6 +12,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import useSWR from "swr";
 import { ApiError, fetcher } from "@/lib/api";
+import { NO_PAYROLL, type PayrollMe } from "@/lib/payroll";
 import type {
   EffectiveAccessOut,
   LeaveSettingsOut,
@@ -27,6 +28,12 @@ export interface Session {
   teams: MyTeamOut[];
   /** True when the viewer belongs to the team named in the leave settings. */
   isHr: boolean;
+  /**
+   * What the viewer may do in payroll, as the backend's `/payroll/me` says.
+   * Not a module grant — see lib/payroll. All false until it loads, or if the
+   * backend predates payroll.
+   */
+  payroll: PayrollMe;
   /** Module keys the viewer can reach, grants and always-open modules alike. */
   modules: Set<string>;
   /** "module:page" for every page the viewer can reach. */
@@ -95,6 +102,9 @@ export function useLoadSession(): SessionLoad {
   // which team HR is, so the leave queue can be hidden from everyone else
   // rather than shown and then 403-ing.
   const leave = useSWR<LeaveSettingsOut>("/leave/settings", fetcher, ONCE);
+  // Answers everyone signed in, never 403s. A failure (an older backend) is
+  // simply "no payroll", not a broken session — so it is left out of `error`.
+  const payroll = useSWR<PayrollMe>("/payroll/me", fetcher, ONCE);
 
   const session = useMemo<Session | null>(() => {
     if (!user.data || !roles.data || !access.data || !teams.data) return null;
@@ -122,11 +132,12 @@ export function useLoadSession(): SessionLoad {
       access: access.data,
       teams: teams.data,
       isHr,
+      payroll: payroll.data ?? NO_PAYROLL,
       modules,
       pages,
       can: (module, page) => (page ? pages.has(`${module}:${page}`) : modules.has(module)),
     };
-  }, [user.data, roles.data, access.data, teams.data, leave.data]);
+  }, [user.data, roles.data, access.data, teams.data, leave.data, payroll.data]);
 
   const error = [user.error, roles.error, access.error, teams.error].find(
     (e): e is ApiError => e instanceof ApiError,

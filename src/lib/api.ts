@@ -127,7 +127,10 @@ export function apiUrl(path: string, query?: Query): string {
 // task changes the task, its milestone's percentage, the project's roll-up,
 // the board, the portfolio and the activity log at once. Enumerating that at
 // every call site is how one gets missed.
-const REVALIDATE_AFTER_WRITE = ["/hr", "/projects"];
+// Payroll is the third, for the same reason: Postgres only, and one change —
+// a salary revision, a month approved — moves the employee, the month, its
+// lines and the log together.
+const REVALIDATE_AFTER_WRITE = ["/hr", "/projects", "/payroll"];
 
 /** Revalidate — never clear. Screens keep the last answer while the next loads. */
 function invalidateModule(path: string): void {
