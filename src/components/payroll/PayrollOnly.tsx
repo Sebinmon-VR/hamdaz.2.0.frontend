@@ -20,7 +20,7 @@ export function NotProcessorNotice({ doing }: { doing: string }) {
     <InlineNotice tone="info">
       You can read payroll but not change it: only payroll processors and super admins can{" "}
       {doing}. A super admin names the processors on{" "}
-      <Link className="font-semibold underline" href="/payroll/access">
+      <Link className="font-semibold underline" href="/payroll?tab=settings">
         Payroll access
       </Link>
       .

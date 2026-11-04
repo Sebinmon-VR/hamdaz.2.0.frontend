@@ -103,6 +103,13 @@ export interface PayrollSettings {
   in_esi_er_rate: string;
   in_pt_slabs: Record<string, PtSlab[]>;
   in_tax_tables: Record<string, TaxTable>;
+  invoice_prefix: string;
+  invoice_payment_terms: number;
+  invoice_notes: string | null;
+  invoice_terms: string | null;
+  invoice_customer_zoho_id: string | null;
+  invoice_customer_name: string | null;
+  invoice_mail: boolean;
   updated_at: string;
 }
 
@@ -308,3 +315,218 @@ export function blank(value: string | null | undefined): string | null {
   const trimmed = (value ?? "").trim();
   return trimmed ? trimmed : null;
 }
+
+/**
+ * The employee list's cache key. One spelling everywhere, so the tabs and the
+ * pay run share a single request instead of several that differ by a query.
+ */
+export function employeesKey(includeLeft = false): string {
+  return `/payroll/employees?include_left=${includeLeft}`;
+}
+
+/** "2026-11" for a year and month — the pay run's place in the URL. */
+export function monthKey(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+export function parseMonth(key: string | null): { year: number; month: number } | null {
+  const m = key?.match(/^(\d{4})-(\d{2})$/);
+  if (!m) return null;
+  const month = Number(m[2]);
+  return month >= 1 && month <= 12 ? { year: Number(m[1]), month } : null;
+}
+
+export function shiftMonth(at: { year: number; month: number }, by: number) {
+  const index = at.year * 12 + (at.month - 1) + by;
+  return { year: Math.floor(index / 12), month: (index % 12) + 1 };
+}
+
+/**
+ * India's statutory deductions — PF, pension, ESI, professional tax, TDS —
+ * switched off: what most of this payroll uses, so it is what a new Indian
+ * employee starts with. One switch on the employee turns them all back on.
+ */
+export const NO_STATUTORY = {
+  pf_enabled: false,
+  pf_on_actual: false,
+  eps_member: false,
+  esi_mode: "no",
+  pt_override: "0",
+  tds_monthly_override: "0",
+} as const satisfies Partial<EmployeeFields>;
+
+/** The rules the law sets, for an employee whose deductions are switched on. */
+export const WITH_STATUTORY = {
+  pf_enabled: true,
+  pf_on_actual: false,
+  eps_member: true,
+  esi_mode: "auto",
+  pt_override: null,
+  tds_monthly_override: null,
+} as const satisfies Partial<EmployeeFields>;
+
+function isZero(value: string | null): boolean {
+  return value !== null && value.trim() !== "" && Number(value) === 0;
+}
+
+/** Whether any of PF, ESI, professional tax or TDS can be deducted from this person. */
+export function hasStatutory(f: EmployeeFields): boolean {
+  return (
+    f.pf_enabled ||
+    f.esi_mode !== "no" ||
+    !isZero(f.pt_override) ||
+    !isZero(f.tds_monthly_override)
+  );
+}
+
+/**
+ * What an employee's record is missing before they can be paid by bank.
+ *
+ * Nothing here stops a payslip being calculated; each one makes the bank file
+ * (or, with deductions on, a tax figure) wrong. Statutory ids are only asked
+ * for when that person's deductions are switched on.
+ */
+export function employeeGaps(e: PayrollEmployee): string[] {
+  if (!e.active) return [];
+  const out: string[] = [];
+  if (!e.current_salary) out.push("salary");
+  if (e.country === "AE") {
+    if (!e.iban) out.push("IBAN");
+    if (!e.bank_routing) out.push("bank routing code");
+    if (!e.mol_person_id) out.push("MOHRE person id");
+  } else {
+    if (!e.bank_account) out.push("account number");
+    if (!e.ifsc) out.push("IFSC");
+    if (hasStatutory(e)) {
+      if (!e.pan) out.push("PAN");
+      if (e.pf_enabled && !e.uan) out.push("UAN");
+    }
+  }
+  return out;
+}
+
+/**
+ * The next employee code after the highest one in use for that country —
+ * HZ-IN-005 is followed by HZ-IN-006. Only a suggestion; the field stays
+ * editable.
+ */
+export function suggestCode(employees: PayrollEmployee[], country: Country): string {
+  let best: { prefix: string; n: number; width: number } | null = null;
+  for (const e of employees) {
+    if (e.country !== country) continue;
+    const m = e.code.match(/^(.*?)(\d+)$/);
+    if (!m) continue;
+    const n = Number(m[2]);
+    if (!best || n > best.n) best = { prefix: m[1], n, width: m[2].length };
+  }
+  if (!best) return `HZ-${country}-001`;
+  return `${best.prefix}${String(best.n + 1).padStart(best.width, "0")}`;
+}
+
+/* ── invoices ─────────────────────────────────────────────────────── */
+
+export type InvoiceStatus = "draft" | "submitted" | "approved";
+
+export interface InvoiceLine {
+  item_id: string | null;
+  name: string;
+  description: string | null;
+  quantity: string;
+  rate: string;
+  tax_id: string | null;
+  tax_name: string | null;
+  tax_percentage: string;
+  amount?: string;
+  tax_amount?: string;
+  run_id: string | null;
+}
+
+export interface PayrollInvoice {
+  id: string;
+  number: string;
+  status: InvoiceStatus;
+  customer_zoho_id: string | null;
+  customer_name: string;
+  currency: string;
+  exchange_rate: string | null;
+  invoice_date: string;
+  due_date: string | null;
+  payment_terms: number | null;
+  reference_number: string | null;
+  adjustment: string;
+  adjustment_description: string | null;
+  notes: string | null;
+  terms: string | null;
+  sub_total: string;
+  tax_total: string;
+  total: string;
+  run_id: string | null;
+  created_by_name: string | null;
+  submitted_by_id: string | null;
+  submitted_by_name: string | null;
+  submitted_at: string | null;
+  approved_by_name: string | null;
+  approved_at: string | null;
+  returned_note: string | null;
+  zoho_mode: "test" | "live" | null;
+  zoho_invoice_id: string | null;
+  zoho_invoice_number: string | null;
+  zoho_at: string | null;
+  zoho_by_name: string | null;
+  zoho_error: string | null;
+  report_sent_at: string | null;
+  report_to: string[];
+  report_error: string | null;
+  created_at: string;
+}
+
+export interface PayrollInvoiceDetail extends PayrollInvoice {
+  lines: InvoiceLine[];
+  zoho_payload: Record<string, unknown> | null;
+  events: PayrollEvent[];
+}
+
+export interface ZohoTax {
+  tax_id: string;
+  tax_name: string;
+  tax_percentage: string;
+}
+
+export interface ZohoContact {
+  contact_id: string;
+  contact_name: string;
+  company_name: string | null;
+  currency_code: string | null;
+  email: string | null;
+  tax_treatment: string | null;
+}
+
+export interface ZohoItem {
+  item_id: string;
+  name: string;
+  description: string | null;
+  rate: string | null;
+  tax_id: string | null;
+}
+
+export interface InvoiceSetup {
+  zoho_live: boolean;
+  zoho_organization: string | null;
+  mail: boolean;
+  zoho_error: string | null;
+  taxes: ZohoTax[];
+  currencies: string[];
+  default_customer_zoho_id: string | null;
+  default_customer_name: string | null;
+  payment_terms: number;
+  notes: string | null;
+  terms: string | null;
+  approvers: string[];
+  report_to: string[];
+}
+
+export const INVOICE_STATUS: Record<InvoiceStatus, { label: string; tone: Tone }> = {
+  draft: { label: "Draft", tone: "neutral" },
+  submitted: { label: "Waiting for approval", tone: "warn" },
+  approved: { label: "Approved", tone: "positive" },
+};

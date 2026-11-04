@@ -46,6 +46,13 @@ const MAX_TABS = 8;
 /** The tab that always exists and cannot be closed. */
 const HOME: Tab = { href: "/dashboard", label: "Overview" };
 
+/**
+ * Routes that no longer exist, dropped from a remembered strip. Payroll's
+ * sub-pages became sections of `/payroll` (they redirect there), and a
+ * restored tab for one would never light up again — it would just sit there.
+ */
+const RETIRED = /^\/payroll\/./;
+
 export function TabsProvider({
   children,
   labelFor,
@@ -65,7 +72,10 @@ export function TabsProvider({
       if (!raw) return;
       const parsed = JSON.parse(raw) as Tab[];
       if (Array.isArray(parsed) && parsed.length) {
-        setTabs([HOME, ...parsed.filter((t) => t?.href && t.href !== HOME.href)]);
+        setTabs([
+          HOME,
+          ...parsed.filter((t) => t?.href && t.href !== HOME.href && !RETIRED.test(t.href)),
+        ]);
       }
     } catch {
       // A corrupt or unavailable store just means starting with one tab.

@@ -30,7 +30,6 @@ import {
   GaugeCircle,
   Gavel,
   HandCoins,
-  Landmark,
   IdCard,
   KeyRound,
   LayoutList,
@@ -330,24 +329,13 @@ export function buildNav(session: Session): Nav {
 
   // Payroll: not a module grant either. The backend's `/payroll/me` says who
   // reads it — the Accounts team, super admins, the CEO and the payroll access
-  // list — and the group simply does not exist for anybody else. Settings and
-  // the access list are shown to every reader: both are readable by them, and
-  // knowing who can see your salary is part of trusting the system.
+  // list — and the entry simply does not exist for anybody else. One entry:
+  // payroll is a single page whose sections (months, employees, gratuity,
+  // settings, access) are a rail on the page itself.
   if (session.payroll.can_view) {
     more.push({
       label: "Payroll",
-      items: [
-        { label: "Payroll months", href: "/payroll", icon: HandCoins },
-        {
-          label: "Employees on payroll",
-          href: "/payroll/employees",
-          icon: Users,
-          match: "/payroll/employees",
-        },
-        { label: "Gratuity", href: "/payroll/gratuity", icon: Landmark, match: "/payroll/gratuity" },
-        { label: "Payroll settings", href: "/payroll/settings", icon: Sliders, match: "/payroll/settings" },
-        { label: "Payroll access", href: "/payroll/access", icon: KeyRound, match: "/payroll/access" },
-      ],
+      items: [{ label: "Payroll & invoicing", href: "/payroll", icon: HandCoins, match: "/payroll" }],
     });
   }
 
@@ -540,12 +528,7 @@ const STATIC_LABELS: Record<string, string> = {
   "/admin/mail-watch": "Mail watch",
   "/admin/permissions": "Who may do what",
   "/notifications": "Notifications",
-  "/payroll": "Payroll",
-  "/payroll/employees": "Payroll employees",
-  "/payroll/employees/new": "New employee",
-  "/payroll/gratuity": "Gratuity",
-  "/payroll/settings": "Payroll settings",
-  "/payroll/access": "Payroll access",
+  "/payroll": "Payroll & invoicing",
   "/comparisons": "Comparisons",
   "/comparisons/new": "New comparison",
   "/admin/roles": "Roles",
@@ -598,11 +581,6 @@ export function labelFor(pathname: string): string {
     if (parts[1] === "applications") return `Candidate ${short(parts[2])}`;
     if (parts[1] === "people") return `Person ${short(parts[2])}`;
     if (parts[1] === "reviews") return `Cycle ${short(parts[2])}`;
-  }
-
-  if (parts[0] === "payroll" && parts.length >= 3) {
-    if (parts[1] === "runs") return `Payroll ${short(parts[2])}`;
-    if (parts[1] === "employees") return `Employee ${short(parts[2])}`;
   }
 
   const last = parts[parts.length - 1];
