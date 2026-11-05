@@ -589,12 +589,21 @@ export function divideExact(a: string, b: string, places = 2): string | null {
 }
 
 /**
+ * The decimal places Zoho Books keeps on an item price in a currency — its
+ * `price_precision`. Checked against Zoho on 5 Nov 2026: 2 for AED, USD and
+ * the rest; 0 for JPY. An AED price is to the fils, not the whole dirham.
+ */
+export function pricePlaces(currency: string): number {
+  return currency.toUpperCase() === "JPY" ? 0 : 2;
+}
+
+/**
  * A selling price built the way Zoho Books builds one: the margin goes on in
- * the supplier's currency, the price is rounded there — to the whole unit for
- * AED, since that is how Zoho's item prices are set; to the cent otherwise —
+ * the supplier's currency, the price is rounded there to Zoho's precision for
+ * that currency (`pricePlaces`) —
  * and only then converted at the rate, to the cent.
  *
- * AED 49 at a 20% margin = 61.25 → 61 → ÷ 3.672501 = USD 16.61. Pricing the
+ * AED 49 at a 20% margin = 61.25 → ÷ 3.672501 = USD 16.68. Pricing the
  * converted cost instead lands a cent a unit away from the estimate. `fx` is
  * one unit of the quote's currency in the supplier's; "1" when they are the
  * same.
@@ -605,8 +614,7 @@ export function priceViaSupplier(
   fx: string,
   supplierCurrency: string,
 ): string | null {
-  const wholeUnits = supplierCurrency.toUpperCase() === "AED";
-  const theirs = rateFromMargin(supplierPrice, percent, wholeUnits ? 0 : 2);
+  const theirs = rateFromMargin(supplierPrice, percent, pricePlaces(supplierCurrency));
   if (theirs === null) return null;
   return divideExact(theirs, fx, 2);
 }

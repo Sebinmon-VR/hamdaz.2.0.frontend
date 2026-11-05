@@ -14,6 +14,7 @@ import {
   roundExact,
   type QuotePreview,
   type QuotePreviewLine,
+  pricePlaces,
   rateFromMargin,
   sign,
   subExact,
@@ -287,12 +288,12 @@ export function LineEditor({
 
   /**
    * The price a margin makes of a costed line: its landed cost ÷ (1 − margin),
-   * rounded as Zoho rounds an item price in this currency — the whole dirham
-   * for AED, the cent otherwise. The same arithmetic the server does when a
+   * rounded to Zoho's price precision for this currency — the cent, as Zoho has
+   * AED and USD; the whole unit only for JPY. The same arithmetic the server does when a
    * supplier is chosen, so the two agree to the cent.
    */
   function priceAtMargin(line: QuoteLineDraft, percent: string): string | null {
-    return rateFromMargin(landedCostOf(line), percent, currency.toUpperCase() === "AED" ? 0 : 2);
+    return rateFromMargin(landedCostOf(line), percent, pricePlaces(currency));
   }
 
   /** Every costed line at one margin: the one number that prices the quote. */
