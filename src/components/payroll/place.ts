@@ -13,9 +13,9 @@ import type { Country } from "@/lib/payroll";
  * refresh or the back button still lands exactly where you were.
  */
 
-export type PayrollTab = "run" | "employees" | "invoices" | "settings";
+export type PayrollTab = "run" | "employees" | "settings";
 
-export const TABS: PayrollTab[] = ["run", "employees", "invoices", "settings"];
+export const TABS: PayrollTab[] = ["run", "employees", "settings"];
 
 export interface PayrollPlace {
   tab: PayrollTab;
@@ -26,8 +26,6 @@ export interface PayrollPlace {
   employee: string | null;
   /** A month by id — what old links and the approval notification carry. */
   run: string | null;
-  /** An open invoice, or "new". */
-  invoice: string | null;
 }
 
 export function placeHref(place: Partial<PayrollPlace>): string {
@@ -37,7 +35,6 @@ export function placeHref(place: Partial<PayrollPlace>): string {
   if (place.country) q.set("country", place.country);
   if (place.employee) q.set("employee", place.employee);
   if (place.run) q.set("run", place.run);
-  if (place.invoice) q.set("invoice", place.invoice);
   return `/payroll?${q}`;
 }
 
@@ -57,7 +54,6 @@ export function usePayrollPlace(): PayrollPlace & { go: Go } {
   const country: Country | null = c === "AE" || c === "IN" ? c : null;
   const employee = params.get("employee");
   const run = params.get("run");
-  const invoice = params.get("invoice");
 
   /**
    * The month and the country stick until changed; an open employee or a
@@ -66,12 +62,11 @@ export function usePayrollPlace(): PayrollPlace & { go: Go } {
   const go = useCallback<Go>(
     (next, options) => {
       const href = placeHref({
-        tab: next.tab ?? (next.employee ? "employees" : next.invoice ? "invoices" : tab),
+        tab: next.tab ?? (next.employee ? "employees" : tab),
         month: "month" in next ? next.month : month,
         country: "country" in next ? next.country : country,
         employee: next.employee ?? null,
         run: next.run ?? null,
-        invoice: next.invoice ?? null,
       });
       const scroll = options?.scroll ?? false;
       if (options?.replace) router.replace(href, { scroll });
@@ -81,8 +76,8 @@ export function usePayrollPlace(): PayrollPlace & { go: Go } {
   );
 
   return useMemo(
-    () => ({ tab, month, country, employee, run, invoice, go }),
-    [tab, month, country, employee, run, invoice, go],
+    () => ({ tab, month, country, employee, run, go }),
+    [tab, month, country, employee, run, go],
   );
 }
 

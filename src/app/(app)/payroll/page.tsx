@@ -16,7 +16,6 @@ import { readPlace, usePayrollPlace, writePlace, type PayrollTab } from "@/compo
 import { PayRunView } from "@/components/payroll/PayRunView";
 import { EmployeesView } from "@/components/payroll/EmployeesView";
 import { SettingsView } from "@/components/payroll/SettingsView";
-import { InvoicesView } from "@/components/payroll/InvoicesView";
 import { Note, SelectBox, Surface, UnderlineTabs } from "@/components/payroll/ui";
 
 /**
@@ -42,7 +41,6 @@ export default function PayrollPage() {
 const TABS: { value: PayrollTab; label: string }[] = [
   { value: "run", label: "Pay run" },
   { value: "employees", label: "Employees" },
-  { value: "invoices", label: "Invoices" },
   { value: "settings", label: "Settings" },
 ];
 
@@ -117,8 +115,6 @@ function Payroll() {
             <PayRunView country={country} month={place.month} runId={place.run} go={go} />
           ) : tab === "employees" ? (
             <EmployeesView country={country} showCountry={both} selected={place.employee} go={go} />
-          ) : tab === "invoices" ? (
-            <InvoicesView selected={place.invoice} go={go} />
           ) : (
             <SettingsView countries={inUse} />
           )}

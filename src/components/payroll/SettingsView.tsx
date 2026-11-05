@@ -43,6 +43,8 @@ export function SettingsView({ countries }: { countries: Country[] }) {
   const settings = useSWR<PayrollSettings>("/payroll/settings");
   const teams = useSWR<TeamOut[]>("/teams");
   const setup = useSWR<InvoiceSetup>("/payroll/invoice-setup");
+  // The Zoho contact's name, for the picker only — settings keep its id.
+  const [zohoName, setZohoName] = useState("");
   const [draft, setDraft] = useState<Editable | null>(null);
   const [saved, setSaved] = useState(false);
   const [section, setSection] = useState<Section>("company");
@@ -243,6 +245,93 @@ export function SettingsView({ countries }: { countries: Country[] }) {
 
           {section === "invoicing" && (
             <>
+              <FormRow label="From" hint="The India company — set under Company.">
+                <p className="pt-1.5 text-[13px] text-ink">{draft.in_company_name}</p>
+              </FormRow>
+              <FormRow label="Bill to" hint="Every month's invoice goes to the UAE company.">
+                <TextBox {...text("ae_company_name")} />
+              </FormRow>
+              <FormRow label="Bill-to address">
+                <AreaBox {...text("ae_company_address")} />
+              </FormRow>
+              <FormRow label="Zoho contact" hint="The customer in Zoho Books the invoice is raised to.">
+                <Narrow>
+                  <CustomerSearch
+                    disabled={!editable}
+                    value={zohoName}
+                    onText={(t) => {
+                      setZohoName(t);
+                      set("invoice_customer_zoho_id", null);
+                    }}
+                    onPick={(c) => {
+                      setZohoName(c.contact_name);
+                      set("invoice_customer_zoho_id", c.contact_id);
+                    }}
+                  />
+                </Narrow>
+                <p className="mt-1 text-[12px] text-ink-4">
+                  {draft.invoice_customer_zoho_id
+                    ? `Linked (${draft.invoice_customer_zoho_id}).`
+                    : "Not linked yet — search Zoho and pick the contact."}
+                </p>
+              </FormRow>
+              <FormRow label="Currency" hint="Empty: the payroll's own currency.">
+                <div className="w-40">
+                  <SelectBox
+                    disabled={!editable}
+                    value={draft.invoice_currency ?? ""}
+                    onChange={(e) => set("invoice_currency", e.target.value || null)}
+                  >
+                    <option value="">Payroll currency</option>
+                    {(setup.data?.currencies ?? ["INR", "AED", "USD"]).map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </SelectBox>
+                </div>
+              </FormRow>
+              <FormRow label="Invoice numbers" hint="Our own number; Zoho gives its own as well.">
+                <Narrow>
+                  <TextBox {...text("invoice_prefix")} />
+                </Narrow>
+                <p className="mt-1 text-[12px] text-ink-4">
+                  This year: {draft.invoice_prefix}
+                  {new Date().getFullYear()}-001 onwards.
+                </p>
+              </FormRow>
+              <FormRow label="Payment terms" hint="Days to pay.">
+                <div className="w-28">
+                  <TextBox
+                    disabled={!editable}
+                    inputMode="numeric"
+                    value={String(draft.invoice_payment_terms ?? "")}
+                    onChange={(e) => set("invoice_payment_terms", Number(e.target.value.replace(/\D/g, "") || 0))}
+                  />
+                </div>
+              </FormRow>
+              <FormRow label="Customer notes" hint="Printed on every new invoice.">
+                <AreaBox {...text("invoice_notes")} />
+              </FormRow>
+              <FormRow label="Terms and conditions" hint="Printed on every new invoice.">
+                <AreaBox {...text("invoice_terms")} />
+              </FormRow>
+              <FormRow
+                label="Emails"
+                hint="The approval request to the super admins when a month is sent; the report (invoice and register) once it has been through Zoho."
+              >
+                <Toggle
+                  disabled={!editable}
+                  checked={draft.mail_enabled}
+                  onChange={(v) => set("mail_enabled", v)}
+                  label="Send payroll emails"
+                  hint={
+                    setup.data
+                      ? `Approval: ${setup.data.approvers.join(", ") || "no super admin"}. Report: ${setup.data.report_to.join(", ") || "nobody"}.`
+                      : undefined
+                  }
+                />
+              </FormRow>
               <FormRow label="Zoho Books" hint={setup.data?.zoho_organization ?? undefined}>
                 {setup.data?.zoho_live ? (
                   <p className="text-[13px] text-ink">
@@ -254,66 +343,6 @@ export function SettingsView({ countries }: { countries: Country[] }) {
                     nothing. It goes live only when PAYROLL_ZOHO_INVOICE_WRITE is switched on on the server.
                   </p>
                 )}
-              </FormRow>
-              <FormRow
-                label="Emails"
-                hint="The approval request to the super admins; the report, with the invoice PDF, once it has been through Zoho."
-              >
-                <Toggle
-                  disabled={!editable}
-                  checked={draft.invoice_mail}
-                  onChange={(v) => set("invoice_mail", v)}
-                  label="Send invoice emails"
-                  hint={
-                    setup.data
-                      ? `Approval: ${setup.data.approvers.join(", ") || "no super admin"}. Report: ${setup.data.report_to.join(", ") || "nobody"}.`
-                      : undefined
-                  }
-                />
-              </FormRow>
-              <FormRow label="Invoice numbers" hint="Our own number; Zoho gives its own as well.">
-                <Narrow>
-                  <TextBox {...text("invoice_prefix")} />
-                </Narrow>
-                <p className="mt-1 text-[12px] text-ink-4">
-                  Next one this year: {draft.invoice_prefix}
-                  {new Date().getFullYear()}-001 onwards.
-                </p>
-              </FormRow>
-              <FormRow label="Usual customer" hint="A new invoice starts with this Zoho contact.">
-                <Narrow>
-                  <CustomerSearch
-                    disabled={!editable}
-                    value={draft.invoice_customer_name ?? ""}
-                    onText={(t) => {
-                      set("invoice_customer_name", t || null);
-                      set("invoice_customer_zoho_id", null);
-                    }}
-                    onPick={(c) => {
-                      set("invoice_customer_name", c.contact_name);
-                      set("invoice_customer_zoho_id", c.contact_id);
-                    }}
-                  />
-                </Narrow>
-                {draft.invoice_customer_name && !draft.invoice_customer_zoho_id && (
-                  <p className="mt-1 text-[12px] text-warn">Pick it from the list to link it to Zoho.</p>
-                )}
-              </FormRow>
-              <FormRow label="Payment terms" hint="Days to pay, on a new invoice.">
-                <div className="w-28">
-                  <TextBox
-                    disabled={!editable}
-                    inputMode="numeric"
-                    value={String(draft.invoice_payment_terms)}
-                    onChange={(e) => set("invoice_payment_terms", Number(e.target.value.replace(/\D/g, "") || 0))}
-                  />
-                </div>
-              </FormRow>
-              <FormRow label="Customer notes" hint="Printed on every new invoice.">
-                <AreaBox {...text("invoice_notes")} />
-              </FormRow>
-              <FormRow label="Terms and conditions" hint="Printed on every new invoice.">
-                <AreaBox {...text("invoice_terms")} />
               </FormRow>
             </>
           )}

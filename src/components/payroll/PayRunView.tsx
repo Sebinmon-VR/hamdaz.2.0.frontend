@@ -44,6 +44,7 @@ import { Badge } from "@/components/ui/primitives";
 import { Modal, PanelSkeleton } from "@/components/ui/feedback";
 import { RunStatusBadge } from "@/components/payroll/badges";
 import { LineDialog } from "@/components/payroll/LineDialog";
+import { RunInvoice } from "@/components/payroll/RunInvoice";
 import {
   estimate,
   fromCents,
@@ -262,7 +263,8 @@ function RunSheet({
   // A super admin both prepares and approves: one click, two steps.
   const approveOwn = useAction(async () => {
     await saver.idle();
-    await api.post<PayrollRunDetail>(`${key}/submit`);
+    // No approval mail: the one approving is the one sending.
+    await api.post<PayrollRunDetail>(`${key}/submit?notify=false`);
     return done(await api.post<PayrollRunDetail>(`${key}/approve`));
   });
   const remove = useAction(async () => {
@@ -514,7 +516,13 @@ function RunSheet({
         </table>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+      <RunInvoice
+        run={r}
+        salaryDeltas={rows.map((x) => x.figures.gross - x.server.gross)}
+        pendingSheet={typing}
+      />
+
+      <div className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-2.5">
         <Btn icon={FileText} onClick={() => download.run("payslips.pdf", `${stem} payslips.pdf`)}>
           Payslips
         </Btn>
@@ -638,7 +646,7 @@ function nextStep(r: PayrollRunDetail, editable: boolean, canDecide: boolean, se
   switch (r.status) {
     case "draft":
       return editable
-        ? `Enter unpaid days, bonuses and deductions, then ${selfApprove ? "approve" : "send for approval"}.`
+        ? `Enter unpaid days, bonuses and deductions, check the invoice below, then ${selfApprove ? "approve both" : "send both for approval"}.`
         : "Being prepared.";
     case "submitted":
       return canDecide

@@ -105,11 +105,11 @@ export interface PayrollSettings {
   in_tax_tables: Record<string, TaxTable>;
   invoice_prefix: string;
   invoice_payment_terms: number;
+  invoice_currency: string | null;
   invoice_notes: string | null;
   invoice_terms: string | null;
   invoice_customer_zoho_id: string | null;
-  invoice_customer_name: string | null;
-  invoice_mail: boolean;
+  mail_enabled: boolean;
   updated_at: string;
 }
 
@@ -423,11 +423,10 @@ export function suggestCode(employees: PayrollEmployee[], country: Country): str
   return `${best.prefix}${String(best.n + 1).padStart(best.width, "0")}`;
 }
 
-/* ── invoices ─────────────────────────────────────────────────────── */
+/* ── the month's invoice ──────────────────────────────────────────── */
 
-export type InvoiceStatus = "draft" | "submitted" | "approved";
-
-export interface InvoiceLine {
+/** A charge that is not salary — rent, internet — as Zoho takes it. */
+export interface InvoiceCharge {
   item_id: string | null;
   name: string;
   description: string | null;
@@ -436,39 +435,46 @@ export interface InvoiceLine {
   tax_id: string | null;
   tax_name: string | null;
   tax_percentage: string;
-  amount?: string;
-  tax_amount?: string;
-  run_id: string | null;
 }
 
-export interface PayrollInvoice {
-  id: string;
-  number: string;
-  status: InvoiceStatus;
+export interface InvoiceLine extends InvoiceCharge {
+  /** `salary` lines are read off the payslips; `charge` lines are typed in. */
+  source: "salary" | "charge";
+  amount: string;
+  tax_amount: string;
+}
+
+export interface RunInvoice {
+  /** Empty until first saved: the fields are the defaults from settings. */
+  id: string | null;
+  run_id: string;
+  number: string | null;
+  issuer_name: string;
+  issuer_address: string | null;
   customer_zoho_id: string | null;
   customer_name: string;
+  customer_address: string | null;
   currency: string;
+  run_currency: string;
   exchange_rate: string | null;
+  needs_rate: boolean;
   invoice_date: string;
   due_date: string | null;
   payment_terms: number | null;
   reference_number: string | null;
+  salary_lines: "single" | "per_employee";
+  charges: InvoiceCharge[];
+  lines: InvoiceLine[];
   adjustment: string;
   adjustment_description: string | null;
   notes: string | null;
   terms: string | null;
+  salaries: string;
   sub_total: string;
   tax_total: string;
   total: string;
-  run_id: string | null;
-  created_by_name: string | null;
-  submitted_by_id: string | null;
-  submitted_by_name: string | null;
-  submitted_at: string | null;
-  approved_by_name: string | null;
-  approved_at: string | null;
-  returned_note: string | null;
   zoho_mode: "test" | "live" | null;
+  zoho_payload: Record<string, unknown> | null;
   zoho_invoice_id: string | null;
   zoho_invoice_number: string | null;
   zoho_at: string | null;
@@ -477,13 +483,6 @@ export interface PayrollInvoice {
   report_sent_at: string | null;
   report_to: string[];
   report_error: string | null;
-  created_at: string;
-}
-
-export interface PayrollInvoiceDetail extends PayrollInvoice {
-  lines: InvoiceLine[];
-  zoho_payload: Record<string, unknown> | null;
-  events: PayrollEvent[];
 }
 
 export interface ZohoTax {
@@ -516,17 +515,6 @@ export interface InvoiceSetup {
   zoho_error: string | null;
   taxes: ZohoTax[];
   currencies: string[];
-  default_customer_zoho_id: string | null;
-  default_customer_name: string | null;
-  payment_terms: number;
-  notes: string | null;
-  terms: string | null;
   approvers: string[];
   report_to: string[];
 }
-
-export const INVOICE_STATUS: Record<InvoiceStatus, { label: string; tone: Tone }> = {
-  draft: { label: "Draft", tone: "neutral" },
-  submitted: { label: "Waiting for approval", tone: "warn" },
-  approved: { label: "Approved", tone: "positive" },
-};
