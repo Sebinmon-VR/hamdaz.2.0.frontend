@@ -5077,6 +5077,13 @@ export interface MailWatchTeamsOut {
   post_orders?: boolean;
   orders_from?: string | null;
   orders_test_only?: boolean;
+  /** Cards for tasks added to the Proposals list by hand — to the test channel while `manual_test_only`. */
+  post_manual_tasks?: boolean;
+  manual_from?: string | null;
+  manual_test_only?: boolean;
+  manual_posted?: number;
+  /** The newest task added by hand ("1900 — title"), for the sample card. */
+  manual_latest?: string | null;
   /** Where new tenders' tasks are created: the Proposals Test list, the real Proposals list, or nowhere. */
   task_list: "test" | "real" | "none";
   task_lists: { key: "test" | "real"; name: string; url: string }[];

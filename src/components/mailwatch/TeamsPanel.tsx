@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import useSWR from "swr";
-import { Link2, PartyPopper, Send, Unlink } from "lucide-react";
+import { Hand, Link2, PartyPopper, Send, Unlink } from "lucide-react";
 import { api, apiUrl } from "@/lib/api";
 import { relative } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
@@ -57,6 +57,22 @@ export function TeamsPanel() {
     await mutate(out, { revalidate: false });
     setNotice({ tone: "info", text: `Sample order card posted to ${out.test_team} → ${out.test_channel}.` });
   });
+  const manualToggle = useAction(async (on: boolean) => {
+    const out = await api.patch<MailWatchTeamsOut>("/mailwatch/teams", { post_manual_tasks: on });
+    await mutate(out, { revalidate: false });
+  });
+  const manualWhere = useAction(async (manual_test_only: boolean) => {
+    const out = await api.patch<MailWatchTeamsOut>("/mailwatch/teams", { manual_test_only });
+    await mutate(out, { revalidate: false });
+  });
+  const manualSample = useAction(async () => {
+    const out = await api.post<MailWatchTeamsOut>("/mailwatch/teams/sample-manual");
+    await mutate(out, { revalidate: false });
+    setNotice({
+      tone: "info",
+      text: `Card for ${out.manual_latest ?? "the newest hand-added task"} posted to ${out.test_team} → ${out.test_channel}.`,
+    });
+  });
   const assignToggle = useAction(async (on: boolean) => {
     const out = await api.patch<MailWatchTeamsOut>("/mailwatch/teams", { assign_new_tenders: on });
     await mutate(out, { revalidate: false });
@@ -78,6 +94,7 @@ export function TeamsPanel() {
   const connectHref = apiUrl("/mailwatch/teams/connect");
   // An older backend sends no orders_test_only: its order cards are test-only.
   const ordersTestOnly = data?.orders_test_only ?? true;
+  const manualTestOnly = data?.manual_test_only ?? true;
   const chosen = data
     ? data.destination || `${data.team_name ?? data.test_team} → ${data.channel_name ?? data.test_channel}`
     : "";
@@ -118,6 +135,10 @@ export function TeamsPanel() {
             <Fact label="Test tasks" value={String(data.test_tasks)} />
             <Fact label="Assigning from" value={data.assign_from ? uaeDateTime(data.assign_from) : "—"} />
             <Fact label="Orders from" value={data.orders_from ? uaeDateTime(data.orders_from) : "—"} />
+            <Fact
+              label="Hand-added tasks"
+              value={`${data.manual_posted ?? 0} posted${data.manual_from ? ` · from ${uaeDateTime(data.manual_from)}` : ""}`}
+            />
           </dl>
 
           {data.connected && (
@@ -166,6 +187,56 @@ export function TeamsPanel() {
                     )
                       return;
                     ordersWhere.run(testOnly);
+                  }}
+                >
+                  <option value="test">
+                    {data.test_team} → {data.test_channel} (test channel only)
+                  </option>
+                  <option value="chosen">
+                    {chosen}
+                    {data.is_test_channel ? " (the test channel too, until one is chosen below)" : ""}
+                  </option>
+                </Select>
+              </div>
+            </Field>
+          )}
+
+          {data.connected && (
+            <Toggle
+              checked={!!data.post_manual_tasks}
+              disabled={manualToggle.pending}
+              onChange={(on) => manualToggle.run(on)}
+              label={
+                manualTestOnly
+                  ? `Post each task added to the Proposals list by hand (testing: ${data.test_team} → ${data.test_channel} only)`
+                  : `Post each task added to the Proposals list by hand (to ${chosen})`
+              }
+              hint="New tasks only — one somebody assigned themselves on the list, not one the mail watch made (that has its own card). Posted once, a few minutes after it is added; editing or reassigning it later posts nothing. Only tasks added after it is switched on."
+            />
+          )}
+
+          {data.connected && (
+            <Field
+              label="Send hand-added task cards to"
+              hint={
+                manualTestOnly
+                  ? "The test channel, whatever is chosen below for the other cards."
+                  : "Where the other cards go — the channel or group chat chosen below."
+              }
+            >
+              <div className="min-w-64 max-w-md">
+                <Select
+                  value={manualTestOnly ? "test" : "chosen"}
+                  disabled={manualWhere.pending}
+                  onChange={(e) => {
+                    const testOnly = e.target.value === "test";
+                    if (
+                      !testOnly &&
+                      !data.is_test_channel &&
+                      !window.confirm(`Send hand-added task cards to ${chosen}? Everyone there will see each one.`)
+                    )
+                      return;
+                    manualWhere.run(testOnly);
                   }}
                 >
                   <option value="test">
@@ -260,6 +331,17 @@ export function TeamsPanel() {
                 </Button>
                 <Button
                   size="sm"
+                  variant="outline"
+                  icon={Hand}
+                  loading={manualSample.pending}
+                  disabled={!data.manual_latest}
+                  title={data.manual_latest ? `Newest hand-added task: ${data.manual_latest}` : "No task added by hand yet"}
+                  onClick={() => manualSample.run()}
+                >
+                  Post sample hand-added task card
+                </Button>
+                <Button
+                  size="sm"
                   variant="ghost"
                   icon={Unlink}
                   loading={disconnect.pending}
@@ -275,7 +357,7 @@ export function TeamsPanel() {
           {data.last_error && <InlineNotice tone="warn">Last error: {data.last_error}</InlineNotice>}
         </>
       ) : null}
-      {[toggle, orderToggle, ordersWhere, assignToggle, chooseList, test, sample, disconnect].map(
+      {[toggle, orderToggle, ordersWhere, manualToggle, manualWhere, assignToggle, chooseList, test, sample, manualSample, disconnect].map(
         (a, i) => a.error && <InlineNotice key={i} tone="danger">{a.error}</InlineNotice>,
       )}
       {notice && <InlineNotice tone={notice.tone}>{notice.text}</InlineNotice>}
