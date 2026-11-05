@@ -456,8 +456,14 @@ export interface RunInvoice {
   customer_address: string | null;
   currency: string;
   run_currency: string;
+  /** Payroll-currency units per invoice-currency unit (INR per AED). */
   exchange_rate: string | null;
   needs_rate: boolean;
+  /** Zoho's rate for the invoice date, and where it came from — or why there is none. */
+  zoho_rate: string | null;
+  zoho_rate_note: string | null;
+  /** The invoice's rate is Zoho's, not one typed in. */
+  rate_from_zoho: boolean;
   invoice_date: string;
   due_date: string | null;
   payment_terms: number | null;
@@ -515,6 +521,10 @@ export interface InvoiceSetup {
   zoho_error: string | null;
   taxes: ZohoTax[];
   currencies: string[];
+  /** A new invoice's currency, and Zoho's rate to it from INR today. */
+  default_currency: string;
+  default_rate: string | null;
+  default_rate_note: string | null;
   approvers: string[];
   report_to: string[];
 }

@@ -275,15 +275,15 @@ export function SettingsView({ countries }: { countries: Country[] }) {
                     : "Not linked yet — search Zoho and pick the contact."}
                 </p>
               </FormRow>
-              <FormRow label="Currency" hint="Empty: the payroll's own currency.">
+              <FormRow label="Currency" hint="Salaries are converted at Zoho's rate for the invoice date.">
                 <div className="w-40">
                   <SelectBox
                     disabled={!editable}
                     value={draft.invoice_currency ?? ""}
                     onChange={(e) => set("invoice_currency", e.target.value || null)}
                   >
-                    <option value="">Payroll currency</option>
-                    {(setup.data?.currencies ?? ["INR", "AED", "USD"]).map((c) => (
+                    <option value="">AED (default)</option>
+                    {(setup.data?.currencies ?? ["INR", "AED", "USD"]).filter((c) => c !== "AED").map((c) => (
                       <option key={c} value={c}>
                         {c}
                       </option>

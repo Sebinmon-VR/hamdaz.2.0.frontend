@@ -8,6 +8,8 @@ import {
   Banknote,
   Check,
   ChevronRight,
+  FileArchive,
+  FileDown,
   Download,
   FileSpreadsheet,
   FileText,
@@ -39,6 +41,7 @@ import {
   type PayrollLine,
   type PayrollRun,
   type PayrollRunDetail,
+  type InvoiceSetup,
   type PayrollSettings,
 } from "@/lib/payroll";
 import { Badge } from "@/components/ui/primitives";
@@ -51,6 +54,7 @@ import {
   fromCents,
   parseTyped,
   serverFigures,
+  toCents,
   type Draft,
   type Field,
   type Figures,
@@ -244,10 +248,12 @@ function InvoicePreview({
   people: number;
 }) {
   const settings = useSWR<PayrollSettings>("/payroll/settings");
+  const setup = useSWR<InvoiceSetup>("/payroll/invoice-setup");
   if (!settings.data) return null;
   const s = settings.data;
-  const currency = s.invoice_currency ?? CURRENCY[country];
+  const currency = s.invoice_currency ?? setup.data?.default_currency ?? "AED";
   const same = currency === CURRENCY[country];
+  const rate = setup.data?.default_rate ? Number(setup.data.default_rate) : null;
   return (
     <section className="border-t border-line">
       <Toolbar>
@@ -269,12 +275,23 @@ function InvoicePreview({
               </span>
             </td>
             <td className={clsx(TD, "tnum text-right text-ink")}>
-              {same ? amount(total, currency) : `${amount(total, CURRENCY[country])}, converted to ${currency}`}
+              {same
+                ? amount(total, currency)
+                : rate
+                  ? `≈ ${amount(fromCents(Math.round(toCents(total) / rate)), currency)}`
+                  : `${amount(total, CURRENCY[country])}, in ${currency}`}
+              {!same && <span className="block text-[11px] text-ink-4">{amount(total, CURRENCY[country])}</span>}
             </td>
           </tr>
         </tbody>
       </table>
       <p className="px-4 py-2.5 text-[12px] text-ink-3">
+        {!same && (
+          <>
+            {setup.data?.default_rate_note ?? "Converted at Zoho's rate."} The rate used is Zoho's on the invoice
+            date.{" "}
+          </>
+        )}
         Other charges — rent, internet, anything else — are added under the pay sheet once the month is run. The
         invoice is approved with the month, then created in Zoho.
       </p>
@@ -373,6 +390,11 @@ function RunSheet({
     (r.status === "approved" || r.status === "paid") && (payroll.can_process || payroll.can_approve);
   const anyPf = r.lines.some((l) => l.identifiers?.pf_enabled === true);
   const stem = `Payroll ${COUNTRY_NAME[r.country]} ${monthKey(r.year, r.month)}`;
+  const payslipOf = (line: PayrollLine) =>
+    download.run(
+      `payslips.pdf?line=${line.id}`,
+      `Payslip ${line.employee_code} ${line.employee_name} ${monthKey(r.year, r.month)}.pdf`,
+    );
   const pending = step.pending || approveOwn.pending;
   const error = step.error ?? approveOwn.error ?? remove.error ?? download.error ?? saver.error ?? run.error?.message;
 
@@ -536,7 +558,7 @@ function RunSheet({
               <th className={clsx(TH, "text-right")}>Bonus</th>
               <th className={clsx(TH, "text-right")}>Deductions</th>
               <th className={clsx(TH, "text-right")}>Net pay</th>
-              <th className={clsx(TH, "w-10")} />
+              <th className={clsx(TH, "w-16")} />
             </tr>
           </thead>
           <tbody>
@@ -548,6 +570,7 @@ function RunSheet({
                 draft={drafts[line.id]}
                 editable={editable}
                 onOpen={() => setOpen(line.id)}
+                onPayslip={() => payslipOf(line)}
                 onType={(field, text) => setDraft(line.id, field, text)}
                 onCommit={(field) => commit(line, field)}
               />
@@ -581,7 +604,10 @@ function RunSheet({
 
       <div className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-2.5">
         <Btn icon={FileText} onClick={() => download.run("payslips.pdf", `${stem} payslips.pdf`)}>
-          Payslips
+          All payslips (one PDF)
+        </Btn>
+        <Btn icon={FileArchive} onClick={() => download.run("payslips.zip", `${stem} payslips.zip`)}>
+          Payslip per person (ZIP)
         </Btn>
         <Btn icon={FileSpreadsheet} onClick={() => download.run("register.xlsx", `${stem} register.xlsx`)}>
           Salary register
@@ -639,9 +665,7 @@ function RunSheet({
           editable={editable}
           onClose={() => setOpen(null)}
           onSaved={(next) => run.mutate(next, { revalidate: false })}
-          onDownload={(line: PayrollLine) =>
-            download.run(`payslips.pdf?line=${line.id}`, `Payslip ${line.employee_code} ${monthKey(r.year, r.month)}.pdf`)
-          }
+          onDownload={payslipOf}
           onOpenEmployee={(employeeId) => go({ employee: employeeId })}
         />
       )}
@@ -810,6 +834,7 @@ function SheetRow({
   draft,
   editable,
   onOpen,
+  onPayslip,
   onType,
   onCommit,
 }: {
@@ -818,6 +843,7 @@ function SheetRow({
   draft: Draft | undefined;
   editable: boolean;
   onOpen: () => void;
+  onPayslip: () => void;
   onType: (field: Field, text: string | undefined) => void;
   onCommit: (field: Field) => void;
 }) {
@@ -900,8 +926,21 @@ function SheetRow({
         {pendingRow && figures.approximate && "≈ "}
         {amount(fromCents(figures.net))}
       </td>
-      <td className={clsx(TD, "text-right")}>
-        <IconBtn icon={ChevronRight} label={`${line.employee_name}: payslip`} bare className="size-7" onClick={onOpen} />
+      <td className={clsx(TD, "whitespace-nowrap text-right")}>
+        <IconBtn
+          icon={FileDown}
+          label={`Download ${line.employee_name}'s payslip`}
+          bare
+          className="inline-grid size-7"
+          onClick={onPayslip}
+        />
+        <IconBtn
+          icon={ChevronRight}
+          label={`${line.employee_name}: payslip details`}
+          bare
+          className="inline-grid size-7"
+          onClick={onOpen}
+        />
       </td>
     </tr>
   );

@@ -90,6 +90,12 @@ export function RunInvoice({
         <span className="text-[13px] font-semibold text-ink">{i.number ?? "Not numbered yet"}</span>
         <span className="hidden min-w-0 truncate text-[12px] text-ink-3 md:block">
           {i.issuer_name} → {i.customer_name} · {i.currency} · {date(i.invoice_date)}
+          {i.currency !== i.run_currency && i.exchange_rate && (
+            <>
+              {" "}· 1 {i.currency} = {i.exchange_rate} {i.run_currency}
+              {i.rate_from_zoho ? " (Zoho)" : " (typed)"}
+            </>
+          )}
         </span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {editable && (
@@ -119,8 +125,8 @@ export function RunInvoice({
       {error && <Note tone="danger">{error}</Note>}
       {i.needs_rate && (
         <Note tone="warn">
-          The invoice is in {i.currency} but the payroll is in {i.run_currency}: give the exchange rate in Edit
-          invoice, or the salaries are billed at 0.
+          The invoice is in {i.currency} but the payroll is in {i.run_currency}, and there is no rate to convert
+          at. {i.zoho_rate_note ?? ""} Until then the salaries are billed at 0.
         </Note>
       )}
       {!i.customer_zoho_id && (
@@ -366,8 +372,10 @@ function InvoiceEditor({
       ? toCents(invoice.salaries)
       : sameCurrency
         ? toCents(run.employer_cost)
-        : form.exchange_rate
-          ? Math.round(toCents(run.employer_cost) / Number(form.exchange_rate))
+        : form.exchange_rate || (form.currency === invoice.currency && invoice.zoho_rate)
+          ? Math.round(
+              toCents(run.employer_cost) / Number(form.exchange_rate || invoice.zoho_rate),
+            )
           : 0;
   const charges = form.charges.map((c) => {
     const cents = Math.round(Number(c.quantity || 0) * Number(c.rate || 0) * 100) || 0;
@@ -429,8 +437,33 @@ function InvoiceEditor({
             </SelectBox>
           </Labeled>
           {!sameCurrency && (
-            <Labeled label={`${invoice.run_currency} per ${form.currency}`} required hint="To convert the salaries.">
-              <TextBox inputMode="decimal" value={form.exchange_rate} onChange={(e) => set("exchange_rate", e.target.value)} />
+            <Labeled
+              label={`${invoice.run_currency} per ${form.currency}`}
+              hint={
+                form.currency === invoice.currency && invoice.zoho_rate_note
+                  ? invoice.zoho_rate_note
+                  : "Empty: Zoho's rate for the invoice date."
+              }
+            >
+              <div className="flex items-center gap-1.5">
+                <TextBox
+                  inputMode="decimal"
+                  placeholder={form.currency === invoice.currency ? (invoice.zoho_rate ?? "") : ""}
+                  value={form.exchange_rate}
+                  onChange={(e) => set("exchange_rate", e.target.value)}
+                />
+                {form.currency === invoice.currency &&
+                  invoice.zoho_rate &&
+                  form.exchange_rate !== invoice.zoho_rate && (
+                    <button
+                      type="button"
+                      className="shrink-0 text-[11.5px] font-medium text-accent hover:underline"
+                      onClick={() => set("exchange_rate", invoice.zoho_rate!)}
+                    >
+                      Use Zoho's
+                    </button>
+                  )}
+              </div>
             </Labeled>
           )}
         </div>
