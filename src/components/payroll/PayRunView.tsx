@@ -39,6 +39,7 @@ import {
   type PayrollLine,
   type PayrollRun,
   type PayrollRunDetail,
+  type PayrollSettings,
 } from "@/lib/payroll";
 import { Badge } from "@/components/ui/primitives";
 import { Modal, PanelSkeleton } from "@/components/ui/feedback";
@@ -219,9 +220,65 @@ function NotRun({
               </tbody>
             </table>
           </div>
+          <InvoicePreview at={at} country={country} total={total} people={paid.length} />
         </>
       )}
     </>
+  );
+}
+
+/**
+ * What the month's invoice will be, shown before the month is run — so the
+ * invoice is visible from the start rather than appearing out of nowhere.
+ * The real one is made with the run, under its pay sheet.
+ */
+function InvoicePreview({
+  at,
+  country,
+  total,
+  people,
+}: {
+  at: Ym;
+  country: Country;
+  total: string;
+  people: number;
+}) {
+  const settings = useSWR<PayrollSettings>("/payroll/settings");
+  if (!settings.data) return null;
+  const s = settings.data;
+  const currency = s.invoice_currency ?? CURRENCY[country];
+  const same = currency === CURRENCY[country];
+  return (
+    <section className="border-t border-line">
+      <Toolbar>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-4">Invoice</span>
+        <span className="text-[13px] font-semibold text-ink">Made with the month</span>
+        <span className="min-w-0 truncate text-[12px] text-ink-3">
+          {s.in_company_name} → {s.ae_company_name} · {currency}
+        </span>
+      </Toolbar>
+      <table className="w-full text-[13px]">
+        <tbody>
+          <tr>
+            <td className={TD}>
+              <span className="font-medium text-ink">Salaries</span>
+              <span className="ml-2 text-[11px] text-ink-4">from the pay sheet</span>
+              <span className="block text-[11.5px] text-ink-4">
+                {COUNTRY_NAME[country]} payroll, {MONTHS[at.month - 1]} {at.year} — {people}{" "}
+                {people === 1 ? "employee" : "employees"}
+              </span>
+            </td>
+            <td className={clsx(TD, "tnum text-right text-ink")}>
+              {same ? amount(total, currency) : `${amount(total, CURRENCY[country])}, converted to ${currency}`}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p className="px-4 py-2.5 text-[12px] text-ink-3">
+        Other charges — rent, internet, anything else — are added under the pay sheet once the month is run. The
+        invoice is approved with the month, then created in Zoho.
+      </p>
+    </section>
   );
 }
 
