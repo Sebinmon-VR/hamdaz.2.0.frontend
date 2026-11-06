@@ -469,6 +469,13 @@ function MailModal({ id, onClose, onChanged }: { id: string | null; onClose: () 
     await mutate(out, { revalidate: false });
     onChanged();
   });
+  // Rebuild the card and edit the one already in Teams — no new post.
+  const updateCard = useAction(async () => {
+    const out = await api.post<WatchedMailDetailOut>(`/mailwatch/mails/${id}/teams/update`);
+    await mutate(out, { revalidate: false });
+    setUpdated(true);
+  });
+  const [updated, setUpdated] = useState(false);
   const assignNow = useAction(async () => {
     await api.post(`/mailwatch/mails/${id}/assign`);
     setAssigned(true);
@@ -506,6 +513,11 @@ function MailModal({ id, onClose, onChanged }: { id: string | null; onClose: () 
               {order ? " (test channel)" : ""}
             </Button>
           )}
+          {data?.teams_posted_at && (
+            <Button icon={RefreshCw} loading={updateCard.pending} onClick={() => updateCard.run()}>
+              Update the Teams card
+            </Button>
+          )}
           <Button variant="accent" icon={RotateCcw} loading={again.pending} onClick={() => again.run()}>
             Classify again
           </Button>
@@ -532,6 +544,10 @@ function MailModal({ id, onClose, onChanged }: { id: string | null; onClose: () 
           {data.classify_error && <InlineNotice tone="warn">{data.classify_error}</InlineNotice>}
           {again.error && <InlineNotice tone="danger">{again.error}</InlineNotice>}
           {toTeams.error && <InlineNotice tone="danger">{toTeams.error}</InlineNotice>}
+          {updateCard.error && <InlineNotice tone="danger">{updateCard.error}</InlineNotice>}
+          {updated && !updateCard.error && (
+            <InlineNotice tone="positive">The card in Teams was updated in place.</InlineNotice>
+          )}
           {assignNow.error && <InlineNotice tone="danger">{assignNow.error}</InlineNotice>}
           {assigned && (
             <InlineNotice tone="warn">
