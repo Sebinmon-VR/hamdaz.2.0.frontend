@@ -194,6 +194,7 @@ export function LineEditor({
         line_total: null,
         supplier_unit_price: null,
         supplier_currency: null,
+        zoho_fx: null,
         margin: null,
         id: null,
       },
@@ -293,7 +294,40 @@ export function LineEditor({
    * supplier is chosen, so the two agree to the cent.
    */
   function priceAtMargin(line: QuoteLineDraft, percent: string): string | null {
-    return rateFromMargin(landedCostOf(line), percent, pricePlaces(currency));
+    return (
+      zohoOrderPrice(line, percent) ??
+      rateFromMargin(landedCostOf(line), percent, pricePlaces(currency))
+    );
+  }
+
+  /**
+   * Zoho's order, for a line bought in AED on a quote in another currency and
+   * still at its supplier's price: the landed cost in AED (their price plus the
+   * line's charges converted back), the margin on it, rounded to the fils, then
+   * ÷ Zoho's rate to the cent — as Zoho converts an AED item price on a USD
+   * estimate. The server says which lines, and at what rate (`zoho_fx`). Null
+   * when the line was typed by hand or its cost changed; it is then priced on
+   * its cost, as above. Mirrors the server's `zoho_price`.
+   */
+  function zohoOrderPrice(line: QuoteLineDraft, percent: string): string | null {
+    const unit = line.supplier_unit_price;
+    const theirs = line.supplier_currency?.toUpperCase();
+    const fx = line.zoho_fx;
+    const cost = line.cost_rate?.trim();
+    if (!unit || !theirs || !fx || !cost || isZero(cost)) return null;
+    // Still the supplier's price, converted: to four places now, to the cent
+    // on a line costed before that changed.
+    const stillTheirs = [4, 2].some((places) => {
+      const converted = divideExact(unit, fx, places);
+      const drift = converted === null ? null : subExact(converted, cost);
+      return drift !== null && isZero(drift);
+    });
+    if (!stillTheirs) return null;
+    const charges = subExact(landedCostOf(line), cost);
+    const chargesTheirs = charges === null ? null : multiplyExact(charges, fx);
+    const landed = chargesTheirs === null ? null : sumExact([unit, chargesTheirs]);
+    const sell = landed === null ? null : rateFromMargin(landed, percent, pricePlaces(theirs));
+    return sell === null ? null : divideExact(sell, fx, pricePlaces(currency));
   }
 
   /** Every costed line at one margin: the one number that prices the quote. */

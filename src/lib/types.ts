@@ -1452,6 +1452,9 @@ export interface QuoteLineOut {
    */
   supplier_unit_price: string | null;
   supplier_currency: string | null;
+  /** Zoho's rate for the quote's currency in AED when this line is priced in
+      Zoho's order (bought in AED on a quote in another currency); else null. */
+  zoho_fx?: string | null;
   source_supplier_quote_id: string | null;
 }
 
@@ -1497,6 +1500,7 @@ export interface QuoteLineDraft {
   line_total: string | null;
   supplier_unit_price: string | null;
   supplier_currency: string | null;
+  zoho_fx: string | null;
   margin: string | null;
 }
 
@@ -1518,6 +1522,7 @@ export function toDraft(line: QuoteLineOut): QuoteLineDraft {
     line_total: line.line_total,
     supplier_unit_price: line.supplier_unit_price,
     supplier_currency: line.supplier_currency,
+    zoho_fx: line.zoho_fx ?? null,
     margin: line.margin,
   };
 }
