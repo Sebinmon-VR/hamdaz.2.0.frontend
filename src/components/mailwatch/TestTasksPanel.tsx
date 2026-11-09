@@ -59,13 +59,19 @@ function TestTaskRow({ task, onRemoved }: { task: MailWatchTestTaskOut; onRemove
     await api.post(`/mailwatch/mails/${task.mail_id}/teams`);
     onRemoved();
   });
-  const staged = task.action === "stage_change";
+  const found = task.action === "match_found";
+  // A match found is shown as a stage change is: it follows the earlier task.
+  const staged = task.action === "stage_change" || found;
   return (
     <li className="space-y-1.5 py-3 text-[12.5px]">
       <div className="flex flex-wrap items-center gap-1.5">
         <Badge tone="warn">Testing</Badge>
         <Badge tone={staged ? "info" : "positive"}>
-          {staged ? `${(task.previous_stage ?? "?").toUpperCase()} → ${task.current_type ?? ""}` : "New task"}
+          {found
+            ? "New task · match found"
+            : staged
+              ? `${(task.previous_stage ?? "?").toUpperCase()} → ${task.current_type ?? ""}`
+              : "New task"}
         </Badge>
         {task.current_type && <Badge>{task.current_type}</Badge>}
         <span className="font-medium">{task.title}</span>

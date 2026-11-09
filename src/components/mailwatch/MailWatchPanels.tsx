@@ -59,6 +59,11 @@ const VERDICT: Record<MailVerdict, { label: string; tone: Tone; hint: string }> 
   new: { label: "New", tone: "positive", hint: "Not on the Proposals list — needs assigning" },
   existing: { label: "Existing", tone: "info", hint: "Already on the Proposals list" },
   stage_change: { label: "Stage change", tone: "warn", hint: "On the list at an earlier stage" },
+  match_found: {
+    label: "Match found",
+    tone: "warn",
+    hint: "A task matched by PR number or title, but this tender number is on no task: a new task, to whoever had it",
+  },
   duplicate_mail: { label: "Duplicate mail", tone: "neutral", hint: "An earlier mail brought the same tender" },
   not_found: { label: "Task not found", tone: "danger", hint: "No task found for this negotiation or order" },
   unsure: { label: "Match unsure", tone: "warn", hint: "Several tasks are alike — check the candidates" },
@@ -484,7 +489,10 @@ function MailModal({ id, onClose, onChanged }: { id: string | null; onClose: () 
   const secret = data?.category === "confidential";
   const assignable =
     data?.category === "new_tender" &&
-    (data.verdict === "new" || data.verdict === "stage_change" || data.verdict === "unsure");
+    (data.verdict === "new" ||
+      data.verdict === "stage_change" ||
+      data.verdict === "match_found" ||
+      data.verdict === "unsure");
   // The weekly list of unconfirmed orders gets no card; an order arriving does.
   const order = data?.category === "order" && data.kind !== "confirm_reminder";
 

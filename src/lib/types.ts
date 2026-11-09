@@ -4981,6 +4981,7 @@ export type MailVerdict =
   | "new"
   | "existing"
   | "stage_change"
+  | "match_found"
   | "duplicate_mail"
   | "not_found"
   | "unsure";
@@ -5102,7 +5103,7 @@ export interface MailWatchTestTaskOut {
   id: string;
   mail_id: string;
   /** "new" (priority 1 of the team) or "stage_change" (the earlier assignee). */
-  action: "new" | "stage_change";
+  action: "new" | "stage_change" | "match_found" | "unsure";
   title: string;
   assigned_to_name: string | null;
   assigned_to_email: string | null;
