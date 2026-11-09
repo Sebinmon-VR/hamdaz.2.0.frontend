@@ -6,10 +6,14 @@ import { api } from "@/lib/api";
 import { useAction } from "@/lib/hooks";
 import { relative } from "@/lib/format";
 import type { ApprovalSettingsIn, ApprovalSettingsOut } from "@/lib/types";
-import { Button, Input, Toggle } from "@/components/ui/controls";
+import type { StaffRow } from "@/lib/staff";
+import { X } from "lucide-react";
+import { Button, Input, Select, Toggle } from "@/components/ui/controls";
 import { InlineNotice, Modal } from "@/components/ui/feedback";
 
-const RULES: { key: keyof Omit<ApprovalSettingsIn, "extra_emails">; label: string; hint: string }[] = [
+type RuleKey = Exclude<keyof ApprovalSettingsIn, "extra_emails" | "named_approver_ids">;
+
+const RULES: { key: RuleKey; label: string; hint: string }[] = [
   {
     key: "notify_team_approvers",
     label: "The team's approvers",
@@ -52,6 +56,11 @@ export function ApprovalSettingsDialog({
   );
   const [draft, setDraft] = useState<ApprovalSettingsIn | null>(null);
   const [emails, setEmails] = useState("");
+  const [named, setNamed] = useState<{ user_id: string; name: string }[]>([]);
+  // Every local user, for the named-approver picker. A super admin reads it.
+  const people = useSWR<StaffRow[]>(open ? "/hr/staff?status=active" : null, {
+    revalidateOnFocus: false,
+  });
 
   useEffect(() => {
     if (data) {
@@ -64,6 +73,7 @@ export function ApprovalSettingsDialog({
         extra_emails: data.extra_emails,
       });
       setEmails(data.extra_emails.join(", "));
+      setNamed((data.named_approvers ?? []).map((p) => ({ user_id: p.user_id, name: p.name })));
     }
   }, [data]);
 
@@ -75,6 +85,7 @@ export function ApprovalSettingsDialog({
         .split(/[,;\s]+/)
         .map((e) => e.trim())
         .filter(Boolean),
+      named_approver_ids: named.map((p) => p.user_id),
     });
     await mutate(next, { revalidate: false });
     return next;
@@ -86,7 +97,7 @@ export function ApprovalSettingsDialog({
       onClose={onClose}
       width="lg"
       title="Approval request settings"
-      description="Who is emailed when a quote is sent for approval. This changes only the mail: anyone who may approve can still open a quote and decide it."
+      description="Who is emailed when a quote is sent for approval, and who else may approve. The switches change only the mail; named approvers may also open and decide quotes."
       footer={
         <>
           <Button onClick={onClose}>Close</Button>
@@ -112,6 +123,45 @@ export function ApprovalSettingsDialog({
 
       {draft && (
         <div className="space-y-4">
+          <div className="border-b border-line pb-4">
+            <span className="block text-[13px] font-medium text-ink">Named approvers</span>
+            <span className="mt-1 block text-[12px] text-ink-3">
+              Specific people, in any team, who may open and approve any team&rsquo;s quote and
+              are always emailed. They see quotes waiting for approval, not drafts.
+            </span>
+            <ul className="mt-2 divide-y divide-line text-[13px]">
+              {named.map((p) => (
+                <li key={p.user_id} className="flex items-center gap-2 py-1.5">
+                  <span className="flex-1 text-ink">{p.name}</span>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${p.name}`}
+                    onClick={() => setNamed(named.filter((n) => n.user_id !== p.user_id))}
+                    className="grid size-7 place-items-center rounded-md text-ink-3 hover:bg-panel-2 hover:text-ink"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <Select
+              className="mt-2 h-9! text-[13px]!"
+              value=""
+              onChange={(e) => {
+                const p = people.data?.find((r) => r.user_id === e.target.value);
+                if (p) setNamed([...named, { user_id: p.user_id, name: p.name }]);
+              }}
+            >
+              <option value="">Add a person…</option>
+              {(people.data ?? [])
+                .filter((r) => !named.some((n) => n.user_id === r.user_id))
+                .map((r) => (
+                  <option key={r.user_id} value={r.user_id}>
+                    {r.name} — {r.email}
+                  </option>
+                ))}
+            </Select>
+          </div>
           {RULES.map((rule) => (
             <Toggle
               key={rule.key}

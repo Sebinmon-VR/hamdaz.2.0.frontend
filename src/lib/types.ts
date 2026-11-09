@@ -1943,11 +1943,15 @@ export interface ApprovalSettingsIn {
   notify_ceo: boolean;
   notify_super_admins: boolean;
   extra_emails: string[];
+  /** The whole list of named approvers. Omitted leaves them unchanged. */
+  named_approver_ids?: string[];
 }
 
 export interface ApprovalSettingsOut extends ApprovalSettingsIn {
   updated_at: string | null;
   updated_by_name: string | null;
+  /** Specific people who may open and decide any team's quote. */
+  named_approvers: { user_id: string; name: string; email: string }[];
   /** Per team: who the request would go to now. */
   preview: { team_id: string; team_name: string; recipients: string[] }[];
 }
