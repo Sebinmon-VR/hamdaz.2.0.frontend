@@ -307,6 +307,7 @@ export function buildNav(session: Session): Nav {
           match: "/hr/applications",
           badge: "hr",
         },
+        { label: "Staff", href: "/hr/staff", icon: Users, match: "/hr/staff", badge: "hr" },
         {
           label: "Staff documents",
           href: "/hr/people",
