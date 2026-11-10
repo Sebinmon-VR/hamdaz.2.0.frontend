@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import clsx from "clsx";
+import { mutate } from "swr";
 import { ChevronDown, FileText, Plus, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { amount, decimal } from "@/lib/format";
@@ -41,9 +42,12 @@ export function LineDialog({
   const [note, setNote] = useState(line.note ?? "");
   const [extras, setExtras] = useState<PayrollExtra[]>(line.extras);
   const [more, setMore] = useState(false);
+  const savedJoined = typeof line.identifiers.joined_on === "string" ? line.identifiers.joined_on : "";
+  const [joined, setJoined] = useState(savedJoined);
 
   const save = useAction(async () => {
     const next = await api.patch<PayrollRunDetail>(`/payroll/runs/${run.id}/lines/${line.id}`, {
+      ...(joined && joined !== savedJoined ? { joined_on: joined } : {}),
       lop_adjust: lop || "0",
       ot_normal_hours: otNormal || "0",
       ot_premium_hours: otPremium || "0",
@@ -52,6 +56,10 @@ export function LineDialog({
       note: note.trim() || null,
       extras: extras.map((e) => ({ ...e, name: e.name.trim(), amount: e.amount.trim() })),
     });
+    if (joined && joined !== savedJoined) {
+      // The joining date lives on the employee record: refresh every employee list.
+      void mutate((key) => typeof key === "string" && key.startsWith("/payroll/employees"));
+    }
     onSaved(next);
     onClose();
     return next;
@@ -122,6 +130,23 @@ export function LineDialog({
 
       <DrawerSection title="This month">
         <div className="space-y-3">
+          <Labeled
+            label="Joined on"
+            hint={
+              joined !== savedJoined
+                ? "Saving works the month out again from this date, and changes the employee record."
+                : "Joined part-way through the month? Set the start date: pay is worked out for the days from then."
+            }
+          >
+            <div className="w-44">
+              <TextBox
+                type="date"
+                disabled={!editable}
+                value={joined}
+                onChange={(e) => setJoined(e.target.value)}
+              />
+            </div>
+          </Labeled>
           <Toggle
             disabled={!editable}
             checked={hold}

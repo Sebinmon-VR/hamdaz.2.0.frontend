@@ -336,6 +336,22 @@ export function parseMonth(key: string | null): { year: number; month: number } 
   return month >= 1 && month <= 12 ? { year: Number(m[1]), month } : null;
 }
 
+/**
+ * Why someone is paid for part of the month: they joined or left during it.
+ * Null when they were employed the whole month. Dates are ISO days from the
+ * line's identifiers, so comparing the "YYYY-MM" prefix is enough.
+ */
+export function partOfMonth(
+  line: PayrollLine,
+  at: { year: number; month: number },
+): { joined: string | null; left: string | null } | null {
+  const key = monthKey(at.year, at.month);
+  const inMonth = (v: unknown) => (typeof v === "string" && v.slice(0, 7) === key ? v : null);
+  const joined = inMonth(line.identifiers.joined_on);
+  const left = inMonth(line.identifiers.left_on);
+  return joined || left ? { joined, left } : null;
+}
+
 export function shiftMonth(at: { year: number; month: number }, by: number) {
   const index = at.year * 12 + (at.month - 1) + by;
   return { year: Math.floor(index / 12), month: (index % 12) + 1 };

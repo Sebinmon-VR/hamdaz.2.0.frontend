@@ -24,7 +24,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { amount, date, dateTime, decimal, isoDay, relative, sumExact } from "@/lib/format";
+import { amount, date, dateShort, dateTime, decimal, isoDay, relative, sumExact } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import {
@@ -34,6 +34,7 @@ import {
   employeesKey,
   monthKey,
   parseMonth,
+  partOfMonth,
   shiftMonth,
   type Country,
   type PayrollEmployee,
@@ -566,6 +567,7 @@ function RunSheet({
               <SheetRow
                 key={line.id}
                 line={line}
+                at={r}
                 figures={figures}
                 draft={drafts[line.id]}
                 editable={editable}
@@ -830,6 +832,7 @@ function useLineSaver(
 
 function SheetRow({
   line,
+  at,
   figures,
   draft,
   editable,
@@ -839,6 +842,7 @@ function SheetRow({
   onCommit,
 }: {
   line: PayrollLine;
+  at: { year: number; month: number };
   figures: Figures;
   draft: Draft | undefined;
   editable: boolean;
@@ -853,6 +857,7 @@ function SheetRow({
   const leave = Number(line.leave_lop_days);
   const basis = Number(line.basis_days);
   const pendingRow = draft !== undefined;
+  const part = partOfMonth(line, at);
   const cell = (field: Field, saved: number, show: string, can: boolean, hint?: string) => (
     <Cell
       editable={editable && can}
@@ -880,8 +885,10 @@ function SheetRow({
             )}
             {line.on_hold && <Badge tone="warn">On hold</Badge>}
           </span>
-          {figures.paid < basis && (
+          {(figures.paid < basis || part) && (
             <span className="block text-[11px] text-ink-4">
+              {part?.joined && <span className="text-accent">Joined {dateShort(part.joined)} · </span>}
+              {part?.left && <span className="text-warn">Left {dateShort(part.left)} · </span>}
               {decimal(String(figures.paid), { min: 0 })} of {decimal(line.basis_days, { min: 0 })} days paid
             </span>
           )}
