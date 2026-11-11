@@ -29,6 +29,7 @@ import {
   FolderLock,
   GaugeCircle,
   Gavel,
+  Globe,
   HandCoins,
   IdCard,
   KeyRound,
@@ -160,6 +161,23 @@ export function buildNav(session: Session): Nav {
     });
   }
   const more: NavGroup[] = [];
+
+  // What came in through the contact form on hamdaz.com. In the menu rather
+  // than the bar: a new one announces itself on the bell, and the people who
+  // answer them are a few, not everybody.
+  if (can("website_enquiries")) {
+    more.push({
+      label: "Sales",
+      items: [
+        {
+          label: "Website enquiries",
+          href: "/website-enquiries",
+          icon: Globe,
+          match: "/website-enquiries",
+        },
+      ],
+    });
+  }
 
   // Tenders read from the Ariba supplier portal. Beside Proposals rather than
   // a pill of its own: people look at it when a tender comes in, not daily.

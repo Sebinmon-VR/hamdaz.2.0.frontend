@@ -5149,3 +5149,57 @@ export interface MailWatchTestTaskOut {
   teams_posted_at: string | null;
   teams_error: string | null;
 }
+
+/* ── website enquiries (the contact form on hamdaz.com) ──────────────── */
+
+export type WebsiteEnquiryStatus = "new" | "contacted" | "qualified" | "won" | "lost" | "spam";
+
+export interface WebsitePersonOut {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface WebsiteEnquirySummaryOut {
+  id: string;
+  created_at: string;
+  name: string;
+  company: string | null;
+  email: string | null;
+  phone: string | null;
+  topics: string[];
+  /** The message flattened to a line, for the list. */
+  preview: string;
+  status: WebsiteEnquiryStatus;
+  assigned_to: WebsitePersonOut | null;
+}
+
+export interface WebsiteEnquiryPage {
+  enquiries: WebsiteEnquirySummaryOut[];
+  total: number;
+  /** Per status, whatever the filter — what the filter's own labels show. */
+  counts: Record<WebsiteEnquiryStatus, number>;
+}
+
+export interface WebsiteEnquiryOut extends WebsiteEnquirySummaryOut {
+  message: string;
+  /** The site path the form was sent from. */
+  page: string | null;
+  /** The first page of the visit — usually where an ad landed. */
+  landing: string | null;
+  referrer: string | null;
+  /** utm_* and gclid, only the ones the visit carried. */
+  attribution: Record<string, string>;
+  notes: string | null;
+  /** When somebody first moved it on from "new", and who. Never rewritten. */
+  handled_at: string | null;
+  handled_by: WebsitePersonOut | null;
+  updated_at: string;
+}
+
+export interface WebsiteEnquiryUpdateIn {
+  status?: WebsiteEnquiryStatus;
+  /** null unassigns. */
+  assigned_to_id?: string | null;
+  notes?: string | null;
+}
