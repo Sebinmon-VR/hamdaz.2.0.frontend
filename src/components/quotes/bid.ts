@@ -220,6 +220,8 @@ export interface CostRow {
   line_key: string | null;
   /** The amounts are per unit of that line, × its quantity. */
   per_unit: boolean;
+  /** Counted in the landed cost. Off keeps the row, out of the price. */
+  is_active: boolean;
 }
 
 export interface ComplianceRow {
@@ -273,6 +275,7 @@ export function costRowOf(row: QuoteCostLineOut, lineKeys: string[]): CostRow {
     percent_of: row.percent_of ?? "goods",
     line_key: row.line_position == null ? null : (lineKeys[row.line_position] ?? null),
     per_unit: row.per_unit ?? false,
+    is_active: row.is_active ?? true,
   };
 }
 
@@ -292,6 +295,7 @@ export function blankCostRow(stage: CostStage, sourceCurrency: string): CostRow 
     percent_of: "goods",
     line_key: null,
     per_unit: false,
+    is_active: true,
   };
 }
 
@@ -322,6 +326,7 @@ export function costRowIn(row: CostRow, sentKeys: string[]) {
     line_position: at >= 0 ? at : null,
     // Per unit means nothing without a line to count the units of.
     per_unit: at >= 0 && row.per_unit,
+    is_active: row.is_active,
   };
 }
 

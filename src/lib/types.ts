@@ -1643,6 +1643,8 @@ export interface QuoteCostLineOut {
   line_position?: number | null;
   /** The amounts are per unit of that line, × its quantity. */
   per_unit?: boolean;
+  /** Counted in the landed cost. Off keeps the row on the sheet, out of the price. */
+  is_active?: boolean;
 }
 
 /** What a rated cost row is charged on: the goods, or the CIF value. */
@@ -1735,6 +1737,8 @@ export interface CostElementOut {
   /** Stated per unit: the amounts above are the line's total over `quantity`. */
   per_unit?: boolean;
   quantity?: string | null;
+  /** False on a row switched off; such rows come in `switched_off`. */
+  is_active?: boolean;
 }
 
 /** One cost element's share of one line, per unit. */
@@ -1787,6 +1791,11 @@ export interface LandedCostOut {
    * bid's `uplift`: read it from here.
    */
   lines?: LineLandedOut[];
+  /**
+   * Rows switched off, with what each would add if switched on. In none of
+   * the figures above.
+   */
+  switched_off?: CostElementOut[];
 }
 
 /** One rung of the ladder: the landed cost priced at one margin. */

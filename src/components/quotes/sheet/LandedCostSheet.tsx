@@ -50,6 +50,10 @@ import {
  * A row belongs to the whole bid, shared across the lines by value, or to one
  * line — two lines from two suppliers carry two suppliers' charges. A row on a
  * line can be per unit, and is then multiplied by that line's quantity.
+ *
+ * Every typed row has an on/off switch beside its bin. Off keeps the row and
+ * its rate on the sheet, listed under "Switched off", but out of the landed
+ * cost and the prices. Payment / bank charges come in switched off.
  */
 
 /** A priced line, as a cost row's line picker names it. */
@@ -60,7 +64,7 @@ export interface CostLineChoice {
 }
 
 const COLUMNS =
-  "44px minmax(0,1.3fr) minmax(0,0.8fr) 118px 112px 122px minmax(0,0.8fr) 34px";
+  "44px minmax(0,1.3fr) minmax(0,0.8fr) 118px 112px 122px minmax(0,0.8fr) 68px";
 
 export function LandedCostSheet({
   bid,
@@ -121,6 +125,7 @@ export function LandedCostSheet({
   const byId = new Map(rows.filter((r) => r.id).map((r) => [r.id as string, r]));
   const unsaved = rows.filter((r) => r.id === null);
   const cifIndex = landed.elements.findIndex((e) => e.stage === "destination");
+  const switchedOff = landed.switched_off ?? [];
 
   return (
     <Sheet>
@@ -291,7 +296,7 @@ export function LandedCostSheet({
                 </GridRow>
               )}
 
-              <GridRow>
+              <GridRow faded={own && !row!.is_active}>
                 <Td align="right" muted>
                   <Num muted>{element.ref}</Num>
                 </Td>
@@ -432,17 +437,87 @@ export function LandedCostSheet({
                 </Td>
                 <Td align="center">
                   {own && (
-                    <button
-                      onClick={() => onRowsChange(rows.filter((r) => r.key !== row!.key))}
-                      aria-label={`Remove ${row!.label || "this cost"}`}
-                      className="grid size-6 place-items-center rounded-[6px] text-ink-4 transition hover:bg-danger-soft hover:text-danger"
-                    >
-                      <Trash2 className="size-3" strokeWidth={1.8} />
-                    </button>
+                    <RowControls
+                      row={row!}
+                      onToggle={(on) => patch(row!.key, { is_active: on })}
+                      onRemove={() => onRowsChange(rows.filter((r) => r.key !== row!.key))}
+                    />
                   )}
                 </Td>
               </GridRow>
             </div>
+          );
+        })}
+
+        {/* Rows switched off: on the sheet with what they would add, so they
+            can be switched back on, and in none of the totals below. */}
+        {switchedOff.length > 0 && (
+          <GridRow>
+            <Td />
+            <Td className="col-span-6" muted>
+              <span className="text-[11px] uppercase tracking-wide">
+                Switched off — not in the landed cost or the prices
+              </span>
+            </Td>
+            <Td />
+          </GridRow>
+        )}
+        {switchedOff.map((element) => {
+          const row = element.id ? byId.get(element.id) : undefined;
+          const own = editable && Boolean(row);
+          const on = own && row!.is_active;
+          return (
+            <GridRow key={`off-${element.id}`} faded={!on} tone={on ? "accent" : undefined}>
+              <Td align="right" muted>
+                <span className="text-[10.5px] text-ink-4">{on ? "on save" : "off"}</span>
+              </Td>
+              <Td wrap>
+                <span className="min-w-0">{element.label}</span>
+              </Td>
+              <Td wrap muted>
+                {element.basis ?? "—"}
+              </Td>
+              <Td align="right">
+                {own && row!.percent.trim() ? (
+                  <RateCell
+                    row={row!}
+                    stage={element.stage}
+                    onChange={(change) => patch(row!.key, change)}
+                  />
+                ) : element.percent ? (
+                  <Num muted>
+                    {decimal(element.percent, { min: 0 })}% of {element.percent_of ?? "goods"}
+                  </Num>
+                ) : (
+                  <span className="text-ink-4">—</span>
+                )}
+              </Td>
+              <Td align="right">
+                {element.amount_source ? (
+                  <Num muted>{decimal(element.amount_source)}</Num>
+                ) : (
+                  <span className="text-ink-4">—</span>
+                )}
+              </Td>
+              <Td align="right">
+                <span>
+                  <Num muted>{decimal(element.amount_base)}</Num>
+                  <span className="ml-1 text-[10px] text-ink-4">if on</span>
+                </span>
+              </Td>
+              <Td wrap muted>
+                {element.notes ?? ""}
+              </Td>
+              <Td align="center">
+                {own && (
+                  <RowControls
+                    row={row!}
+                    onToggle={(next) => patch(row!.key, { is_active: next })}
+                    onRemove={() => onRowsChange(rows.filter((r) => r.key !== row!.key))}
+                  />
+                )}
+              </Td>
+            </GridRow>
           );
         })}
 
@@ -522,13 +597,11 @@ export function LandedCostSheet({
               />
             </Td>
             <Td align="center">
-              <button
-                onClick={() => onRowsChange(rows.filter((r) => r.key !== row.key))}
-                aria-label="Remove this cost"
-                className="grid size-6 place-items-center rounded-[6px] text-ink-4 transition hover:bg-danger-soft hover:text-danger"
-              >
-                <Trash2 className="size-3" strokeWidth={1.8} />
-              </button>
+              <RowControls
+                row={row}
+                onToggle={(on) => patch(row.key, { is_active: on })}
+                onRemove={() => onRowsChange(rows.filter((r) => r.key !== row.key))}
+              />
             </Td>
           </GridRow>
         ))}
@@ -583,6 +656,53 @@ export function LandedCostSheet({
 
       {editable && <YellowNote />}
     </Sheet>
+  );
+}
+
+/**
+ * A row's on/off switch and its bin. Off keeps the row on the sheet but out of
+ * the landed cost; the bin removes it. Both take effect on save.
+ */
+function RowControls({
+  row,
+  onToggle,
+  onRemove,
+}: {
+  row: CostRow;
+  onToggle: (on: boolean) => void;
+  onRemove: () => void;
+}) {
+  const name = row.label || "this cost";
+  return (
+    <span className="flex items-center gap-1">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={row.is_active}
+        aria-label={`${row.is_active ? "Switch off" : "Switch on"} ${name}`}
+        title={row.is_active ? "On — counted in the landed cost" : "Off — not counted"}
+        onClick={() => onToggle(!row.is_active)}
+        className={
+          "relative h-4 w-7 shrink-0 rounded-full transition " +
+          (row.is_active ? "bg-accent" : "bg-panel-3")
+        }
+      >
+        <span
+          className={
+            "absolute top-0.5 size-3 rounded-full transition-all " +
+            (row.is_active ? "left-[14px] bg-accent-ink" : "left-0.5 bg-ink-4")
+          }
+        />
+      </button>
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove ${name}`}
+        className="grid size-6 place-items-center rounded-[6px] text-ink-4 transition hover:bg-danger-soft hover:text-danger"
+      >
+        <Trash2 className="size-3" strokeWidth={1.8} />
+      </button>
+    </span>
   );
 }
 
