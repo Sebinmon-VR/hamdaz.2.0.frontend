@@ -482,6 +482,14 @@ export function buildNav(session: Session): Nav {
       match: "/admin/mail-watch",
       badge: "admin",
     });
+    // The AI that answers Teams chats as IT Support: who, what it may do.
+    admin.push({
+      label: "IT Support agent",
+      href: "/admin/it-support",
+      icon: Bot,
+      match: "/admin/it-support",
+      badge: "admin",
+    });
     admin.push({
       label: "Who may do what",
       href: "/admin/permissions",
@@ -545,6 +553,7 @@ const STATIC_LABELS: Record<string, string> = {
   "/admin/console": "System",
   "/admin/mirror": "Proposals sync",
   "/admin/mail-watch": "Mail watch",
+  "/admin/it-support": "IT Support agent",
   "/admin/permissions": "Who may do what",
   "/notifications": "Notifications",
   "/payroll": "Payroll & invoicing",
