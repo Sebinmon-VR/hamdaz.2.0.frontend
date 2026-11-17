@@ -4,7 +4,7 @@ import { useState } from "react";
 import useSWR from "swr";
 import { Check, Inbox, Mail, MailWarning, ShieldAlert, X } from "lucide-react";
 import { api, withQuery } from "@/lib/api";
-import { date, num, relative } from "@/lib/format";
+import { num, relative } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import type { LeaveRequestOut } from "@/lib/types";
@@ -12,7 +12,7 @@ import { Avatar, Badge, Panel, PageHead, Stat } from "@/components/ui/primitives
 import { PersonHover } from "@/components/people/PersonHover";
 import { Button, Field, PillRail, Textarea, Toggle } from "@/components/ui/controls";
 import { Empty, ErrorState, InlineNotice, Modal, RowsSkeleton } from "@/components/ui/feedback";
-import { LeaveStatusBadge, LeaveTypeBadge } from "@/components/leave/badges";
+import { LeaveStatusBadge, LeaveTypeBadge, leaveSpan } from "@/components/leave/badges";
 
 type Queue = "pending" | "rejected" | "approved" | "all";
 
@@ -125,10 +125,8 @@ export default function LeaveQueuePage() {
                       {request.user_email} · asked {relative(request.created_at)}
                     </p>
                     <p className="mt-3 text-[14px] font-medium">
-                      {date(request.start_date)} – {date(request.end_date)}
-                      <span className="ml-2 font-normal opacity-70">
-                        {request.days} {request.days === 1 ? "day" : "days"}
-                      </span>
+                      {leaveSpan(request).dates}
+                      <span className="ml-2 font-normal opacity-70">{leaveSpan(request).length}</span>
                     </p>
                     {request.reason && (
                       <p className="mt-2 text-[13px] leading-relaxed opacity-80">
@@ -258,9 +256,7 @@ function DecideDialog({
       }
       description={
         deciding
-          ? `${date(deciding.request.start_date)} – ${date(deciding.request.end_date)}, ${
-              deciding.request.days
-            } ${deciding.request.days === 1 ? "day" : "days"}.`
+          ? `${leaveSpan(deciding.request).dates}, ${leaveSpan(deciding.request).length}.`
           : undefined
       }
       footer={

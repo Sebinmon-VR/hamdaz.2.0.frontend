@@ -8,7 +8,7 @@ import { CalendarDays, Send, Users } from "lucide-react";
 import { api, withQuery } from "@/lib/api";
 import { date, isoDay } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
-import type { CalendarOut, LeaveSettingsOut, LeaveType } from "@/lib/types";
+import type { CalendarOut, HalfDay, LeaveSettingsOut, LeaveType } from "@/lib/types";
 import { Avatar, Panel, PageHead, PanelHead } from "@/components/ui/primitives";
 import { Button, Field, Input, Select, Textarea } from "@/components/ui/controls";
 import { InlineNotice } from "@/components/ui/feedback";
@@ -17,6 +17,7 @@ import { LeaveTypeBadge } from "@/components/leave/badges";
 const TYPES: { value: LeaveType; label: string }[] = [
   { value: "annual", label: "Annual leave" },
   { value: "sick", label: "Sick leave" },
+  { value: "casual", label: "Casual leave" },
   { value: "emergency", label: "Emergency" },
   { value: "unpaid", label: "Unpaid" },
 ];
@@ -37,13 +38,16 @@ export default function RequestLeavePage() {
   const [start, setStart] = useState(isoDay(new Date()));
   const [end, setEnd] = useState(isoDay(new Date()));
   const [reason, setReason] = useState("");
+  /** "" for whole days; else the half of the one date. */
+  const [half, setHalf] = useState<"" | HalfDay>("");
 
   const days = useMemo(() => {
     const a = new Date(start);
     const b = new Date(end);
     if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime()) || b < a) return null;
+    if (half) return 0.5;
     return Math.round((b.getTime() - a.getTime()) / 86_400_000) + 1;
-  }, [start, end]);
+  }, [start, end, half]);
 
   // Only asked for once the range makes sense, and only over the range itself.
   const clashes = useSWR<CalendarOut>(
@@ -56,7 +60,8 @@ export default function RequestLeavePage() {
     api.post("/leave/requests", {
       leave_type: type,
       start_date: start,
-      end_date: end,
+      end_date: half ? start : end,
+      half_day: half || null,
       reason: reason.trim() || null,
     }),
   );
@@ -107,8 +112,24 @@ export default function RequestLeavePage() {
               </Select>
             </Field>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="First day off" required>
+            <Field label="How long" required>
+              <Select
+                value={half}
+                onChange={(e) => {
+                  const next = e.target.value as "" | HalfDay;
+                  setHalf(next);
+                  // A half day is one date.
+                  if (next) setEnd(start);
+                }}
+              >
+                <option value="">Full day(s)</option>
+                <option value="morning">Half day: morning</option>
+                <option value="afternoon">Half day: afternoon</option>
+              </Select>
+            </Field>
+
+            <div className={half ? "grid gap-4" : "grid gap-4 sm:grid-cols-2"}>
+              <Field label={half ? "Date" : "First day off"} required>
                 <Input
                   type="date"
                   value={start}
@@ -116,10 +137,11 @@ export default function RequestLeavePage() {
                     setStart(e.target.value);
                     // Keeps the range valid rather than letting the person
                     // submit something the backend will refuse.
-                    if (end < e.target.value) setEnd(e.target.value);
+                    if (half || end < e.target.value) setEnd(e.target.value);
                   }}
                 />
               </Field>
+              {!half && (
               <Field
                 label="Last day off"
                 required
@@ -132,12 +154,21 @@ export default function RequestLeavePage() {
                   onChange={(e) => setEnd(e.target.value)}
                 />
               </Field>
+              )}
             </div>
 
             {days !== null && (
               <p className="text-[13px] text-ink-3">
-                <strong className="text-ink">{days}</strong>{" "}
-                {days === 1 ? "day" : "days"} off, inclusive.
+                {half ? (
+                  <>
+                    <strong className="text-ink">Half a day</strong> off, the {half}.
+                  </>
+                ) : (
+                  <>
+                    <strong className="text-ink">{days}</strong> {days === 1 ? "day" : "days"} off,
+                    inclusive.
+                  </>
+                )}
                 {tooLong && (
                   <span className="text-danger">
                     {" "}

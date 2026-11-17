@@ -1,5 +1,5 @@
-import { Ban, Check, Clock, Plane, Stethoscope, Wallet, X, Zap } from "lucide-react";
-import { humanise } from "@/lib/format";
+import { Ban, Check, Clock, Coffee, Plane, Stethoscope, Wallet, X, Zap } from "lucide-react";
+import { date, humanise } from "@/lib/format";
 import { Badge, type Tone } from "@/components/ui/primitives";
 
 /**
@@ -13,9 +13,27 @@ import { Badge, type Tone } from "@/components/ui/primitives";
 const TYPES: Record<string, { tone: Tone; icon: typeof Plane }> = {
   annual: { tone: "accent", icon: Plane },
   sick: { tone: "info", icon: Stethoscope },
+  casual: { tone: "positive", icon: Coffee },
   emergency: { tone: "danger", icon: Zap },
   unpaid: { tone: "neutral", icon: Wallet },
 };
+
+/** "2 Dec – 4 Dec · 3 days", or "2 Dec · half day (morning)". */
+export function leaveSpan(request: {
+  start_date: string;
+  end_date: string;
+  days: number;
+  half_day?: string | null;
+}): { dates: string; length: string } {
+  if (request.half_day) {
+    return { dates: date(request.start_date), length: `half day (${request.half_day})` };
+  }
+  const dates =
+    request.start_date === request.end_date
+      ? date(request.start_date)
+      : `${date(request.start_date)} – ${date(request.end_date)}`;
+  return { dates, length: `${request.days} ${request.days === 1 ? "day" : "days"}` };
+}
 
 export function LeaveTypeBadge({ type }: { type: string }) {
   const spec = TYPES[type];

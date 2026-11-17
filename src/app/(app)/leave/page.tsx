@@ -3,13 +3,13 @@
 import useSWR from "swr";
 import { CalendarDays, Plus, X } from "lucide-react";
 import { api } from "@/lib/api";
-import { date, humanise, num, relative } from "@/lib/format";
+import { humanise, num, relative } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
 import type { LeaveRequestOut, LeaveSettingsOut, LeaveSummaryOut } from "@/lib/types";
 import { Panel, PageHead, PanelHead, Stat } from "@/components/ui/primitives";
 import { Button, LinkButton } from "@/components/ui/controls";
 import { Empty, ErrorState, InlineNotice, RowsSkeleton } from "@/components/ui/feedback";
-import { LeaveStatusBadge, LeaveTypeBadge } from "@/components/leave/badges";
+import { LeaveStatusBadge, LeaveTypeBadge, leaveSpan } from "@/components/leave/badges";
 
 export default function MyLeavePage() {
   const summary = useSWR<LeaveSummaryOut>("/leave/summary/me");
@@ -106,10 +106,10 @@ export default function MyLeavePage() {
                     <div className="flex flex-wrap items-center gap-3">
                       <div className="min-w-0 flex-1">
                         <p className="text-[14px] font-medium">
-                          {date(request.start_date)} – {date(request.end_date)}
+                          {leaveSpan(request).dates}
                         </p>
                         <p className="mt-0.5 text-[12px] opacity-70">
-                          {request.days} {request.days === 1 ? "day" : "days"} ·
+                          {leaveSpan(request).length} ·
                           requested {relative(request.created_at)}
                         </p>
                       </div>

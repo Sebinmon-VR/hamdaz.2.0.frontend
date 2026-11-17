@@ -842,7 +842,9 @@ export interface WorkloadOut {
 
 // ── leave ──────────────────────────────────────────────────────────────
 
-export type LeaveType = "annual" | "sick" | "emergency" | "unpaid";
+export type LeaveType = "annual" | "sick" | "casual" | "emergency" | "unpaid";
+/** Half of one date; null: whole days. */
+export type HalfDay = "morning" | "afternoon";
 export type LeaveStatus = "pending" | "approved" | "rejected" | "cancelled";
 
 export interface LeaveRequestOut {
@@ -853,6 +855,9 @@ export interface LeaveRequestOut {
   leave_type: string;
   start_date: string;
   end_date: string;
+  /** Set for a half day (start == end). */
+  half_day?: HalfDay | null;
+  /** 0.5 for a half day. */
   days: number;
   reason: string | null;
   status: string;
