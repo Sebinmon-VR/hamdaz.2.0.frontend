@@ -3,8 +3,8 @@
 import clsx from "clsx";
 import { type ReactNode, useEffect, useState } from "react";
 import useSWR from "swr";
-import { Bot, Plus, Save, ShieldCheck, X } from "lucide-react";
-import { api } from "@/lib/api";
+import { Bot, LogIn, LogOut, Plus, Save, ShieldCheck, X } from "lucide-react";
+import { api, apiUrl } from "@/lib/api";
 import { relative } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
@@ -43,6 +43,8 @@ interface ITSupportSettings {
   due_until: string;
   due_days: number[];
   due_test_to: string;
+  brief_enabled: boolean;
+  brief_at: string;
   brain_model: string;
   brain_effort: string;
   modules: Module[];
@@ -54,6 +56,10 @@ interface ITSupportSettings {
   signed_in_as: string | null;
   last_error: string | null;
   runs_here: boolean;
+  connected: boolean;
+  connected_account: string | null;
+  connected_at: string | null;
+  connected_by: string | null;
 }
 
 const KEY = "/it-support/settings";
@@ -115,10 +121,83 @@ function Status({ data }: { data: ITSupportSettings }) {
       {data.last_seen_at
         ? `Last seen on ${data.running_on} ${relative(data.last_seen_at)}.`
         : "No machine has run it since this page existed."}{" "}
-      {data.runs_here
-        ? "This server may run it; restart it if it should be answering."
-        : "It runs on the laptop: start the backend there (IT_SUPPORT_CHAT_ENABLED=true)."}
+      {!data.runs_here
+        ? "It runs on the laptop: start the backend there (IT_SUPPORT_CHAT_ENABLED=true)."
+        : data.connected
+          ? "This server runs it; it starts within 30 seconds of connecting."
+          : "This server runs it once the IT Support account is connected below."}
     </p>
+  );
+}
+
+/** Why Microsoft sent the browser back without a connection. */
+const CONNECT_ERRORS: Record<string, string> = {
+  sign_in_failed: "Microsoft sign-in did not complete. Try connecting again.",
+  permission_not_granted: "Microsoft did not grant the chat permissions. Try again, or ask an admin to consent.",
+  wrong_account: "That was not the IT Support account. Sign in as IT Support, not as yourself; nothing was kept.",
+  expired_login: "The sign-in took too long. Try connecting again.",
+};
+
+function Connection({ data, onChange }: { data: ITSupportSettings; onChange: (next: ITSupportSettings) => void }) {
+  const [notice, setNotice] = useState<{ tone: "positive" | "danger"; text: string } | null>(null);
+  // Microsoft sends the browser back here with ?connected=1 or ?connect_error=…
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("connected") === "1") {
+      setNotice({ tone: "positive", text: "IT Support connected. The agent starts within 30 seconds." });
+    }
+    const failed = params.get("connect_error") ?? params.get("error");
+    if (failed) {
+      const who = params.get("account");
+      setNotice({
+        tone: "danger",
+        text: (CONNECT_ERRORS[failed] ?? `Connecting failed: ${failed}`) + (who ? ` (signed in as ${who})` : ""),
+      });
+    }
+    if (params.has("connected") || params.has("connect_error")) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
+  const disconnect = useAction(async () => {
+    if (!window.confirm("Disconnect IT Support? The agent on the server stops answering within 30 seconds.")) return;
+    onChange(await api.del<ITSupportSettings>("/it-support/connect"));
+    setNotice(null);
+  });
+  return (
+    <Section
+      title="Connection"
+      hint="The agent chats as the IT Support account, so that account signs in once. Sign in as IT Support, not as yourself."
+    >
+      {notice && <InlineNotice tone={notice.tone}>{notice.text}</InlineNotice>}
+      {disconnect.error && <InlineNotice tone="danger">{disconnect.error}</InlineNotice>}
+      <div className="flex flex-wrap items-center gap-3 text-[12.5px]">
+        {data.connected ? (
+          <>
+            <Badge tone="positive">Connected</Badge>
+            <span className="text-ink-3">
+              as {data.connected_account}
+              {data.connected_at && `, ${relative(data.connected_at)}`}
+              {data.connected_by && ` by ${data.connected_by}`}
+            </span>
+          </>
+        ) : (
+          <Badge tone="danger">Not connected</Badge>
+        )}
+        <span className="flex-1" />
+        <a
+          href={apiUrl("/it-support/connect")}
+          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line px-3.5 text-[12px] font-medium hover:bg-panel-2"
+        >
+          <LogIn className="size-3.5" />
+          {data.connected ? "Connect again" : "Connect IT Support"}
+        </a>
+        {data.connected && (
+          <Button size="sm" icon={LogOut} loading={disconnect.pending} onClick={() => void disconnect.run()}>
+            Disconnect
+          </Button>
+        )}
+      </div>
+    </Section>
   );
 }
 
@@ -154,6 +233,8 @@ function SettingsForm() {
       due_until: form.due_until,
       due_days: form.due_days,
       due_test_to: form.due_test_to,
+      brief_enabled: form.brief_enabled,
+      brief_at: form.brief_at,
       brain_model: form.brain_model,
       brain_effort: form.brain_effort,
       module_modes: Object.fromEntries(form.modules.map((m) => [m.key, m.mode])),
@@ -208,6 +289,13 @@ function SettingsForm() {
       {saved && !save.error && (
         <InlineNotice tone="positive" className="mb-3">Saved. The agent picks it up within 30 seconds.</InlineNotice>
       )}
+
+      <Connection
+        data={data}
+        onChange={(next) => {
+          void mutate(next, { revalidate: false });
+        }}
+      />
 
       <Section title="Switch" hint="Off: no chat is answered and no check-in is sent, on any machine.">
         <Toggle checked={form.enabled} onChange={(v) => change({ enabled: v })} label="Answer chats" />
@@ -291,6 +379,27 @@ function SettingsForm() {
       </Section>
 
       <Section
+        title="Morning brief"
+        hint="At the start of the working day, one short message to each person with what closes today, anything early tomorrow, and anything past its BCD. Nothing due, nothing sent. Skips people on leave."
+      >
+        <Toggle
+          checked={form.brief_enabled}
+          onChange={(v) => change({ brief_enabled: v })}
+          label="Send the morning brief"
+          hint="Off until you decide to send. Preview with python -m app.itsupport.brief."
+        />
+        <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+          <span className="text-ink-3">At (IST, on the working days below)</span>
+          <Input
+            type="time"
+            value={form.brief_at}
+            className="h-8! w-28 rounded-xl! px-3! text-[12.5px]"
+            onChange={(e) => change({ brief_at: e.target.value })}
+          />
+        </div>
+      </Section>
+
+      <Section
         title="Due-today check-ins"
         hint="IT Support messages a person first when a task of theirs has its BCD today. Once per task."
       >
@@ -340,7 +449,7 @@ function SettingsForm() {
           })}
         </div>
         <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
-          <span className="text-ink-3">Trial: send every check-in to</span>
+          <span className="text-ink-3">Trial: send every check-in and brief to</span>
           <Select
             value={form.due_test_to}
             className="h-8! min-w-56 rounded-xl! pl-3! text-[12.5px]"
