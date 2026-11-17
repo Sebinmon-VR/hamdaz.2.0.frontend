@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { Globe } from "lucide-react";
 import { withQuery } from "@/lib/api";
@@ -24,6 +25,7 @@ type Filter = WebsiteEnquiryStatus | "all";
  * "New 3" stays true while you are looking at something else.
  */
 export default function WebsiteEnquiriesPage() {
+  const router = useRouter();
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const q = useDebounced(search.trim());
@@ -95,7 +97,16 @@ export default function WebsiteEnquiriesPage() {
               </thead>
               <tbody>
                 {rows.map((e) => (
-                  <tr key={e.id} className="border-b border-line/60 align-top hover:bg-panel-2/60">
+                  <tr
+                    key={e.id}
+                    // The whole row opens the enquiry, not only the name; the name stays a
+                    // real link for the keyboard, a new tab and screen readers.
+                    onClick={(ev) => {
+                      if ((ev.target as HTMLElement).closest("a")) return;
+                      router.push(`/website-enquiries/${e.id}`);
+                    }}
+                    className="cursor-pointer border-b border-line/60 align-top hover:bg-panel-2/60"
+                  >
                     <td className="whitespace-nowrap px-5 py-2.5 text-[12px] text-ink-3" title={dateTime(e.created_at)}>
                       {relative(e.created_at)}
                     </td>
