@@ -34,6 +34,34 @@ interface Module {
 
 type Mode = "off" | "read" | "write";
 
+interface Feature {
+  key: string;
+  name: string;
+  about: string;
+  group: string;
+  default: boolean;
+  on: boolean;
+  /** It messages people unasked. */
+  sends: boolean;
+  /** It changes something in the ERP. */
+  writes: boolean;
+}
+
+interface ActivityRow {
+  at: string;
+  email: string;
+  kind: string;
+  summary: string;
+  ok: boolean;
+  cost_usd: number | null;
+  detail: Record<string, unknown>;
+}
+
+interface ActivityPage {
+  rows: ActivityRow[];
+  spend: { day: string; usd: number; turns: number }[];
+}
+
 interface ITSupportSettings {
   enabled: boolean;
   people: Person[];
@@ -48,6 +76,7 @@ interface ITSupportSettings {
   brain_model: string;
   brain_effort: string;
   modules: Module[];
+  features?: Feature[];
   models: string[];
   efforts: string[];
   running: boolean;
@@ -90,6 +119,7 @@ export default function ITSupportPage() {
         lead="The AI that answers Teams chats sent to IT Support, as that account."
       />
       <SettingsForm />
+      <Activity />
     </div>
   );
 }
@@ -238,6 +268,7 @@ function SettingsForm() {
       brain_model: form.brain_model,
       brain_effort: form.brain_effort,
       module_modes: Object.fromEntries(form.modules.map((m) => [m.key, m.mode])),
+      features: Object.fromEntries((form.features ?? []).map((f) => [f.key, f.on])),
     });
     await mutate(next, { revalidate: false });
     setForm(next);
@@ -449,7 +480,7 @@ function SettingsForm() {
           })}
         </div>
         <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
-          <span className="text-ink-3">Trial: send every check-in and brief to</span>
+          <span className="text-ink-3">Trial: send everything it sends unasked to</span>
           <Select
             value={form.due_test_to}
             className="h-8! min-w-56 rounded-xl! pl-3! text-[12.5px]"
@@ -464,6 +495,41 @@ function SettingsForm() {
           </Select>
         </div>
       </Section>
+
+      {form.features && form.features.length > 0 && (
+        <Section
+          title="Features"
+          hint="Anything that messages people unasked or changes the ERP ships off; answers to questions ship on. The trial address above catches every message it sends unasked."
+        >
+          {Array.from(new Set(form.features.map((f) => f.group))).map((group) => (
+            <div key={group} className="space-y-2">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-ink-4">{group}</p>
+              {form.features!
+                .filter((f) => f.group === group)
+                .map((f) => (
+                  <div key={f.key} className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <Toggle
+                        checked={f.on}
+                        onChange={(v) =>
+                          change({
+                            features: form.features!.map((x) => (x.key === f.key ? { ...x, on: v } : x)),
+                          })
+                        }
+                        label={f.name}
+                        hint={f.about}
+                      />
+                    </div>
+                    <div className="flex shrink-0 gap-1 pt-0.5">
+                      {f.sends && <Badge tone="warn">sends</Badge>}
+                      {f.writes && <Badge tone="info">writes</Badge>}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          ))}
+        </Section>
+      )}
 
       <Section title="Model" hint="Rules answer first; this model handles the rest. A picture or scan always goes to Claude.">
         <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
@@ -538,6 +604,83 @@ function SettingsForm() {
           </tbody>
         </table>
       </Section>
+    </Panel>
+  );
+}
+
+const KIND_LABEL: Record<string, string> = {
+  change: "Change",
+  answer: "Status answer",
+  sent: "Sent",
+  feedback: "👎",
+};
+
+/** What the agent did: changes it made, answers it filed, messages it sent unasked, and 👎 on its replies; with the model spend per day. */
+function Activity() {
+  const [kind, setKind] = useState("");
+  const { data, error, mutate } = useSWR<ActivityPage>(
+    `/it-support/activity${kind ? `?kind=${kind}` : ""}`,
+    { refreshInterval: 60000 },
+  );
+  if (error) return <ErrorState error={error} onRetry={() => mutate()} />;
+  return (
+    <Panel className="p-5">
+      <div className="flex flex-wrap items-center gap-3 pb-3">
+        <h2 className="flex-1 text-[15px] font-semibold tracking-tight">Activity</h2>
+        <Select value={kind} className="h-8! min-w-44 rounded-xl! pl-3! text-[12.5px]" onChange={(e) => setKind(e.target.value)}>
+          <option value="">Everything</option>
+          <option value="change">Changes in the ERP</option>
+          <option value="answer">Status answers</option>
+          <option value="sent">Sent unasked</option>
+          <option value="feedback">👎 feedback</option>
+        </Select>
+      </div>
+      {!data ? (
+        <PanelSkeleton lines={4} />
+      ) : (
+        <>
+          {data.spend.length > 0 && (
+            <p className="pb-3 text-[12px] text-ink-3">
+              Model spend:{" "}
+              {data.spend.slice(0, 7).map((d, i) => (
+                <span key={d.day}>
+                  {i > 0 && " · "}
+                  {d.day.slice(5)} ${d.usd.toFixed(2)} ({d.turns})
+                </span>
+              ))}
+            </p>
+          )}
+          {data.rows.length === 0 ? (
+            <p className="text-[12.5px] text-ink-4">Nothing yet.</p>
+          ) : (
+            <table className="w-full text-[12.5px]">
+              <thead>
+                <tr className="text-left text-[11px] text-ink-4">
+                  <th className="pb-1.5 font-medium">When</th>
+                  <th className="pb-1.5 font-medium">For</th>
+                  <th className="pb-1.5 font-medium">Kind</th>
+                  <th className="pb-1.5 font-medium">What</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {data.rows.map((r, i) => (
+                  <tr key={`${r.at}-${i}`} className={clsx(!r.ok && r.kind !== "feedback" && "text-danger")}>
+                    <td className="whitespace-nowrap py-1.5 pr-3 text-ink-3" title={r.at}>
+                      {relative(r.at)}
+                    </td>
+                    <td className="py-1.5 pr-3">{r.email.split("@")[0]}</td>
+                    <td className="whitespace-nowrap py-1.5 pr-3">{KIND_LABEL[r.kind] ?? r.kind}</td>
+                    <td className="py-1.5">
+                      {r.summary}
+                      {!r.ok && r.kind !== "feedback" && " (failed)"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
+      )}
     </Panel>
   );
 }
