@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { ExternalLink, FileText, ListChecks, UserX } from "lucide-react";
@@ -44,11 +44,30 @@ export function EnquiryPicker() {
   const [scope, setScope] = useState<Scope>("live");
   const [search, setSearch] = useState("");
   const [raising, setRaising] = useState<QuotableTaskOut | null>(null);
+  // ?task=1958 (IT Support's "make the costing for 1958" link): that exact
+  // task, its raise dialog open, so the costing is made under it and not as
+  // a loose new one. All tasks, because a submitted bid is no longer live.
+  const [wanted, setWanted] = useState<string | null>(null);
+  useEffect(() => {
+    const task = new URLSearchParams(window.location.search).get("task");
+    if (task) {
+      setWanted(task);
+      setScope("all");
+      setSearch(task);
+    }
+  }, []);
 
   const { data, error, isLoading, mutate } = useSWR<QuotableTasksOut>(
     withQuery("/quote-requests/tasks", { scope }),
     { revalidateOnFocus: false },
   );
+
+  useEffect(() => {
+    if (!wanted || !data || scope !== "all") return;
+    const task = data.tasks.find((t) => t.id === wanted);
+    if (task) setRaising(task);
+    setWanted(null);
+  }, [wanted, data, scope]);
 
   if (error) return <ErrorState error={error} onRetry={() => mutate()} />;
   if (isLoading && !data) return <RowsSkeleton rows={6} />;
@@ -70,7 +89,7 @@ export function EnquiryPicker() {
   const needle = search.trim().toLowerCase();
   const rows = needle
     ? data.tasks.filter((task) =>
-        [task.title, task.end_user, task.quote_no, task.status, task.quote_reference]
+        [task.id, task.title, task.end_user, task.quote_no, task.status, task.quote_reference]
           .filter(Boolean)
           .some((value) => value!.toLowerCase().includes(needle)),
       )
@@ -95,7 +114,7 @@ export function EnquiryPicker() {
         <SearchInput
           value={search}
           onChange={setSearch}
-          placeholder="Search title, end user, quote number"
+          placeholder="Search task number, title, end user, quote number"
           className="w-full max-w-sm"
         />
         <PillRail
