@@ -3,9 +3,9 @@
 import clsx from "clsx";
 import { type ReactNode, useEffect, useState } from "react";
 import useSWR from "swr";
-import { Bot, LogIn, LogOut, Plus, Save, ShieldCheck, X } from "lucide-react";
-import { api, apiUrl } from "@/lib/api";
-import { relative } from "@/lib/format";
+import { Bot, LogIn, LogOut, Paperclip, Plus, RefreshCw, Save, ShieldCheck, X } from "lucide-react";
+import { api, apiUrl, withQuery } from "@/lib/api";
+import { dateTime, relative } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { Badge, PageHead, Panel } from "@/components/ui/primitives";
@@ -60,6 +60,33 @@ interface ActivityRow {
 interface ActivityPage {
   rows: ActivityRow[];
   spend: { day: string; usd: number; turns: number }[];
+}
+
+interface ChatRow {
+  chat_id: string;
+  email: string;
+  name: string;
+  /** On the people list: the agent answers them now. */
+  answered: boolean;
+  last_at: string | null;
+}
+
+interface ChatMessage {
+  id: string;
+  at: string | null;
+  /** Sent by IT Support (the agent). */
+  mine: boolean;
+  sender: string;
+  text: string;
+  files: string[];
+  reactions: string[];
+  deleted: boolean;
+}
+
+interface ChatPage {
+  messages: ChatMessage[];
+  /** The cursor for older messages; null at the start of the chat. */
+  more: string | null;
 }
 
 interface ITSupportSettings {
@@ -119,6 +146,7 @@ export default function ITSupportPage() {
         lead="The AI that answers Teams chats sent to IT Support, as that account."
       />
       <SettingsForm />
+      <Chats />
       <Activity />
     </div>
   );
@@ -678,6 +706,128 @@ function Activity() {
                 ))}
               </tbody>
             </table>
+          )}
+        </>
+      )}
+    </Panel>
+  );
+}
+
+const REACTIONS: Record<string, string> = {
+  like: "👍",
+  heart: "❤️",
+  laugh: "😆",
+  surprised: "😮",
+  sad: "😢",
+  angry: "😠",
+  dislike: "👎",
+};
+
+/** Each person's chat with IT Support as Teams has it, read-only: what they wrote and what the agent answered. */
+function Chats() {
+  const { data: chats, error, mutate } = useSWR<ChatRow[]>("/it-support/chats", { refreshInterval: 60000 });
+  const [picked, setPicked] = useState("");
+  const chatId = picked || chats?.[0]?.chat_id || "";
+  const { data: page, error: pageError, mutate: reload } = useSWR<ChatPage>(
+    chatId ? withQuery("/it-support/chats/messages", { chat_id: chatId }) : null,
+    { refreshInterval: 20000 },
+  );
+  // Older pages, for the chat they were loaded for.
+  const [older, setOlder] = useState<{ chat: string; messages: ChatMessage[]; more: string | null } | null>(null);
+  const earlier = older?.chat === chatId ? older : null;
+  const cursor = earlier ? earlier.more : (page?.more ?? null);
+  const loadOlder = useAction(async () => {
+    if (!cursor) return;
+    const next = await api.get<ChatPage>("/it-support/chats/messages", { chat_id: chatId, more: cursor });
+    setOlder({ chat: chatId, messages: [...(earlier?.messages ?? []), ...next.messages], more: next.more });
+  });
+  const seen = new Set<string>();
+  const messages = [...(page?.messages ?? []), ...(earlier?.messages ?? [])]
+    .filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), true)))
+    .reverse();
+  const current = chats?.find((c) => c.chat_id === chatId);
+
+  return (
+    <Panel className="p-5">
+      <div className="flex flex-wrap items-center gap-3 pb-3">
+        <h2 className="flex-1 text-[15px] font-semibold tracking-tight">Chats</h2>
+        {chats && chats.length > 0 && (
+          <Select
+            value={chatId}
+            className="h-8! min-w-56 rounded-xl! pl-3! text-[12.5px]"
+            onChange={(e) => setPicked(e.target.value)}
+          >
+            {chats.map((c) => (
+              <option key={c.chat_id} value={c.chat_id}>
+                {c.name}
+                {c.last_at ? ` · ${relative(c.last_at)}` : ""}
+                {c.answered ? "" : " (not answered)"}
+              </option>
+            ))}
+          </Select>
+        )}
+        <Button size="sm" icon={RefreshCw} onClick={() => void Promise.all([mutate(), reload()])}>
+          Refresh
+        </Button>
+      </div>
+      {error ? (
+        <ErrorState error={error} onRetry={() => mutate()} />
+      ) : !chats ? (
+        <PanelSkeleton lines={4} />
+      ) : chats.length === 0 ? (
+        <p className="text-[12.5px] text-ink-4">No chats with IT Support yet.</p>
+      ) : pageError ? (
+        <ErrorState error={pageError} onRetry={() => reload()} />
+      ) : !page ? (
+        <PanelSkeleton lines={6} />
+      ) : (
+        <>
+          <p className="pb-2 text-[11.5px] text-ink-4">
+            {current?.email} · read-only, as Teams has it · newest at the bottom
+          </p>
+          {cursor && (
+            <div className="pb-2">
+              <Button size="sm" loading={loadOlder.pending} onClick={() => void loadOlder.run()}>
+                Show older
+              </Button>
+              {loadOlder.error && <span className="pl-3 text-[12px] text-danger">{loadOlder.error}</span>}
+            </div>
+          )}
+          {messages.length === 0 ? (
+            <p className="text-[12.5px] text-ink-4">Nothing in this chat yet.</p>
+          ) : (
+            <div className="max-h-[560px] divide-y divide-line overflow-y-auto border-y border-line">
+              {messages.map((m) => (
+                <div key={m.id} className="grid grid-cols-[92px_1fr] gap-3 py-2 text-[12.5px]">
+                  <div className="text-[11.5px] leading-tight">
+                    <div className={clsx("font-medium", m.mine ? "text-accent-text" : "text-ink-2")}>
+                      {m.mine ? "IT Support" : m.sender || current?.name}
+                    </div>
+                    <div className="text-ink-4" title={m.at ? dateTime(m.at) : undefined}>
+                      {m.at ? relative(m.at) : ""}
+                    </div>
+                  </div>
+                  <div className={clsx("min-w-0 whitespace-pre-wrap break-words", m.deleted && "italic text-ink-4")}>
+                    {m.deleted ? "Deleted" : m.text}
+                    {m.files.map((f) => (
+                      <span key={f} className="mt-0.5 flex items-center gap-1 text-[12px] text-ink-3">
+                        <Paperclip className="size-3" />
+                        {f}
+                      </span>
+                    ))}
+                    {m.reactions.length > 0 && (
+                      <span className="mt-0.5 block text-[12px]">
+                        {m.reactions.map((r, i) => (
+                          <span key={`${r}-${i}`} className="pr-1">
+                            {REACTIONS[r] ?? r}
+                          </span>
+                        ))}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </>
       )}
