@@ -47,6 +47,7 @@ import { Empty, ErrorState, PanelSkeleton } from "@/components/ui/feedback";
 import { NoWidgets, Widget, WidgetGrid } from "@/components/widgets";
 import { OrgWorkload } from "@/components/proposals/OrgWorkload";
 import { Greeting, SessionClock } from "@/components/shell/Clock";
+import { HrAnnouncements } from "@/components/hr/HrAnnouncements";
 
 /**
  * Overview.
@@ -190,6 +191,10 @@ export default function DashboardPage() {
           </>
         }
       />
+
+      {/* HR's holidays and notices: a card while something is coming up, and a
+          pop-up the first time each one appears. Renders nothing otherwise. */}
+      <HrAnnouncements />
 
       <div className="grid gap-4 lg:grid-cols-[1.58fr_1fr]">
         <HeroPanel className="p-7">

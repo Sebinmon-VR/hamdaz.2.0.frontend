@@ -16,6 +16,7 @@ import {
   Activity,
   AlarmClock,
   CalendarClock,
+  CalendarHeart,
   Bell,
   Bot,
   Briefcase,
@@ -301,6 +302,12 @@ export function buildNav(session: Session): Nav {
   if (can("hr", "my_record")) {
     people.push({ label: "My HR record", href: "/hr/me", icon: IdCard, match: "/hr/me" });
   }
+  // The year's holidays. Open to everybody, and no grant gates it: the API
+  // reads with a bare session. HR reaches the same page from the HR group,
+  // where it is the editor, so it is listed once per person, not twice.
+  if (!isHrViewer(session)) {
+    people.push({ label: "Holidays", href: "/hr/calendar", icon: CalendarHeart, match: "/hr/calendar" });
+  }
   if (people.length) more.push({ label: "People", items: people });
 
   // HR proper: the personnel files, gated on membership of the HR team rather
@@ -326,6 +333,13 @@ export function buildNav(session: Session): Nav {
           badge: "hr",
         },
         { label: "Staff", href: "/hr/staff", icon: Users, match: "/hr/staff", badge: "hr" },
+        {
+          label: "Holiday calendar",
+          href: "/hr/calendar",
+          icon: CalendarHeart,
+          match: "/hr/calendar",
+          badge: "hr",
+        },
         {
           label: "Staff documents",
           href: "/hr/people",
@@ -572,6 +586,7 @@ const STATIC_LABELS: Record<string, string> = {
   "/hr/reviews": "Review cycles",
   "/hr/my-reviews": "Reviews to write",
   "/hr/me": "My HR record",
+  "/hr/calendar": "Holidays & notices",
 };
 
 export function labelFor(pathname: string): string {
