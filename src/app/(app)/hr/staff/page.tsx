@@ -20,6 +20,7 @@ import {
 import { Badge, PageHead, type Tone } from "@/components/ui/primitives";
 import { PanelSkeleton } from "@/components/ui/feedback";
 import { HrOnly } from "@/components/hr/HrOnly";
+import { StaffWebsiteProfile } from "@/components/hr/org/StaffWebsiteProfile";
 import { Drawer, DrawerSection } from "@/components/payroll/Drawer";
 import {
   AreaBox,
@@ -265,6 +266,8 @@ function PersonDrawer({
               </dd>
             </dl>
           </DrawerSection>
+
+          <StaffWebsiteProfile userId={p.user_id} />
 
           <DrawerSection
             title="Leaving"

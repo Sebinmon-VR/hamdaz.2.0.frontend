@@ -11,3 +11,6 @@ npm-debug.log*
 
 # The removed 3D face's avatar (35 MB), if it is still downloaded locally.
 public/avatars/
+
+# The cut-out tool's runtime, copied from node_modules by scripts/copy-ort.mjs.
+public/ort/

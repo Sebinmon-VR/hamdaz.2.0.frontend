@@ -15,13 +15,13 @@ import { AGENTS_ENABLED } from "@/lib/features";
 import {
   Activity,
   AlarmClock,
-  CalendarClock,
-  CalendarHeart,
   Bell,
   Bot,
   Briefcase,
   Building2,
+  CalendarClock,
   CalendarDays,
+  CalendarHeart,
   CalendarRange,
   ClipboardList,
   Coins,
@@ -33,26 +33,27 @@ import {
   Globe,
   HandCoins,
   IdCard,
+  Inbox,
   KeyRound,
   LayoutList,
-  Inbox,
-  MailSearch,
   ListChecks,
+  MailSearch,
   Map as MapIcon,
+  Network,
   NotebookPen,
   ReceiptText,
   Scale,
   ScanSearch,
   Settings,
+  ShieldCheck,
   Sliders,
   Star,
   Tag,
   Trophy,
-  UserCheck,
-  UserSearch,
-  ShieldCheck,
-  Users,
   type LucideIcon,
+  UserCheck,
+  Users,
+  UserSearch,
 } from "lucide-react";
 import { isHrViewer } from "@/lib/hr";
 import type { Session } from "@/lib/session";
@@ -334,6 +335,14 @@ export function buildNav(session: Session): Nav {
         },
         { label: "Staff", href: "/hr/staff", icon: Users, match: "/hr/staff", badge: "hr" },
         {
+          // The chart behind the website's Our People page, and each face's photo and details.
+          label: "Organisation",
+          href: "/hr/organisation",
+          icon: Network,
+          match: "/hr/organisation",
+          badge: "hr",
+        },
+        {
           label: "Holiday calendar",
           href: "/hr/calendar",
           icon: CalendarHeart,
@@ -587,6 +596,7 @@ const STATIC_LABELS: Record<string, string> = {
   "/hr/my-reviews": "Reviews to write",
   "/hr/me": "My HR record",
   "/hr/calendar": "Holidays & notices",
+  "/hr/organisation": "Organisation",
 };
 
 export function labelFor(pathname: string): string {
