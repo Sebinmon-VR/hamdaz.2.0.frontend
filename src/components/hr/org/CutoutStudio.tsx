@@ -2,6 +2,7 @@
 
 import clsx from "clsx";
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { createPortal } from "react-dom";
 import { Eraser, Hand, ImageUp, Paintbrush, RotateCcw, Undo2, X } from "lucide-react";
 import {
   OUT_H,
@@ -259,7 +260,9 @@ export function CutoutStudio({
 
   const pct = progress?.fraction != null ? Math.round(progress.fraction * 100) : null;
 
-  return (
+  // Straight onto <body>, like the person drawer it opens from (which is portalled there too): rendered
+  // in place it sat inside the page's own stacking context and came up behind the drawer.
+  return createPortal(
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-3 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-label={`Photo for ${name}`}>
       <div className="flex max-h-full w-full max-w-[1080px] flex-col overflow-hidden rounded-xl border border-line bg-panel shadow-2xl">
         <div className="flex items-center gap-3 border-b border-line px-4 py-3">
@@ -439,7 +442,8 @@ export function CutoutStudio({
           </span>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
