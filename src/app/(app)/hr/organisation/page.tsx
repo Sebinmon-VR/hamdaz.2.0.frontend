@@ -35,24 +35,23 @@ const PAPER = "#f2f1ed";
 
 type Editing = { person: OrgPerson } | { fresh: NewFace };
 type TeamEditing = { team: OrgTeam } | { parent: OrgTeam | null; office: OrgOffice | null };
-type Country = OrgOffice | "all";
 
 /**
  * The organisation chart behind the website's Our People page.
  *
- * The company has two country charts under one CEO: the UAE and India. Each has
- * departments (Sales, Business Operations, Finance…); a department has one or
- * more heads, people of its own, and groups inside it (Technicians, IT & HSE…),
- * each with an optional lead. HR arranges it here and fills in what the page
- * says about each person; a face can also be edited from its staff record.
- * Nothing is public until Publish, which checks the chart is complete first.
+ * One chart for the whole company: the CEO, and under them every department,
+ * the UAE's and India's side by side (Sales, Business Operations, Finance…). A
+ * department has one or more heads, people of its own, and groups inside it
+ * (Technicians, IT & HSE…), each with an optional lead; its office is only a
+ * label. HR arranges it here and fills in what the page says about each person;
+ * a face can also be edited from its staff record. Nothing is public until
+ * Publish, which checks the chart is complete first.
  */
 function OrganisationPage() {
   const chart = useSWR<OrgState>(ORG_KEY);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [picking, setPicking] = useState(false);
   const [teamEdit, setTeamEdit] = useState<TeamEditing | null>(null);
-  const [country, setCountry] = useState<Country>("AE");
   const state = chart.data;
   const view = useMemo(() => (state ? chartOf(state) : null), [state]);
 
@@ -70,10 +69,8 @@ function OrganisationPage() {
     refresh();
   }
 
-  const fresh = (over: Partial<NewFace>): NewFace => ({ user_id: null, name: "", title: "", office: country === "IN" ? "IN" : "AE", ...over });
-  const depts = view ? view.depts.filter((d) => country === "all" || d.team.office === country || !d.team.office) : [];
-  const count = (c: OrgOffice) =>
-    view ? view.depts.filter((d) => d.team.office === c).reduce((n, d) => n + d.heads.length + d.members.length + d.groups.reduce((m, g) => m + g.heads.length + g.members.length, 0), 0) : 0;
+  const fresh = (over: Partial<NewFace>): NewFace => ({ user_id: null, name: "", title: "", office: "AE", ...over });
+  const depts = view ? view.depts : [];
   const sortedTeams = state ? [...state.teams].sort((a, b) => a.sort_order - b.sort_order) : [];
 
   return (
@@ -81,7 +78,7 @@ function OrganisationPage() {
       <PageHead
         eyebrow="HR · People"
         title="Organisation"
-        lead="The chart on the website's Our People page: the UAE and India, each department and group, with each person's photo and a few lines about them."
+        lead="The chart on the website's Our People page: one chart under the CEO, every department and group in the UAE and India, with each person's photo and a few lines about them."
         actions={
           <div className="flex gap-2">
             <Btn icon={UserPlus} onClick={() => setPicking(true)}>
@@ -149,24 +146,15 @@ function OrganisationPage() {
           {/* the chart */}
           <Surface className="overflow-hidden">
             <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
-              <div className="flex rounded-md border border-line p-0.5">
-                {(["AE", "IN", "all"] as Country[]).map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setCountry(c)}
-                    className={clsx("rounded px-3 py-1 text-[12.5px] font-medium", country === c ? "bg-panel-2 text-ink" : "text-ink-3 hover:text-ink")}
-                  >
-                    {c === "all" ? "Both" : `${COUNTRY_LABEL[c]} · ${count(c)}`}
-                  </button>
-                ))}
-              </div>
+              <p className="text-[12.5px] text-ink-3">
+                {state.people.length} {state.people.length === 1 ? "person" : "people"} · {depts.length} {depts.length === 1 ? "department" : "departments"}
+              </p>
               <span className="ml-auto" />
-              <Btn icon={Plus} onClick={() => setTeamEdit({ parent: null, office: country === "all" ? null : country })}>
+              <Btn icon={Plus} onClick={() => setTeamEdit({ parent: null, office: null })}>
                 Add department
               </Btn>
             </div>
-            <div className="overflow-x-auto px-4 pb-6 pt-4" style={{ background: PAPER }}>
+            <div className="px-4 pb-6 pt-4" style={{ background: PAPER }}>
               <div className="flex justify-center gap-6 pb-6 pt-8">
                 {view.md.length === 0 ? (
                   <EmptySlot label="CEO" onClick={() => setEditing({ fresh: fresh({ title: "Chief Executive Officer", position: "md" }) })} />
@@ -177,7 +165,7 @@ function OrganisationPage() {
               {depts.length === 0 ? (
                 <p className="py-8 text-center text-[13px] text-ink-3">No departments here yet. Add the first one with “Add department”.</p>
               ) : (
-                <div className="flex min-w-max items-start justify-center gap-4">
+                <div className="flex flex-wrap items-start justify-center gap-4">
                   {depts.map((d) => {
                     const siblings = view.depts.map((x) => x.team);
                     return (
@@ -305,7 +293,7 @@ function DeptCard({
 }) {
   const groups = d.groups.map((g) => g.team);
   return (
-    <div className="w-max min-w-[13rem] rounded-lg border border-line/70 bg-white/60 pb-3">
+    <div className="w-max min-w-[13rem] max-w-[30rem] rounded-lg border border-line/70 bg-white/60 pb-3">
       <div className="flex items-center gap-1 border-b border-line/70 px-1 py-1.5">
         <IconBtn icon={ChevronLeft} label="Move left" disabled={first} onClick={() => onMoveTeam(d.team, -1, siblings)} />
         <button type="button" className="min-w-0 flex-1 truncate px-1 text-center text-[12.5px] font-semibold uppercase tracking-wide text-ink hover:underline" onClick={() => onTeam(d.team)} title="Edit department">
@@ -322,7 +310,7 @@ function DeptCard({
         <EmptySlot label={d.heads.length ? "Add head" : "Head"} small onClick={() => onAdd(d.team, "head")} />
       </div>
       {d.members.length > 0 && <People unit={d} onOpen={onOpen} onMove={onMovePerson} />}
-      <div className="flex items-start gap-3 px-3 pt-2">
+      <div className="flex flex-wrap items-start justify-center gap-3 px-3 pt-2">
         {d.groups.map((g, i) => (
           <GroupBox
             key={g.team.id}
@@ -589,9 +577,9 @@ function TeamDialog({ editing, teams, onClose, onSaved }: { editing: TeamEditing
           </SelectBox>
         </Labeled>
         {!isGroup && (
-          <Labeled label="Country chart">
+          <Labeled label="Office" hint="A label on the department. Every department is on the one chart.">
             <SelectBox value={form.office ?? ""} onChange={(e) => set("office", (e.target.value || null) as OrgOffice | null)}>
-              <option value="">Both</option>
+              <option value="">Both offices</option>
               <option value="AE">UAE</option>
               <option value="IN">India</option>
             </SelectBox>

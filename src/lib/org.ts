@@ -14,7 +14,7 @@ export interface OrgTeam {
   short_name: string;
   /** The department a group is inside; null for a department. One level only. */
   parent_id: string | null;
-  /** A department's country chart; null for a group (it follows its department). */
+  /** A department's office, shown as a label on the one chart; null for a group (it follows its department). */
   office: OrgOffice | null;
   /** A line under the name on the chart, e.g. "Technical reporting: Althaf Hussein". */
   note: string | null;
@@ -103,7 +103,7 @@ export const POSITION_LABEL: Record<OrgPosition, string> = {
 };
 
 export const OFFICE_LABEL: Record<OrgOffice, string> = { AE: "Abu Dhabi", IN: "Kerala" };
-/** The two country charts. */
+/** A department's office label on the chart. */
 export const COUNTRY_LABEL: Record<OrgOffice, string> = { AE: "UAE", IN: "India" };
 
 /** The website's two ring colours (assets/css/style.css on hamdaz.com). */
