@@ -1,15 +1,14 @@
 "use client";
 
 import clsx from "clsx";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import useSWR from "swr";
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ExternalLink, Pencil, Plus, Send, Trash2, UserPlus } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ExternalLink, Pencil, Plus, Send, Trash2, TriangleAlert, UserPlus } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAction } from "@/lib/hooks";
 import {
   COUNTRY_LABEL,
   ORG_KEY,
-  POSITION_LABEL,
   chartOf,
   photoUrl,
   type Dept,
@@ -27,11 +26,10 @@ import { Face } from "@/components/hr/org/Face";
 import { PersonDrawer, type NewFace } from "@/components/hr/org/PersonDrawer";
 import { Badge, PageHead } from "@/components/ui/primitives";
 import { Modal, PanelSkeleton } from "@/components/ui/feedback";
-import { Btn, IconBtn, Labeled, Note, SearchBox, SelectBox, Surface, TextBox } from "@/components/payroll/ui";
+import { Btn, Labeled, Note, SearchBox, SelectBox, Surface, TextBox } from "@/components/payroll/ui";
 
 /** Where the published chart shows. */
 const WEBSITE_PAGE = "https://hamdaz.com/people.html";
-const PAPER = "#f2f1ed";
 
 type Editing = { person: OrgPerson } | { fresh: NewFace };
 type TeamEditing = { team: OrgTeam } | { parent: OrgTeam | null; office: OrgOffice | null };
@@ -46,6 +44,10 @@ type TeamEditing = { team: OrgTeam } | { parent: OrgTeam | null; office: OrgOffi
  * label. HR arranges it here and fills in what the page says about each person;
  * a face can also be edited from its staff record. Nothing is public until
  * Publish, which checks the chart is complete first.
+ *
+ * Drawn flat and dense: one surface, the departments as columns in one row
+ * (scrolling sideways on a narrow screen rather than wrapping), each person a
+ * line with a small face, and the order arrows only on hover.
  */
 function OrganisationPage() {
   const chart = useSWR<OrgState>(ORG_KEY);
@@ -72,13 +74,14 @@ function OrganisationPage() {
   const fresh = (over: Partial<NewFace>): NewFace => ({ user_id: null, name: "", title: "", office: "AE", ...over });
   const depts = view ? view.depts : [];
   const sortedTeams = state ? [...state.teams].sort((a, b) => a.sort_order - b.sort_order) : [];
+  const onWebsite = state ? state.people.filter((p) => p.on_website).length : 0;
 
   return (
     <div className="space-y-4">
       <PageHead
         eyebrow="HR · People"
         title="Organisation"
-        lead="The chart on the website's Our People page: one chart under the CEO, every department and group in the UAE and India, with each person's photo and a few lines about them."
+        lead="The chart on the website's Our People page: one chart under the CEO, every department and group in the UAE and India."
         actions={
           <div className="flex gap-2">
             <Btn icon={UserPlus} onClick={() => setPicking(true)}>
@@ -94,115 +97,101 @@ function OrganisationPage() {
       {!state || !view ? (
         chart.error ? <Note tone="danger">{chart.error.message}</Note> : <PanelSkeleton lines={8} className="p-4" />
       ) : (
-        <>
-          {/* publishing */}
-          <Surface>
-            <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-[13px] font-semibold text-ink">
-                  {state.published ? `On the website: version ${state.published.version}, ${state.published.people} people` : "Not on the website yet"}
-                </p>
-                <p className="text-[12px] text-ink-3">
-                  {state.published
-                    ? `Published ${new Date(state.published.published_at).toLocaleString()}${state.published.published_by_name ? ` by ${state.published.published_by_name}` : ""}.`
-                    : "Arrange the chart, then publish it to the Our People page."}
-                </p>
-              </div>
-              {state.changes ? <Badge tone="warn">Changes not published</Badge> : <Badge tone="positive">Up to date</Badge>}
-              <a href={WEBSITE_PAGE} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[12.5px] text-ink-3 hover:text-ink">
-                Our People page <ExternalLink className="size-3.5" />
-              </a>
-              <Btn
-                variant="accent"
-                icon={Send}
-                loading={publish.pending}
-                disabled={!state.changes || state.problems.length > 0}
-                onClick={async () => {
-                  if (!window.confirm("Publish the chart? It goes live on hamdaz.com straight away.")) return;
-                  if (await publish.run()) refresh();
-                }}
-              >
-                Publish
-              </Btn>
-            </div>
-            {(state.problems.length > 0 || state.warnings.length > 0 || publish.error) && (
-              <div className="space-y-2 border-t border-line px-4 py-3">
-                {publish.error && <Note tone="danger">{publish.error}</Note>}
-                {state.problems.length > 0 && (
-                  <Note tone="danger">
-                    <span className="font-medium">Before you can publish:</span>
-                    <List items={state.problems} />
-                  </Note>
-                )}
-                {state.warnings.length > 0 && (
-                  <Note tone="warn">
-                    <List items={state.warnings} />
-                  </Note>
-                )}
-              </div>
-            )}
-          </Surface>
-
-          {/* the chart */}
-          <Surface className="overflow-hidden">
-            <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
-              <p className="text-[12.5px] text-ink-3">
-                {state.people.length} {state.people.length === 1 ? "person" : "people"} · {depts.length} {depts.length === 1 ? "department" : "departments"}
-              </p>
-              <span className="ml-auto" />
-              <Btn icon={Plus} onClick={() => setTeamEdit({ parent: null, office: null })}>
-                Add department
-              </Btn>
-            </div>
-            <div className="px-4 pb-6 pt-4" style={{ background: PAPER }}>
-              <div className="flex justify-center gap-6 pb-6 pt-8">
-                {view.md.length === 0 ? (
-                  <EmptySlot label="CEO" onClick={() => setEditing({ fresh: fresh({ title: "Chief Executive Officer", position: "md" }) })} />
-                ) : (
-                  view.md.map((p) => <Tile key={p.id} person={p} size={92} onOpen={() => setEditing({ person: p })} />)
-                )}
-              </div>
-              {depts.length === 0 ? (
-                <p className="py-8 text-center text-[13px] text-ink-3">No departments here yet. Add the first one with “Add department”.</p>
-              ) : (
-                <div className="flex flex-wrap items-start justify-center gap-4">
-                  {depts.map((d) => {
-                    const siblings = view.depts.map((x) => x.team);
-                    return (
-                      <DeptCard
-                        key={d.team.id}
-                        dept={d}
-                        teams={state.teams}
-                        onOpen={(p) => setEditing({ person: p })}
-                        onAdd={(team, position) => setEditing({ fresh: fresh({ team_id: team.id, position, office: (d.team.office ?? "AE") as OrgOffice }) })}
-                        onTeam={(team) => setTeamEdit({ team })}
-                        onAddGroup={() => setTeamEdit({ parent: d.team, office: null })}
-                        onMoveTeam={(team, by, sibs) => move(sibs, team, by, "teams")}
-                        onMovePerson={(p, by, sibs) => move(sibs, p, by, "people")}
-                        first={siblings.indexOf(d.team) === 0}
-                        last={siblings.indexOf(d.team) === siblings.length - 1}
-                        siblings={siblings}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-              {view.loose.length > 0 && (
-                <div className="mt-5 rounded-lg border border-dashed border-warn/60 bg-warn-soft/30 p-3">
-                  <p className="mb-2 text-[12px] font-medium text-ink-2">Without a department: open each one and choose where they belong.</p>
-                  <div className="flex flex-wrap gap-3 pt-6">
-                    {view.loose.map((p) => (
-                      <Tile key={p.id} person={p} size={48} onOpen={() => setEditing({ person: p })} />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            <p className="border-t border-line px-4 py-2 text-[11.5px] text-ink-4">
-              Faded faces are not shown on the website. Click a face or a name to edit it; the arrows change the order.
+        <Surface className="overflow-hidden">
+          {/* publishing, in one line */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line px-4 py-2">
+            <p className="min-w-0 flex-1 text-[12.5px] text-ink-2">
+              <span className="font-semibold text-ink">
+                {state.published ? `On the website: version ${state.published.version}` : "Not on the website yet"}
+              </span>
+              <span className="text-ink-3">
+                {state.published
+                  ? ` · published ${new Date(state.published.published_at).toLocaleString()}${state.published.published_by_name ? ` by ${state.published.published_by_name}` : ""}`
+                  : ` · ${state.people.length} people, ${onWebsite} to show, ${depts.length} departments`}
+              </span>
             </p>
-          </Surface>
-        </>
+            {state.changes ? <Badge tone="warn">Changes not published</Badge> : <Badge tone="positive">Up to date</Badge>}
+            <a href={WEBSITE_PAGE} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[12px] text-ink-3 hover:text-ink">
+              Our People page <ExternalLink className="size-3.5" />
+            </a>
+            <Btn icon={Plus} onClick={() => setTeamEdit({ parent: null, office: null })}>
+              Add department
+            </Btn>
+            <Btn
+              variant="accent"
+              icon={Send}
+              loading={publish.pending}
+              disabled={!state.changes || state.problems.length > 0}
+              onClick={async () => {
+                if (!window.confirm("Publish the chart? It goes live on hamdaz.com straight away.")) return;
+                if (await publish.run()) refresh();
+              }}
+            >
+              Publish
+            </Btn>
+          </div>
+          {(state.problems.length > 0 || state.warnings.length > 0 || publish.error) && (
+            <div className="space-y-1 border-b border-line px-4 py-1.5 text-[12px]">
+              {publish.error && <p className="text-danger">{publish.error}</p>}
+              {state.problems.length > 0 && (
+                <p className="text-danger">
+                  <span className="font-medium">Before you can publish:</span> {state.problems.join(" ")}
+                </p>
+              )}
+              {state.warnings.length > 0 && <Warnings items={state.warnings} />}
+            </div>
+          )}
+
+          {/* the CEO */}
+          <div className="flex justify-center border-b border-line px-4 py-2">
+            {view.md.length === 0 ? (
+              <AddLink onClick={() => setEditing({ fresh: fresh({ title: "Chief Executive Officer", position: "md" }) })}>+ Add the CEO</AddLink>
+            ) : (
+              view.md.map((p) => <PersonRow key={p.id} person={p} size={34} strong onOpen={() => setEditing({ person: p })} />)
+            )}
+          </div>
+
+          {/* every department in one row */}
+          {depts.length === 0 ? (
+            <p className="px-4 py-8 text-center text-[13px] text-ink-3">No departments yet. Add the first one with “Add department”.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <div className="grid auto-cols-[minmax(11rem,1fr)] grid-flow-col divide-x divide-line">
+                {depts.map((d, i) => {
+                  const siblings = depts.map((x) => x.team);
+                  return (
+                    <DeptColumn
+                      key={d.team.id}
+                      dept={d}
+                      onOpen={(p) => setEditing({ person: p })}
+                      onAdd={(team, position) => setEditing({ fresh: fresh({ team_id: team.id, position, office: (d.team.office ?? "AE") as OrgOffice }) })}
+                      onTeam={(team) => setTeamEdit({ team })}
+                      onAddGroup={() => setTeamEdit({ parent: d.team, office: null })}
+                      onMoveTeam={(team, by, sibs) => move(sibs, team, by, "teams")}
+                      onMovePerson={(p, by, sibs) => move(sibs, p, by, "people")}
+                      first={i === 0}
+                      last={i === depts.length - 1}
+                      siblings={siblings}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {view.loose.length > 0 && (
+            <div className="border-t border-line px-4 py-2">
+              <p className="mb-1 text-[12px] font-medium text-warn">Without a department: open each one and choose where they belong.</p>
+              <div className="flex flex-wrap gap-x-4">
+                {view.loose.map((p) => (
+                  <PersonRow key={p.id} person={p} onOpen={() => setEditing({ person: p })} />
+                ))}
+              </div>
+            </div>
+          )}
+          <p className="border-t border-line px-4 py-1.5 text-[11.5px] text-ink-4">
+            Faded people are not shown on the website. Click a name to edit it; hover a line for the arrows that change the order.
+          </p>
+        </Surface>
       )}
 
       {editing && state && (
@@ -254,21 +243,57 @@ export default function Page() {
   );
 }
 
-function List({ items }: { items: string[] }) {
+/* ── what to check before publishing, in one line ────────────────────── */
+
+/** The backend says each one per person ("Feba has no photo yet; …"); here they are counted by kind. */
+const WARNING_KINDS: { label: string; match: RegExp }[] = [
+  { label: "No photo yet (initials show)", match: /^(.+?) has no photo yet/ },
+  { label: "No title", match: /^(.+?) has no title/ },
+  { label: "Left Hamdaz, kept off the page", match: /^(.+?) has left Hamdaz/ },
+];
+
+function Warnings({ items }: { items: string[] }) {
+  const [open, setOpen] = useState(false);
+  const kinds = WARNING_KINDS.map((k) => ({
+    label: k.label,
+    names: items.map((w) => w.match(k.match)?.[1]).filter((n): n is string => Boolean(n)),
+  })).filter((k) => k.names.length > 0);
+  const other = items.filter((w) => !WARNING_KINDS.some((k) => k.match.test(w)));
   return (
-    <ul className="mt-1 list-disc pl-4">
-      {items.map((p) => (
-        <li key={p}>{p}</li>
-      ))}
-    </ul>
+    <div className="text-ink-3">
+      <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+        <TriangleAlert className="size-3.5 shrink-0 text-warn" />
+        {kinds.map((k) => (
+          <span key={k.label}>
+            {k.label}: <span className="font-medium tabular-nums text-ink-2">{k.names.length}</span>
+          </span>
+        ))}
+        {other.map((w) => (
+          <span key={w}>{w}</span>
+        ))}
+        {kinds.length > 0 && (
+          <button type="button" onClick={() => setOpen((o) => !o)} className="text-ink-2 underline-offset-2 hover:underline">
+            {open ? "Hide" : "Show who"}
+          </button>
+        )}
+      </p>
+      {open && (
+        <ul className="mt-1 space-y-0.5 pl-5.5">
+          {kinds.map((k) => (
+            <li key={k.label}>
+              <span className="text-ink-2">{k.label}:</span> {k.names.join(", ")}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
-/* ── a department ────────────────────────────────────────────────────── */
+/* ── a department: one column ────────────────────────────────────────── */
 
-function DeptCard({
+function DeptColumn({
   dept: d,
-  teams,
   onOpen,
   onAdd,
   onTeam,
@@ -280,7 +305,6 @@ function DeptCard({
   siblings,
 }: {
   dept: Dept;
-  teams: OrgTeam[];
   onOpen: (p: OrgPerson) => void;
   onAdd: (team: OrgTeam, position: "head" | "member") => void;
   onTeam: (team: OrgTeam) => void;
@@ -293,51 +317,53 @@ function DeptCard({
 }) {
   const groups = d.groups.map((g) => g.team);
   return (
-    <div className="w-max min-w-[13rem] max-w-[30rem] rounded-lg border border-line/70 bg-white/60 pb-3">
-      <div className="flex items-center gap-1 border-b border-line/70 px-1 py-1.5">
-        <IconBtn icon={ChevronLeft} label="Move left" disabled={first} onClick={() => onMoveTeam(d.team, -1, siblings)} />
-        <button type="button" className="min-w-0 flex-1 truncate px-1 text-center text-[12.5px] font-semibold uppercase tracking-wide text-ink hover:underline" onClick={() => onTeam(d.team)} title="Edit department">
+    <div className="min-w-0 pb-2">
+      <div className="group flex items-center gap-1.5 border-b border-line px-2.5 py-1.5">
+        <button
+          type="button"
+          onClick={() => onTeam(d.team)}
+          title="Edit department"
+          className="min-w-0 truncate text-left text-[11.5px] font-semibold uppercase tracking-wide text-ink hover:underline"
+        >
           {d.team.name}
         </button>
-        {d.team.office && <Badge tone="neutral">{COUNTRY_LABEL[d.team.office]}</Badge>}
-        <IconBtn icon={ChevronRight} label="Move right" disabled={last} onClick={() => onMoveTeam(d.team, 1, siblings)} />
+        {d.team.office && <span className="text-[10.5px] text-ink-4">{COUNTRY_LABEL[d.team.office]}</span>}
+        <span className="ml-auto" />
+        <Arrows dir="x" first={first} last={last} onMove={(by) => onMoveTeam(d.team, by, siblings)} />
       </div>
-      {d.team.note && <p className="px-3 pt-2 text-center text-[11px] text-ink-4">{d.team.note}</p>}
-      <div className="flex justify-center gap-2 px-3 pb-2 pt-8">
-        {d.heads.map((p) => (
-          <Tile key={p.id} person={p} size={66} onOpen={() => onOpen(p)} />
+      {d.team.note && <p className="px-2.5 pt-1 text-[11px] leading-snug text-ink-4">{d.team.note}</p>}
+      <div className="px-1 pt-1">
+        {d.heads.map((p, i) => (
+          <PersonRow key={p.id} person={p} strong onOpen={() => onOpen(p)} onMove={(by) => onMovePerson(p, by, d.heads)} first={i === 0} last={i === d.heads.length - 1} />
         ))}
-        <EmptySlot label={d.heads.length ? "Add head" : "Head"} small onClick={() => onAdd(d.team, "head")} />
-      </div>
-      {d.members.length > 0 && <People unit={d} onOpen={onOpen} onMove={onMovePerson} />}
-      <div className="flex flex-wrap items-start justify-center gap-3 px-3 pt-2">
-        {d.groups.map((g, i) => (
-          <GroupBox
-            key={g.team.id}
-            group={g}
-            onOpen={onOpen}
-            onAdd={onAdd}
-            onTeam={onTeam}
-            onMove={onMovePerson}
-            onMoveGroup={(by) => onMoveTeam(g.team, by, groups)}
-            first={i === 0}
-            last={i === d.groups.length - 1}
-          />
+        {d.members.map((p, i) => (
+          <PersonRow key={p.id} person={p} indent onOpen={() => onOpen(p)} onMove={(by) => onMovePerson(p, by, d.members)} first={i === 0} last={i === d.members.length - 1} />
         ))}
       </div>
-      <div className="flex justify-center gap-3 px-3 pt-3">
-        <button type="button" className="text-[11.5px] text-ink-4 hover:text-ink" onClick={() => onAdd(d.team, "member")}>
-          + Person
-        </button>
-        <button type="button" className="text-[11.5px] text-ink-4 hover:text-ink" onClick={onAddGroup}>
-          + Group inside {d.team.short_name}
-        </button>
+      {d.groups.map((g, i) => (
+        <GroupRows
+          key={g.team.id}
+          group={g}
+          onOpen={onOpen}
+          onAdd={onAdd}
+          onTeam={onTeam}
+          onMove={onMovePerson}
+          onMoveGroup={(by) => onMoveTeam(g.team, by, groups)}
+          first={i === 0}
+          last={i === d.groups.length - 1}
+        />
+      ))}
+      <div className="flex flex-wrap gap-x-3 px-2.5 pt-1.5">
+        <AddLink onClick={() => onAdd(d.team, "head")}>{d.heads.length ? "+ Head" : "+ Head (needed)"}</AddLink>
+        <AddLink onClick={() => onAdd(d.team, "member")}>+ Person</AddLink>
+        <AddLink onClick={onAddGroup}>+ Group</AddLink>
       </div>
     </div>
   );
 }
 
-function GroupBox({
+/** A group inside a department: a divider, its name and count, its lead, then its people under the lead. */
+function GroupRows({
   group: g,
   onOpen,
   onAdd,
@@ -358,96 +384,101 @@ function GroupBox({
 }) {
   const n = g.heads.length + g.members.length;
   return (
-    <div className="w-max min-w-[9.5rem] rounded-md border border-line/60 bg-[#e9ecf1]/70 pb-2">
-      <div className="flex items-center gap-1 px-1 py-1">
-        <IconBtn icon={ChevronLeft} label="Move left" disabled={first} onClick={() => onMoveGroup(-1)} />
-        <button type="button" className="min-w-0 flex-1 truncate text-left text-[11px] font-semibold uppercase tracking-wide text-ink-2 hover:underline" onClick={() => onTeam(g.team)} title="Edit group">
+    <div className="mt-1.5 border-t border-line/70 px-1 pt-1">
+      <div className="group flex items-center gap-1.5 px-1.5 py-0.5">
+        <button
+          type="button"
+          onClick={() => onTeam(g.team)}
+          title="Edit group"
+          className="min-w-0 truncate text-left text-[10.5px] font-semibold uppercase tracking-wide text-ink-3 hover:text-ink hover:underline"
+        >
           {g.team.name}
         </button>
-        <span className="rounded-full bg-[#e0559a] px-1.5 text-[10px] font-semibold text-white">{n}</span>
-        <IconBtn icon={ChevronRight} label="Move right" disabled={last} onClick={() => onMoveGroup(1)} />
+        <span className="text-[10.5px] tabular-nums text-ink-4">{n}</span>
+        <span className="ml-auto" />
+        <Arrows dir="y" first={first} last={last} onMove={onMoveGroup} />
       </div>
-      {g.team.note && <p className="px-2 text-[10.5px] text-ink-4">{g.team.note}</p>}
-      {g.heads.length > 0 && (
-        <div className="flex justify-center gap-2 pt-6">
-          {g.heads.map((p) => (
-            <Tile key={p.id} person={p} size={54} onOpen={() => onOpen(p)} />
-          ))}
-        </div>
-      )}
-      <People unit={g} onOpen={onOpen} onMove={onMove} />
-      <div className="flex justify-center gap-3 pt-1">
-        <button type="button" className="text-[11px] text-ink-4 hover:text-ink" onClick={() => onAdd(g.team, "member")}>
-          + Person
-        </button>
-        {g.heads.length === 0 && (
-          <button type="button" className="text-[11px] text-ink-4 hover:text-ink" onClick={() => onAdd(g.team, "head")}>
-            + Lead
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function People({ unit, onOpen, onMove }: { unit: Unit; onOpen: (p: OrgPerson) => void; onMove: (p: OrgPerson, by: number, siblings: OrgPerson[]) => void }) {
-  const list = unit.members;
-  if (list.length === 0) return null;
-  return (
-    <div className={clsx("grid justify-center gap-x-1 gap-y-1 px-2 pt-6", list.length > 2 ? "grid-cols-2" : "grid-flow-col")}>
-      {list.map((p, i) => (
-        <Tile key={p.id} person={p} size={44} onOpen={() => onOpen(p)} onMove={(by) => onMove(p, by, list)} first={i === 0} last={i === list.length - 1} />
+      {g.team.note && <p className="px-1.5 pb-0.5 text-[10.5px] leading-snug text-ink-4">{g.team.note}</p>}
+      {g.heads.map((p, i) => (
+        <PersonRow key={p.id} person={p} strong onOpen={() => onOpen(p)} onMove={(by) => onMove(p, by, g.heads)} first={i === 0} last={i === g.heads.length - 1} />
       ))}
+      {g.members.map((p, i) => (
+        <PersonRow
+          key={p.id}
+          person={p}
+          indent={g.heads.length > 0}
+          onOpen={() => onOpen(p)}
+          onMove={(by) => onMove(p, by, g.members)}
+          first={i === 0}
+          last={i === g.members.length - 1}
+        />
+      ))}
+      <div className="flex gap-x-3 px-1.5 pt-0.5">
+        <AddLink onClick={() => onAdd(g.team, "member")}>+ Person</AddLink>
+        {g.heads.length === 0 && <AddLink onClick={() => onAdd(g.team, "head")}>+ Lead</AddLink>}
+      </div>
     </div>
   );
 }
 
-/* ── a face on the chart ─────────────────────────────────────────────── */
+/* ── one person: a line with a small face ────────────────────────────── */
 
-function Tile({
+function PersonRow({
   person: p,
-  size,
+  size = 26,
+  strong,
+  indent,
   onOpen,
   onMove,
   first,
   last,
 }: {
   person: OrgPerson;
-  size: number;
+  size?: number;
+  /** A head or a lead. */
+  strong?: boolean;
+  /** Under a head or a lead. */
+  indent?: boolean;
   onOpen: () => void;
   onMove?: (by: number) => void;
   first?: boolean;
   last?: boolean;
 }) {
-  const missing = !p.has_photo ? "No photo" : !p.title ? "No title" : null;
   return (
-    <div className="group relative flex w-[6.25rem] flex-col items-center pb-1 text-center">
-      <button type="button" onClick={onOpen} className="rounded-full focus-visible:outline-2 focus-visible:outline-accent" title={`Edit ${p.name}`}>
-        <Face src={p.has_photo ? photoUrl(p, "cutout") : null} name={p.name} colour={p.colour} size={size} gap={PAPER} dim={!p.on_website} />
+    <div className={clsx("group flex items-center gap-2 rounded-md py-0.5 pr-1 hover:bg-panel-2", indent ? "pl-4" : "pl-1.5")}>
+      <button type="button" onClick={onOpen} title={`Edit ${p.name}`} className="shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-accent">
+        <Face src={p.has_photo ? photoUrl(p, "cutout") : null} name={p.name} colour={p.colour} size={size} dim={!p.on_website} />
       </button>
-      <button type="button" onClick={onOpen} className="mt-1.5 line-clamp-2 text-[11.5px] font-semibold leading-tight text-ink hover:underline">
-        {p.name}
+      <button type="button" onClick={onOpen} className={clsx("min-w-0 flex-1 text-left leading-tight", !p.on_website && "opacity-50")}>
+        <span className={clsx("block truncate text-[12.5px] text-ink", strong ? "font-semibold" : "font-medium")}>{p.name}</span>
+        <span className="block truncate text-[11px] text-ink-3">{p.title || <span className="text-warn">No title</span>}</span>
       </button>
-      <span className="line-clamp-1 text-[10px] text-ink-3">{p.title || POSITION_LABEL[p.position]}</span>
-      {p.on_website && missing && <span className="text-[9.5px] font-medium text-warn">{missing}</span>}
-      {onMove && (
-        <span className="absolute -top-1 right-0 hidden gap-0.5 group-hover:flex">
-          <IconBtn icon={ArrowUp} label="Earlier" disabled={first} onClick={() => onMove(-1)} />
-          <IconBtn icon={ArrowDown} label="Later" disabled={last} onClick={() => onMove(1)} />
-        </span>
-      )}
+      {onMove && !(first && last) && <Arrows dir="y" first={first} last={last} onMove={onMove} />}
     </div>
   );
 }
 
-function EmptySlot({ label, small, onClick }: { label: string; small?: boolean; onClick: () => void }) {
-  const size = small ? 44 : 92;
+/** Small order arrows, shown while the line is hovered or focused. */
+function Arrows({ dir, first, last, onMove }: { dir: "x" | "y"; first?: boolean; last?: boolean; onMove: (by: number) => void }) {
+  if (first && last) return null;
+  const [Back, Forward] = dir === "x" ? [ChevronLeft, ChevronRight] : [ArrowUp, ArrowDown];
+  const btn = "grid size-5 place-items-center rounded text-ink-4 hover:bg-panel-2 hover:text-ink disabled:opacity-30";
   return (
-    <button type="button" onClick={onClick} className="flex w-[6.25rem] flex-col items-center gap-1.5 text-ink-4 hover:text-ink">
-      <span className="grid place-items-center rounded-full border-2 border-dashed border-current" style={{ width: size, height: size }}>
-        <Plus className="size-4" />
-      </span>
-      <span className="text-[10.5px]">{label}</span>
+    <span className="hidden shrink-0 gap-0.5 group-focus-within:flex group-hover:flex">
+      <button type="button" className={btn} aria-label={dir === "x" ? "Move left" : "Move up"} title={dir === "x" ? "Move left" : "Move up"} disabled={first} onClick={() => onMove(-1)}>
+        <Back className="size-3.5" />
+      </button>
+      <button type="button" className={btn} aria-label={dir === "x" ? "Move right" : "Move down"} title={dir === "x" ? "Move right" : "Move down"} disabled={last} onClick={() => onMove(1)}>
+        <Forward className="size-3.5" />
+      </button>
+    </span>
+  );
+}
+
+function AddLink({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} className="text-[11px] text-ink-4 hover:text-ink">
+      {children}
     </button>
   );
 }
